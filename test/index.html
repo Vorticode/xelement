@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Tests</title>
+	<style>
+		body { color: #555; background-color: black; font-family: sans-serif }
+		table td { vertical-align: top; padding: .25em .5em }
+		table td:first-child { padding-left: 0 }
+		label {white-space: nowrap; font-weight: bold }
+		button, input { background-color: #333;
+			color: white;
+			border: 2px solid gray;
+			border-radius: .4em;
+			padding: .25em .75em }
+		.pass { color : #0c0 }
+		.fail { color: #c00 }
+	</style>
+
+	<!-- Custom elements Polyfill for IE and Edge -->
+	<script>
+		if (!this.customElements)
+			document.write('<script src="//unpkg.com/document-register-element"><\x2fscript>');
+	</script>
+	<script src="../xelement.js"></script>
+	<script src="test_xelement.js"></script>
+	<script src="test.js"></script>
+</head>
+<body>
+	<form id="tests">
+		<button>Run Tests</button>
+	</form>
+
+	<script>
+		var tests = Tests.find("test_");
+		table = Tests.getTable(Object.keys(tests));
+		document.getElementById('tests').appendChild(table);
+
+		var enabled = Tests.getEnabled();
+		Tests.run(enabled);
+
+		function click2(a, b, c) {
+			console.log(this, a, b, c);
+		}
+	</script>
+
+</body>
+</html>
