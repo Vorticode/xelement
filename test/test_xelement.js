@@ -382,10 +382,6 @@ var test_XElement = {
 		})();
 	},
 
-
-
-
-
 	bindLoop2: function() {
 		class VD extends XElement {
 			constructor() {

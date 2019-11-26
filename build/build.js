@@ -1,9 +1,22 @@
 //node node_modules/terser/bin/terser -c -m reserved=['event'] -m eval --mangle-props regex=/_$/ --output xelement.min.js < xelement.js
 
 var fs = require('fs');
-var Terser = require("terser");
 
-var code =  fs.readFileSync('../xelement.js', 'utf8');
+// Concatenate
+var code = [
+	fs.readFileSync('../src/utils.js', 'utf8'),
+	fs.readFileSync('../src/parseVars.js', 'utf8'),
+	fs.readFileSync('../src/watch.js', 'utf8'),
+	fs.readFileSync('../src/xelement.js', 'utf8')
+];
+code =
+	'(function() {' +
+		//'%replace%\n' +
+		code.join(';') +
+	'})();';
+
+fs.writeFileSync('../xelement.js', code);
+
 
 // Do replacements
 var replacementFuncs = {
@@ -13,7 +26,7 @@ var replacementFuncs = {
 	'document': 'd',
 	'Object.defineProperty': 'O',
 	'customElements': 'm',
-}
+};
 
 var replacementProps = {
 	"length": 'l',
@@ -68,6 +81,9 @@ var options = {
 		properties: { regex: '_$' }
 	}
 };
+
+
+var Terser = require("terser");
 var result = Terser.minify(code, options);
 
 console.log(result.error || 'Success');
