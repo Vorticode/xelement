@@ -32,7 +32,50 @@ function parentIndex(el) {
 	return Array.prototype.indexOf.call(el.parentNode.children, el);
 }
 
+
+/**
+ * @param obj {object}
+ * @param path {string[]}
+ * @param create {boolean=false}
+ * @param value If not undefined, set the object's path field to this value. */
+function traversePath(obj, path, create, value) {
+	for (let i=0; i<path.length; i++) {
+		let srcProp = path[i];
+
+		// If the path is undefined and we're not to the end yet:
+		if (obj[srcProp] === undefined) {
+
+			// If the next index is an integer or integer string.
+			if (create) {
+
+				// If last item in path
+				if (i === path.length-1) {
+					if (value !== undefined)
+						obj[srcProp] = value;
+				}
+
+				// If next level path is a number, create as an array
+				else if ((path[i + 1] + '').match(/^\d+$/))
+					obj[srcProp] = [];
+				else
+					obj[srcProp] = {};
+			}
+			else
+				return undefined; // can't traverse
+		}
+
+		// Traverse deeper along destination object.
+		obj = obj[srcProp];
+	}
+
+	return obj;
+}
+
+
+
 // Shortened version of this answer: stackoverflow.com/a/18751951
 var events = Object.keys(document.__proto__.__proto__)
 	.filter((x) => x.startsWith('on'))
 	.map(   (x) => x.slice(2));
+
+

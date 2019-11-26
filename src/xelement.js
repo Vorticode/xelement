@@ -401,26 +401,34 @@ XElement.dataAttr = {
 		// Update input value when object property changes.
 		for (let path of vars)
 			watch(self, path, (action)=> {
-				if (el.getAttribute('type') === 'checkbox')
-				// noinspection EqualityComparisonWithCoercionJS
-					el.checked = eval(code) == true;
-				else
-					el.value = eval(code);
+				if (action === 'delete') {
+					if (el.getAttribute('type') === 'checkbox')
+						el.checked = false;
+					else
+						el.value = '';
+				}
+				else {
+					if (el.getAttribute('type') === 'checkbox')
+						// noinspection EqualityComparisonWithCoercionJS
+						el.checked = eval(code) == true;
+					else
+						el.value = eval(code);
+				}
 			});
 	},
 
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, ()=> {
-				el.innerHTML = eval(code);
+			watch(self, path, (action)=> {
+				el.innerHTML = action === 'delete' ? '' : eval(code);
 			});
 		}
 	},
 
 	text: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, ()=> {
-				el.textContent = eval(code);
+			watch(self, path, (action)=> {
+				el.textContent = action === 'delete' ? '' : eval(code);
 			});
 		}
 	},
@@ -442,6 +450,8 @@ XElement.dataAttr = {
 
 			// Remove all children.
 			// TODO: Use rebuildChildren args to only modify children that have changed.
+			// I should also detect when an item is removed from the middle, by checking if the value is the next value in the lst.
+			// Then I can simply remove one child and keep unbound textboxes from losing their values when they're destroyed/created.
 			// Otherwise iterating and adding one item at a time will keep clearing and
 			// resetting thie children at each iteration!
 			while (el.lastChild) {
@@ -473,7 +483,7 @@ XElement.dataAttr = {
 	/*
 	'cls': function(self, field, el) {}, // data-cls="house.big" // Adds or removes the big class when the house.big var is true or false.
 	'style': function(self, field, el) {}, // Can point to an object to use for the style.
-	'if': function(self, field, el) {}, // Element is added and removed when data-if="code" evaluates to true or false.
+	'if': function(self, field, el) {}, // Element is created or destroyed when data-if="code" evaluates to true or false.
 	'visible':
 	*/
 
@@ -489,12 +499,16 @@ XElement.dataAttr = {
 		// If the variables in code, change, execute the code.
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code))
-			watch(self, path, ()=> { // slice() to remove this.
-				var result = eval(code);
-				if (result === false)
+			watch(self, path, (action)=> { // slice() to remove this.
+				if (action==='delete')
 					el.removeAttribute(attr);
-				else
-					el.setAttribute(attr, result + '');
+				else {
+					var result = eval(code);
+					if (result === false)
+						el.removeAttribute(attr);
+					else
+						el.setAttribute(attr, result + '');
+				}
 			});
 	}
 };

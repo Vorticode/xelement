@@ -1,5 +1,4 @@
-/*
-These are not exported and can't be easily tested.
+
 var test_ParseVar = {
 
 	parseVars: function() {
@@ -22,8 +21,59 @@ var test_ParseVar = {
 		assertEq(result, " this.cats[0] + this.items[0]");
 	}
 };
-*/
 
+var test_Watch = {
+
+	init: function() {
+
+		var o = { a: [0, 1] };
+		var wp = new WatchProperties(o);
+		wp.subscribe(['a'], (action, path, value) => {});
+		assertEq(o.a.length, 2);
+		assertEq(o.a[0], 0);
+		assertEq(o.a[1], 1);
+	},
+
+
+	arrayShift: function() {
+
+		var o = { a: [0, 1] };
+		var wp = new WatchProperties(o);
+		var ops = [];
+		wp.subscribe(['a'], function(action, path, value) {
+			ops.push(Array.from(arguments));
+		});
+
+		o.a.shift();
+
+		assertEq(o.a.length, 1);
+		assertEq(o.a[0], 1);
+
+		assertEq(JSON.stringify(ops[0]), '["set",["a","0"],1]');
+		assertEq(JSON.stringify(ops[1]), '["delete",["a","1"]]');
+	},
+
+	unsubscribe: function() {
+
+		var o = { a: [0, 1] };
+		var wp = new WatchProperties(o);
+		var ops = [];
+		var callback = function(action, path, value) {
+			ops.push(Array.from(arguments));
+		};
+		wp.subscribe(['a'], callback);
+		assertEq(Object.keys(wp.subs_).length, 1);
+
+		wp.unsubscribe(['a'], callback);
+		assertEq(Object.keys(wp.subs_).length, 0);
+
+
+		wp.subscribe(['a', 0], callback);
+		assertEq(Object.keys(wp.subs_).length, 2);
+		wp.unsubscribe(['a', 0], callback);
+		assertEq(Object.keys(wp.subs_).length, 0);
+	}
+};
 
 var test_XElement = {
 
@@ -406,8 +456,6 @@ var test_XElement = {
 
 		var v = new VD();
 		var input = v.loop.children[0];
-		console.log(input.value);
-
 
 		v.items.shift();
 		// console.log(v.variables);

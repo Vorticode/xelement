@@ -65,42 +65,13 @@ function watchObj(root, callback) {
 	return new Proxy(root, handler);
 }
 
-/**
- * @param obj {object}
- * @param path {string[]}
- * @param create {boolean=false} */
-function traversePath(obj, path, create) {
-	for (let i=0; i<path.length; i++) { // length-1 because we don't want to set the deepest prop to be an object, just undefiend.
-		let srcProp = path[i];
-
-		// If the path is undefined and we're not to the end yet:
-		if (obj[srcProp] === undefined && i < path.length-1) {
-
-			// If the next index is an integer or integer string.
-			if (create) {
-				if ((path[i + 1] + '').match(/^\d+$/))
-					obj[srcProp] = [];
-				else
-					obj[srcProp] = {};
-			}
-			else
-				return undefined; // can't traverse
-		}
-
-		// Traverse deeper along destination object.
-		obj = obj[srcProp];
-	}
-
-	return obj;
-}
-
 class WatchProperties {
 
 	constructor(obj) {
 		this.obj_ = obj;   // Original object being watched.
 		this.fields_ = {}; // Unproxied underlying fields that store the data.
 		this.proxy_ = watchObj(this.fields_, this.notify.bind(this));
-		this.subs_ = [];
+		this.subs_ = {};
 	}
 
 	/**
@@ -128,7 +99,7 @@ class WatchProperties {
 	 * @param callback {function((action:string, path:string[], value:string?)} */
 	subscribe(path, callback) {
 		if (typeof path === 'string')
-			path = parseVars(path)[0];
+			path = parseVars(path)[0]; // TODO subscribe to all vars?
 
 		// Create property at top level path, even if we're only watching something much deeper.
 		// This way we don't have to worry about overriding properties created at deper levels.
@@ -137,7 +108,8 @@ class WatchProperties {
 		if (!(field in self.fields_)) {
 
 			// Set initial value from obj, creating the path to it.
-			traversePath(this.fields_, path, true);
+			let initialValue = traversePath(this.obj_, path);
+			traversePath(this.fields_, path, true, initialValue);
 
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.

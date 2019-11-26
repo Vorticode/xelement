@@ -32,10 +32,53 @@ function parentIndex(el) {
 	return Array.prototype.indexOf.call(el.parentNode.children, el);
 }
 
+
+/**
+ * @param obj {object}
+ * @param path {string[]}
+ * @param create {boolean=false}
+ * @param value If not undefined, set the object's path field to this value. */
+function traversePath(obj, path, create, value) {
+	for (let i=0; i<path.length; i++) {
+		let srcProp = path[i];
+
+		// If the path is undefined and we're not to the end yet:
+		if (obj[srcProp] === undefined) {
+
+			// If the next index is an integer or integer string.
+			if (create) {
+
+				// If last item in path
+				if (i === path.length-1) {
+					if (value !== undefined)
+						obj[srcProp] = value;
+				}
+
+				// If next level path is a number, create as an array
+				else if ((path[i + 1] + '').match(/^\d+$/))
+					obj[srcProp] = [];
+				else
+					obj[srcProp] = {};
+			}
+			else
+				return undefined; // can't traverse
+		}
+
+		// Traverse deeper along destination object.
+		obj = obj[srcProp];
+	}
+
+	return obj;
+}
+
+
+
 // Shortened version of this answer: stackoverflow.com/a/18751951
 var events = Object.keys(document.__proto__.__proto__)
 	.filter((x) => x.startsWith('on'))
 	.map(   (x) => x.slice(2));
+
+
 ;// Regex for matching javascript variables.  Made from pieces of this regex:  https://www.regexpal.com/?fam=112426
 var varStart = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
 var varDotStart = '\\.\\s*' + varStart;
@@ -228,42 +271,13 @@ function watchObj(root, callback) {
 	return new Proxy(root, handler);
 }
 
-/**
- * @param obj {object}
- * @param path {string[]}
- * @param create {boolean=false} */
-function traversePath(obj, path, create) {
-	for (let i=0; i<path.length; i++) { // length-1 because we don't want to set the deepest prop to be an object, just undefiend.
-		let srcProp = path[i];
-
-		// If the path is undefined and we're not to the end yet:
-		if (obj[srcProp] === undefined && i < path.length-1) {
-
-			// If the next index is an integer or integer string.
-			if (create) {
-				if ((path[i + 1] + '').match(/^\d+$/))
-					obj[srcProp] = [];
-				else
-					obj[srcProp] = {};
-			}
-			else
-				return undefined; // can't traverse
-		}
-
-		// Traverse deeper along destination object.
-		obj = obj[srcProp];
-	}
-
-	return obj;
-}
-
 class WatchProperties {
 
 	constructor(obj) {
 		this.obj_ = obj;   // Original object being watched.
 		this.fields_ = {}; // Unproxied underlying fields that store the data.
 		this.proxy_ = watchObj(this.fields_, this.notify.bind(this));
-		this.subs_ = [];
+		this.subs_ = {};
 	}
 
 	/**
@@ -291,7 +305,7 @@ class WatchProperties {
 	 * @param callback {function((action:string, path:string[], value:string?)} */
 	subscribe(path, callback) {
 		if (typeof path === 'string')
-			path = parseVars(path)[0];
+			path = parseVars(path)[0]; // TODO subscribe to all vars?
 
 		// Create property at top level path, even if we're only watching something much deeper.
 		// This way we don't have to worry about overriding properties created at deper levels.
@@ -300,7 +314,8 @@ class WatchProperties {
 		if (!(field in self.fields_)) {
 
 			// Set initial value from obj, creating the path to it.
-			traversePath(this.fields_, path, true);
+			let initialValue = traversePath(this.obj_, path);
+			traversePath(this.fields_, path, true, initialValue);
 
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
@@ -469,12 +484,14 @@ function getContext(el) {
 	let parent = el;
 	let lastParent = el;
 
-	// Parent.host lets us traverse up beyond the shadow root,
+	// Parent.host lets us traverse up beyond the shadow root, 
 	// in case data-loop is defined on the shadow host.
-	do {
+	// We also start by checking the parent for the context instead of this element,
+	// because an element only sets its context for its children, not itself.
+	while (parent = (parent.host || parent.parentNode)) {
 
 		// Shadow root documnet fragment won't have getAttrbute.
-		let code =  parent.getAttribute && parent.getAttribute('data-loop');
+		let code = parent.getAttribute && parent.getAttribute('data-loop');
 		if (code) {
 
 			let [foreach, item] = parseLoop(code);
@@ -492,9 +509,7 @@ function getContext(el) {
 		// Stop once we reach an XElement.
 		if (parent instanceof XElement)
 			break;
-
-	} while (parent = (parent.host || parent.parentNode));
-
+	}
 	return context;
 }
 
@@ -514,28 +529,8 @@ function bind(self, el, context) {
 	var foreach, item;
 
 	// Traverse through all parents to build the loop context.
-	if (!context) {
-		context = {};
-		let parent = el;
-		let lastParent = el;
-
-		// Parent.host lets us traverse up beyond the shadow root, in case data-loop is defined on the shadow host.
-		while (parent = (parent.host || parent.parentNode)) {
-
-			// Shadow root documnet fragment won't have getAttrbute.
-			let code =  parent.getAttribute && parent.getAttribute('data-loop');
-			if (code) {
-
-				// As we traverse upward, we set the index of variables.
-				let [foreach2, item2] = parseLoop(code);
-				context[item2] = foreach2 + '[' + parentIndex(lastParent) + ']';
-
-				lastParent = parent;
-			}
-			if (parent.connectedCallback)
-				break;
-		}
-	}
+	if (!context)
+		context = getContext(el);
 
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
@@ -547,7 +542,7 @@ function bind(self, el, context) {
 				// Replace loopVars
 				if (attr.name === 'data-loop') { // only the foreach part of a data-loop="..."
 
-					// Don't do data-loop binding for
+					// Don't do data-loop binding for nested XElements.  They will do their own binding.
 					if (el !== self && el instanceof XElement)
 						continue;
 
@@ -854,26 +849,34 @@ XElement.dataAttr = {
 		// Update input value when object property changes.
 		for (let path of vars)
 			watch(self, path, (action)=> {
-				if (el.getAttribute('type') === 'checkbox')
-				// noinspection EqualityComparisonWithCoercionJS
-					el.checked = eval(code) == true;
-				else
-					el.value = eval(code);
+				if (action === 'delete') {
+					if (el.getAttribute('type') === 'checkbox')
+						el.checked = false;
+					else
+						el.value = '';
+				}
+				else {
+					if (el.getAttribute('type') === 'checkbox')
+						// noinspection EqualityComparisonWithCoercionJS
+						el.checked = eval(code) == true;
+					else
+						el.value = eval(code);
+				}
 			});
 	},
 
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, ()=> {
-				el.innerHTML = eval(code);
+			watch(self, path, (action)=> {
+				el.innerHTML = action === 'delete' ? '' : eval(code);
 			});
 		}
 	},
 
 	text: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, ()=> {
-				el.textContent = eval(code);
+			watch(self, path, (action)=> {
+				el.textContent = action === 'delete' ? '' : eval(code);
 			});
 		}
 	},
@@ -942,12 +945,16 @@ XElement.dataAttr = {
 		// If the variables in code, change, execute the code.
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code))
-			watch(self, path, ()=> { // slice() to remove this.
-				var result = eval(code);
-				if (result === false)
+			watch(self, path, (action)=> { // slice() to remove this.
+				if (action==='delete')
 					el.removeAttribute(attr);
-				else
-					el.setAttribute(attr, result + '');
+				else {
+					var result = eval(code);
+					if (result === false)
+						el.removeAttribute(attr);
+					else
+						el.setAttribute(attr, result + '');
+				}
 			});
 	}
 };
