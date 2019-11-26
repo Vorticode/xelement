@@ -29,6 +29,7 @@ If specified on its definition?  If the data-binding is on its embed?
 
 /**
  * Traverse through all parents to build the loop context.
+ * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
  * @param el
  * @return {object<string, string>} */
 function getContext(el) {
@@ -50,7 +51,7 @@ function getContext(el) {
 
 			// Check for an inner loop having the same variable name
 			if (item in context)
-				throw new Error('Loop variable "' + item2 + '"already declared in an outer scope.');
+				throw new Error('Loop variable "' + item + '"already declared in an outer scope.');
 
 			// As we traverse upward, we set the index of variables.
 			context[item] = foreach + '[' + parentIndex(lastParent) + ']';
@@ -149,6 +150,9 @@ function unbind(self, root) {
 		els.unshift(root);
 
 	for (let el of els) {
+
+		var context = getContext(el);
+
 		for (let attr of el.attributes) {
 			if (attr.name.substr(0, 5) === 'data-') {
 				let code = attr.value;
@@ -160,7 +164,9 @@ function unbind(self, root) {
 				//if (isSimpleVar(code) && !code.startsWith('this'))
 				//	code = 'this.' + code;
 
+				code = replaceVars(code, context);
 				var paths = parseVars(code);
+
 				for (let path of paths)
 					unwatch(self, path);
 			}
@@ -400,8 +406,11 @@ XElement.dataAttr = {
 
 		// Update input value when object property changes.
 		for (let path of vars)
-			watch(self, path, (action)=> {
-				if (action === 'delete') {
+			watch(self, path, (action, actionPath, val)=> {
+				//console.log(action, actionPath, val);
+
+				// Sometimes action="set" is called on a parent path and we receive no "delete"
+				if (action === 'delete' || traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
 						el.checked = false;
 					else
@@ -419,16 +428,16 @@ XElement.dataAttr = {
 
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action)=> {
-				el.innerHTML = action === 'delete' ? '' : eval(code);
+			watch(self, path, (action, actionPath, value)=> {
+				el.innerHTML = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 	},
 
 	text: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action)=> {
-				el.textContent = action === 'delete' ? '' : eval(code);
+			watch(self, path, (action, actionPath, value) => {
+				el.textContent = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 	},
@@ -444,6 +453,8 @@ XElement.dataAttr = {
 
 		// The code we'll loop over.
 		var html = el.innerHTML.trim();
+		while (el.lastChild)
+			el.removeChild(el.lastChild);
 
 
 		var rebuildChildren = (function (action, path, value) {
@@ -456,9 +467,11 @@ XElement.dataAttr = {
 			// resetting thie children at each iteration!
 			while (el.lastChild) {
 				if (el.lastChild.nodeType === 1)
-				// If we don't unbind, changing the array will still updated these detached elements.
-				// This will cause errors because these detached elements can't traverse upward to find their array contexts.
+					// If we don't unbind, changing the array will still updated these detached elements.
+					// This will cause errors because these detached elements can't traverse upward to find their array contexts.
+					// TODO: unbindEvents()?
 					unbind(self, el.lastChild);
+
 				el.removeChild(el.lastChild);
 			}
 
@@ -468,6 +481,7 @@ XElement.dataAttr = {
 					let child = createEl(html);
 					el.appendChild(child);
 					bind(self, child);
+					bindEvents(self, child);
 				}
 		}).bind(self);
 
@@ -500,7 +514,7 @@ XElement.dataAttr = {
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code))
 			watch(self, path, (action)=> { // slice() to remove this.
-				if (action==='delete')
+				if (action==='delete' || traversePath(self, path) === undefined)
 					el.removeAttribute(attr);
 				else {
 					var result = eval(code);

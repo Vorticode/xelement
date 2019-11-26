@@ -1,4 +1,5 @@
-(function() {function arrayEq(array1, array2) {
+(function() {
+function arrayEq(array1, array2) {
 	return array1.length === array2.length && array1.every((value, index) => value === array2[index])
 }
 
@@ -79,7 +80,9 @@ var events = Object.keys(document.__proto__.__proto__)
 	.map(   (x) => x.slice(2));
 
 
-;// Regex for matching javascript variables.  Made from pieces of this regex:  https://www.regexpal.com/?fam=112426
+;
+
+// Regex for matching javascript variables.  Made from pieces of this regex:  https://www.regexpal.com/?fam=112426
 var varStart = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
 var varDotStart = '\\.\\s*' + varStart;
 var varBrD = '\\[\\s*"(([^"]|\\")*)"\\s*]';  // A ["as\"df"] index
@@ -204,12 +207,14 @@ function parseLoop(code) {
 		code = 'this.' + code;
 
 	return [code, loopVar];
-};/**
- * Call callback() with a 'set' or 'delete' action whenever anything within object is added, removed, or modified.
+};
+
+/**
+ * Create a copy of root, where callback() is called whenever anything within object is added, removed, or modified.
  * Monitors all deeply nested properties including array operations.
- * Got ideas from here:  https://stackoverflow.com/questions/41299642/how-to-use-javascript-proxy-for-nested-objects
+ * Inspired by: stackoverflow.com/q/41299642
  * @param root {object}
- * @param callback {function(action:string, path:string[], value:string?)}
+ * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
 function watchObj(root, callback) {
 
@@ -271,6 +276,10 @@ function watchObj(root, callback) {
 	return new Proxy(root, handler);
 }
 
+/**
+ * Allow subcribing only to specific properties of an object.
+ * Internally, the property is replaced with a call to Object.defineProperty() that forwards to
+ * a proxy created by watchObh() above. */
 class WatchProperties {
 
 	constructor(obj) {
@@ -440,13 +449,19 @@ function watchlessGet(obj, path) {
 }*/
 
 function watchlessSet(obj, path, val) {
+	// TODO: Make this work instead:
+	//traversePath(watched.get(obj).fields_, path, true, val);
+	//return val;
+
 	let node =  watched.get(obj).fields_;
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1))
 		node = node[p];
 
 	return node[prop] = val;
-};/*
+};
+
+/*
 Inherit from XElement to create custom HTML Components.
 
 TODO:
@@ -477,6 +492,7 @@ If specified on its definition?  If the data-binding is on its embed?
 
 /**
  * Traverse through all parents to build the loop context.
+ * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
  * @param el
  * @return {object<string, string>} */
 function getContext(el) {
@@ -498,7 +514,7 @@ function getContext(el) {
 
 			// Check for an inner loop having the same variable name
 			if (item in context)
-				throw new Error('Loop variable "' + item2 + '"already declared in an outer scope.');
+				throw new Error('Loop variable "' + item + '"already declared in an outer scope.');
 
 			// As we traverse upward, we set the index of variables.
 			context[item] = foreach + '[' + parentIndex(lastParent) + ']';
@@ -597,6 +613,9 @@ function unbind(self, root) {
 		els.unshift(root);
 
 	for (let el of els) {
+
+		var context = getContext(el);
+
 		for (let attr of el.attributes) {
 			if (attr.name.substr(0, 5) === 'data-') {
 				let code = attr.value;
@@ -608,7 +627,9 @@ function unbind(self, root) {
 				//if (isSimpleVar(code) && !code.startsWith('this'))
 				//	code = 'this.' + code;
 
+				code = replaceVars(code, context);
 				var paths = parseVars(code);
+
 				for (let path of paths)
 					unwatch(self, path);
 			}
@@ -848,8 +869,11 @@ XElement.dataAttr = {
 
 		// Update input value when object property changes.
 		for (let path of vars)
-			watch(self, path, (action)=> {
-				if (action === 'delete') {
+			watch(self, path, (action, actionPath, val)=> {
+				//console.log(action, actionPath, val);
+
+				// Sometimes action="set" is called on a parent path and we receive no "delete"
+				if (action === 'delete' || traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
 						el.checked = false;
 					else
@@ -867,16 +891,16 @@ XElement.dataAttr = {
 
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action)=> {
-				el.innerHTML = action === 'delete' ? '' : eval(code);
+			watch(self, path, (action, actionPath, value)=> {
+				el.innerHTML = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 	},
 
 	text: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action)=> {
-				el.textContent = action === 'delete' ? '' : eval(code);
+			watch(self, path, (action, actionPath, value) => {
+				el.textContent = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 	},
@@ -892,19 +916,25 @@ XElement.dataAttr = {
 
 		// The code we'll loop over.
 		var html = el.innerHTML.trim();
+		while (el.lastChild)
+			el.removeChild(el.lastChild);
 
 
 		var rebuildChildren = (function (action, path, value) {
 
 			// Remove all children.
 			// TODO: Use rebuildChildren args to only modify children that have changed.
+			// I should also detect when an item is removed from the middle, by checking if the value is the next value in the lst.
+			// Then I can simply remove one child and keep unbound textboxes from losing their values when they're destroyed/created.
 			// Otherwise iterating and adding one item at a time will keep clearing and
 			// resetting thie children at each iteration!
 			while (el.lastChild) {
 				if (el.lastChild.nodeType === 1)
-				// If we don't unbind, changing the array will still updated these detached elements.
-				// This will cause errors because these detached elements can't traverse upward to find their array contexts.
+					// If we don't unbind, changing the array will still updated these detached elements.
+					// This will cause errors because these detached elements can't traverse upward to find their array contexts.
+					// TODO: unbindEvents()?
 					unbind(self, el.lastChild);
+
 				el.removeChild(el.lastChild);
 			}
 
@@ -914,6 +944,7 @@ XElement.dataAttr = {
 					let child = createEl(html);
 					el.appendChild(child);
 					bind(self, child);
+					bindEvents(self, child);
 				}
 		}).bind(self);
 
@@ -929,7 +960,7 @@ XElement.dataAttr = {
 	/*
 	'cls': function(self, field, el) {}, // data-cls="house.big" // Adds or removes the big class when the house.big var is true or false.
 	'style': function(self, field, el) {}, // Can point to an object to use for the style.
-	'if': function(self, field, el) {}, // Element is added and removed when data-if="code" evaluates to true or false.
+	'if': function(self, field, el) {}, // Element is created or destroyed when data-if="code" evaluates to true or false.
 	'visible':
 	*/
 
@@ -946,7 +977,7 @@ XElement.dataAttr = {
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code))
 			watch(self, path, (action)=> { // slice() to remove this.
-				if (action==='delete')
+				if (action==='delete' || traversePath(self, path) === undefined)
 					el.removeAttribute(attr);
 				else {
 					var result = eval(code);
@@ -1007,4 +1038,5 @@ Object.defineProperty(XElement, 'html', {
 });
 
 // Exports
-window.XElement = XElement;})();
+window.XElement = XElement;
+})();

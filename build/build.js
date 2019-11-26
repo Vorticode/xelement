@@ -10,10 +10,10 @@ var code = [
 	fs.readFileSync('../src/xelement.js', 'utf8')
 ];
 code =
-	'(function() {' +
-		//'%replace%\n' +
-		code.join(';') +
-	'})();';
+	'(function() {\r\n' +
+		//'%replace%\r\n' +
+		code.join(';\r\n\r\n') +
+	'\r\n})();';
 
 fs.writeFileSync('../xelement.js', code);
 

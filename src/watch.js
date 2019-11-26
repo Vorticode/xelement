@@ -1,9 +1,9 @@
 /**
- * Call callback() with a 'set' or 'delete' action whenever anything within object is added, removed, or modified.
+ * Create a copy of root, where callback() is called whenever anything within object is added, removed, or modified.
  * Monitors all deeply nested properties including array operations.
- * Got ideas from here:  https://stackoverflow.com/questions/41299642/how-to-use-javascript-proxy-for-nested-objects
+ * Inspired by: stackoverflow.com/q/41299642
  * @param root {object}
- * @param callback {function(action:string, path:string[], value:string?)}
+ * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
 function watchObj(root, callback) {
 
@@ -65,6 +65,10 @@ function watchObj(root, callback) {
 	return new Proxy(root, handler);
 }
 
+/**
+ * Allow subcribing only to specific properties of an object.
+ * Internally, the property is replaced with a call to Object.defineProperty() that forwards to
+ * a proxy created by watchObh() above. */
 class WatchProperties {
 
 	constructor(obj) {
@@ -234,6 +238,10 @@ function watchlessGet(obj, path) {
 }*/
 
 function watchlessSet(obj, path, val) {
+	// TODO: Make this work instead:
+	//traversePath(watched.get(obj).fields_, path, true, val);
+	//return val;
+
 	let node =  watched.get(obj).fields_;
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1))
