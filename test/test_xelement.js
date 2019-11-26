@@ -387,33 +387,33 @@ var test_XElement = {
 			constructor() {
 				super();
 
-				this.variables = [{
-					name: 'Power'
+				// This tests uses sub-properties to trigger possible undefiend defererencing.
+				this.items = [{
+					name: 'A'
+				},
+				{
+					name: 'B'
 				}];
 			}
 		}
 		VD.html = `
 			<div>
-				<div id="list" data-loop="variables: variable">
-					<div class="variable">
-						<input data-val="variable.name">
-					</div>
+				<div id="loop" data-loop="items: item">
+					<input data-val="item.name">					
 				</div>
 			</div>`;
 
 
-
-		class LB extends XElement {}
-		LB.html = `
-			<div>
-			   <x-vd id="variables"></x-vd>
-			</div>`;
-
-		var lb = new LB();
-		var input = lb.variables.list.children[0].children[0];
-		assert(input.tagName === 'INPUT');
+		var v = new VD();
+		var input = v.loop.children[0];
 		console.log(input.value);
 
+
+		v.items.shift();
+		// console.log(v.variables);
+		//
+		// var input = v.list.children[0];
+		// console.log(input.value);
 
 
 

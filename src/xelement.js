@@ -36,12 +36,14 @@ function getContext(el) {
 	let parent = el;
 	let lastParent = el;
 
-	// Parent.host lets us traverse up beyond the shadow root,
+	// Parent.host lets us traverse up beyond the shadow root, 
 	// in case data-loop is defined on the shadow host.
-	do {
+	// We also start by checking the parent for the context instead of this element,
+	// because an element only sets its context for its children, not itself.
+	while (parent = (parent.host || parent.parentNode)) {
 
 		// Shadow root documnet fragment won't have getAttrbute.
-		let code =  parent.getAttribute && parent.getAttribute('data-loop');
+		let code = parent.getAttribute && parent.getAttribute('data-loop');
 		if (code) {
 
 			let [foreach, item] = parseLoop(code);
@@ -59,9 +61,7 @@ function getContext(el) {
 		// Stop once we reach an XElement.
 		if (parent instanceof XElement)
 			break;
-
-	} while (parent = (parent.host || parent.parentNode));
-
+	}
 	return context;
 }
 
@@ -81,28 +81,8 @@ function bind(self, el, context) {
 	var foreach, item;
 
 	// Traverse through all parents to build the loop context.
-	if (!context) {
-		context = {};
-		let parent = el;
-		let lastParent = el;
-
-		// Parent.host lets us traverse up beyond the shadow root, in case data-loop is defined on the shadow host.
-		while (parent = (parent.host || parent.parentNode)) {
-
-			// Shadow root documnet fragment won't have getAttrbute.
-			let code =  parent.getAttribute && parent.getAttribute('data-loop');
-			if (code) {
-
-				// As we traverse upward, we set the index of variables.
-				let [foreach2, item2] = parseLoop(code);
-				context[item2] = foreach2 + '[' + parentIndex(lastParent) + ']';
-
-				lastParent = parent;
-			}
-			if (parent.connectedCallback)
-				break;
-		}
-	}
+	if (!context)
+		context = getContext(el);
 
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
@@ -114,7 +94,7 @@ function bind(self, el, context) {
 				// Replace loopVars
 				if (attr.name === 'data-loop') { // only the foreach part of a data-loop="..."
 
-					// Don't do data-loop binding for
+					// Don't do data-loop binding for nested XElements.  They will do their own binding.
 					if (el !== self && el instanceof XElement)
 						continue;
 
