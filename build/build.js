@@ -1,6 +1,11 @@
-//node node_modules/terser/bin/terser -c -m reserved=['event'] -m eval --mangle-props regex=/_$/ --output xelement.min.js < xelement.js
-
+// Install node.js
+// cd to this folder
+// Then run "node build.js" to create concatenated and minified files.
 var fs = require('fs');
+
+// We use terser 3.14.1, because 
+// terser >=3.16 fails due to missing source-map depenedency.
+var Terser = require("./terser.min.js");  
 
 // Concatenate
 var code = [
@@ -79,12 +84,11 @@ var options = {
 	mangle: {
 		reserved: ['event'],
 		eval: true,
-		properties: { regex: '_$' }
+		properties: { regex: /_$/ }
 	}
 };
 
 
-var Terser = require("terser");
 var result = Terser.minify(code, options);
 
 console.log(result.error || 'Success');
