@@ -429,6 +429,7 @@ XElement.dataAttr = {
 
 			// Set initial value.
 			// TODO remove redundancy with f() in this and other dataAttr's.
+			// TODO: This doesn't need to be inside the loop.
 			(function () {
 				if (traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
@@ -459,7 +460,7 @@ XElement.dataAttr = {
 		// Set initial value.
 		(function() {
 			el.innerHTML = eval(code);
-		}).bind(this)();
+		}).bind(self)();
 	},
 
 	text: function (self, code, el) {
@@ -467,6 +468,8 @@ XElement.dataAttr = {
 			let setText = (action, actionPath, value) => {
 				el.textContent = traversePath(self, path) === undefined ? '' : eval(code);
 			};
+			// if (window.debug)
+			// 	debugger;
 			watch(self, path, setText);
 			addWatchedEl(el, setText);
 		}
@@ -510,14 +513,12 @@ XElement.dataAttr = {
 				el.removeChild(el.lastChild);
 			}
 
-			if (window.debug)
-				debugger;
-
 			// Recreate all children.
 			if (html.length)
 				for (let i in eval(code)) {
 					let child = createEl(html);
 					el.appendChild(child);
+
 					bind(self, child);
 					bindEvents(self, child);
 				}

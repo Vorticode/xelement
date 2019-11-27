@@ -328,6 +328,7 @@ class WatchProperties {
 	constructor(obj) {
 		this.obj_ = obj;   // Original object being watched.
 		this.fields_ = {}; // Unproxied underlying fields that store the data.
+		                   // This is necessary to store the values of obj_ after defineProperty() is called.
 		this.proxy_ = watchObj(this.fields_, this.notify.bind(this));
 		this.subs_ = {};
 	}
@@ -367,17 +368,18 @@ class WatchProperties {
 			path = parseVars(path)[0]; // TODO subscribe to all vars?
 
 		// Create property at top level path, even if we're only watching something much deeper.
-		// This way we don't have to worry about overriding properties created at deper levels.
+		// This way we don't have to worry about overriding properties created at deeper levels.
 		var self = this;
 		var field = path[0];
 		if (!(field in self.fields_)) {
+			self.fields_[field] = self.obj_[field];
 
 			// Set initial value from obj, creating the path to it.
-			let initialValue = traversePath(this.obj_, path);
-			if (initialValue && initialValue.isProxy) // optional check
-				throw new Error();
+			// let initialValue = traversePath(this.obj_, path);
+			// if (initialValue && initialValue.isProxy) // optional check
+			// 	throw new Error();
+			// traversePath(this.fields_, path, true, initialValue);
 
-			traversePath(this.fields_, path, true, initialValue);
 
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
@@ -393,25 +395,16 @@ class WatchProperties {
 			});
 		}
 
+		// Create the full path if it doesn't exist.
+		let initialValue = traversePath(this.fields_, path);
+		if (initialValue === undefined)
+			traversePath(this.fields_, path, true);
 
-		// Append to subscriptions.
-		// var jpath = csv(path);
-		// if (!(jpath in self.subs))
-		// 	self.subs[jpath] = [];
-		// self.subs[jpath].push(callback);
-
-		// Add the callback to this path and all parent paths.
-		var path2 = path.slice();  // shallow copy
-		//while(path2.length) {
-
-			let jpath = csv(path2);
-			if (!(jpath in self.subs_))
-				self.subs_[jpath] = [];
-			self.subs_[jpath].push(callback);
-
-		//	path2.pop();
-		//}
-
+		// Add to subscriptions
+		let cpath = csv(path);
+		if (!(cpath in self.subs_))
+			self.subs_[cpath] = [];
+		self.subs_[cpath].push(callback);
 	}
 
 	unsubscribe(path, callback) {
@@ -506,6 +499,7 @@ function watchlessGet(obj, path) {
 
 function watchlessSet(obj, path, val) {
 	// TODO: Make this work instead:
+	// Or just use unProxied prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
 
@@ -951,6 +945,7 @@ XElement.dataAttr = {
 
 			// Set initial value.
 			// TODO remove redundancy with f() in this and other dataAttr's.
+			// TODO: This doesn't need to be inside the loop.
 			(function () {
 				if (traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
@@ -981,7 +976,7 @@ XElement.dataAttr = {
 		// Set initial value.
 		(function() {
 			el.innerHTML = eval(code);
-		}).bind(this)();
+		}).bind(self)();
 	},
 
 	text: function (self, code, el) {
@@ -989,6 +984,8 @@ XElement.dataAttr = {
 			let setText = (action, actionPath, value) => {
 				el.textContent = traversePath(self, path) === undefined ? '' : eval(code);
 			};
+			// if (window.debug)
+			// 	debugger;
 			watch(self, path, setText);
 			addWatchedEl(el, setText);
 		}
@@ -1032,14 +1029,12 @@ XElement.dataAttr = {
 				el.removeChild(el.lastChild);
 			}
 
-			if (window.debug)
-				debugger;
-
 			// Recreate all children.
 			if (html.length)
 				for (let i in eval(code)) {
 					let child = createEl(html);
 					el.appendChild(child);
+
 					bind(self, child);
 					bindEvents(self, child);
 				}

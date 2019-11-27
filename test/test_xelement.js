@@ -272,23 +272,22 @@ var test_XElement = {
 			b.spanHtml = text;
 			assertEq(b.shadowRoot.children[0].textContent, text);
 		})();
-	},
 
-	bind2: function() {
 		// Make sure unbinding one element doesn't unsubscribe() other watches.
-		class B5 extends XElement {}
-		B5.html =
-			'<div>' +
-				'<span data-text="item.name"></span>' +
-				'<p data-text="item.name"></p>' +
-			'</div>';
-		var b = new B5();
-		b.item = {name: 1};
-		console.log(b.shadowRoot.innerHTML);
+		(function() {
+			class B5 extends XElement {}
+			B5.html =
+				'<div>' +
+					'<span data-text="item.name"></span>' +
+					'<p data-text="item.name"></p>' +
+				'</div>';
+			var b = new B5();
+			b.item = {name: 1};
 
-		console.log(b.item.isProxy);
-		unbind(b, b.shadowRoot.children[1]);
-		console.log(b.item.isProxy);
+			assert(b.item.isProxy);
+			unbind(b, b.shadowRoot.children[1]);
+			assert(b.item.isProxy);
+		})();
 	},
 
 	bindVal: function() {
@@ -543,7 +542,7 @@ var test_XElement = {
 		// TODO: foreach over sub-property of outer loop.
 	},
 
-	bindLoop2: function() {
+	bindNestedLoop: function() {
 
 		class BL3 extends XElement {}
 		BL3.html =
@@ -582,7 +581,6 @@ var test_XElement = {
 			'<span data-text="cat+\':\'+item">2:1</span>' +
 			'<span data-text="cat+\':\'+item">3:1</span>' +
 			'</div>');
-
 	},
 
 
