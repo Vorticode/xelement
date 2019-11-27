@@ -71,7 +71,6 @@ var test_Watch = {
 
 		var o = { a: [0, 1] };
 		var wp = new WatchProperties(o);
-		var ops = [];
 		var callback = function(action, path, value) {
 			ops.push(Array.from(arguments));
 		};
@@ -86,6 +85,29 @@ var test_Watch = {
 		assertEq(Object.keys(wp.subs_).length, 1);
 		wp.unsubscribe(['a', 0], callback);
 		assertEq(Object.keys(wp.subs_).length, 0);
+	},
+
+	unsubscribe2: function() {
+		// Make sure unsubscribing a child leaves the parent.  This used to fail.
+		var o = { a: [0, 1] };
+		var wp = new WatchProperties(o);
+		var cb = ()=>{};
+
+		wp.subscribe(['a'], cb);
+		wp.subscribe(['a', '0'], cb);
+
+		// Unsubscribe one callback from a[0]
+		wp.unsubscribe(['a', '0'], cb);
+		assert(o.a.isProxy);
+
+		// Unsubscribe all callbacks from a[0]
+		wp.unsubscribe(['a', '0']);
+		assert(o.a.isProxy);
+
+		// Unsubscribe last callbacks from a.
+		wp.unsubscribe(['a'], cb);
+		assert(!o.a.isProxy);
+
 	}
 };
 
@@ -336,16 +358,16 @@ var test_XElement = {
 			console.log(wp.subs_);
 
 			b.items.pop();
-			//assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span>');
+			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span>');
 
-			// b.items.pop();
-			// assertEq(b.shadowRoot.innerHTML, '');
-			//
-			// b.items.push(3);
-			// assertEq(b.shadowRoot.innerHTML, '<span data-text="item">3</span>');
-			//
-			// b.items[0] = 4;
-			// assertEq(b.shadowRoot.innerHTML, '<span data-text="item">4</span>');
+			b.items.pop();
+			assertEq(b.shadowRoot.innerHTML, '');
+
+			b.items.push(3);
+			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">3</span>');
+
+			b.items[0] = 4;
+			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">4</span>');
 		})();
 
 		// Loop with sub-properties, whitespace around nodes
@@ -378,47 +400,13 @@ var test_XElement = {
 			b.loop.children[0].value = '2';
 			b.loop.children[0].dispatchEvent(new Event('input'));
 			assertEq(b.loop.children[0].value, '2');
-
-			//assertEq(b.shadowRoot.innerHTML, '<span data-text="item.a">1</span><span data-text="item.a">2</span>');
 		})();
 
 		// Nested loop
 		(function () {
-			class BL3 extends XElement {}
-			BL3.html =
-				'<div data-loop="items:item">' +
-					'<div data-loop="cats:cat">' +
-						'<span data-text="cat+\':\'+item">Hi</span>' +
-					'</div>' +
-				'</div>';
 
-			var b = new BL3();
-			b.items = [1, 2];
-			b.cats = [1, 2];
-			assertEq(b.shadowRoot.innerHTML,
-				'<div data-loop="cats:cat">' +
-					'<span data-text="cat+\':\'+item">1:1</span>' +
-					'<span data-text="cat+\':\'+item">2:1</span>' +
-				'</div>' +
-				'<div data-loop="cats:cat">' +
-					'<span data-text="cat+\':\'+item">1:2</span>' +
-					'<span data-text="cat+\':\'+item">2:2</span>' +
-				'</div>');
 
-			b.items.pop();
-			assertEq(b.shadowRoot.innerHTML,
-				'<div data-loop="cats:cat">' +
-					'<span data-text="cat+\':\'+item">1:1</span>' +
-					'<span data-text="cat+\':\'+item">2:1</span>' +
-				'</div>');
 
-			b.cats.push(3);
-			assertEq(b.shadowRoot.innerHTML,
-				'<div data-loop="cats:cat">' +
-					'<span data-text="cat+\':\'+item">1:1</span>' +
-					'<span data-text="cat+\':\'+item">2:1</span>' +
-					'<span data-text="cat+\':\'+item">3:1</span>' +
-				'</div>');
 		})();
 
 		// Loop on nested XElement with val binding.
@@ -452,11 +440,11 @@ var test_XElement = {
 		(function() {
 			class BL5 extends XElement {}
 			BL5.html = `
-			<div>
-				<div id="loop" data-loop="items: item">
-					<input data-val="item.name">					
-				</div>
-			</div>`;
+				<div>
+					<div id="loop" data-loop="items: item">
+						<input data-val="item.name">					
+					</div>
+				</div>`;
 
 			var v = new BL5();
 			v.items = [ // This tests uses sub-properties to trigger possible undefiend defererencing.
@@ -470,28 +458,106 @@ var test_XElement = {
 			assertEq(v.loop.children.length, 0);
 			//assert(!watched.get(v)); // The object will be removed from teh watched weakmap if it has no subscribers.
 		})();
-	},
 
-	bindLoop2: function() {
 		// Test splice
-		class BL6 extends XElement {}
-		BL6.html = `
+		(function() {
+			class BL6 extends XElement {}
+			BL6.html = `
+				<div>
+					<div id="loop" data-loop="items: item">
+						<input data-val="item.name">					
+					</div>
+				</div>`;
+
+			var v = new BL6();
+			v.items = [ // This tests uses sub-properties to trigger possible undefiend defererencing.
+				{name: 'A'},
+				{name: 'B'},
+				{name: 'C'}
+			];
+
+			v.items.splice(1, 1); // remove B.
+
+			assertEq(v.loop.children.length, 2);
+		})();
+
+
+		// Reassign whole loop variable multiple times to make sure we don't lose the subscription.
+		(function() {
+			class BL7 extends XElement {}
+			BL7.html = `
 			<div>
 				<div id="loop" data-loop="items: item">
 					<input data-val="item.name">					
 				</div>
 			</div>`;
 
-		var v = new BL6();
-		v.items = [ // This tests uses sub-properties to trigger possible undefiend defererencing.
-			{name: 'A'},
-			{name: 'B'},
-			{name: 'C'}
-		];
+			var v = new BL7();
+			v.items = [
+				{name: 'A'},
+				{name: 'B'},
+				{name: 'C'}
+			];
+			assertEq(v.loop.children.length, 3);
 
-		v.items.splice(1, 1); // remove B.
 
-		assertEq(v.loop.children.length, 2);
+			v.items = [
+				{name: 'D'}
+			];
+			assertEq(v.loop.children.length, 1);
+
+
+			v.items = [];
+			assertEq(v.loop.children.length, 0);
+
+
+			v.items = [
+				{name: 'F'},
+				{name: 'G'},
+				{name: 'H'}
+			];
+			assertEq(v.loop.children.length, 3);
+		})();
+	},
+
+	bindLoop2: function() {
+
+		class BL3 extends XElement {}
+		BL3.html =
+			'<div data-loop="items:item">' +
+				'<div data-loop="cats:cat">' +
+					'<span data-text="cat+\':\'+item">Hi</span>' +
+				'</div>' +
+			'</div>';
+
+		var b = new BL3();
+		b.items = [1, 2];
+		b.cats = [1, 2];
+		assertEq(b.shadowRoot.innerHTML,
+			'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:1</span>' +
+				'<span data-text="cat+\':\'+item">2:1</span>' +
+			'</div>' +
+			'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:2</span>' +
+				'<span data-text="cat+\':\'+item">2:2</span>' +
+			'</div>');
+
+		b.items.pop();
+		assertEq(b.shadowRoot.innerHTML,
+			'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:1</span>' +
+				'<span data-text="cat+\':\'+item">2:1</span>' +
+			'</div>');
+
+		b.cats.push(3);
+		assertEq(b.shadowRoot.innerHTML,
+			'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:1</span>' +
+				'<span data-text="cat+\':\'+item">2:1</span>' +
+				'<span data-text="cat+\':\'+item">3:1</span>' +
+			'</div>');
+
 	},
 
 

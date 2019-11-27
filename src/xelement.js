@@ -8,6 +8,10 @@ implement other binding functions.
 create from <template> tag
 compress
 
+caching:
+auto cache results of parseVars() and other parse functions?
+cach the context of loop vars.
+
 shadow DOM - https://developers.google.com/web/fundamentals/web-components/shadowdom
 Move functions to outer scope so people can implement thier own attributes?
 non-ascii variable names.
@@ -47,9 +51,8 @@ function getContext(el) {
 		let code = parent.getAttribute && parent.getAttribute('data-loop');
 		if (code) {
 
-			let [foreach, item] = parseLoop(code);
-
 			// Check for an inner loop having the same variable name
+			let [foreach, item] = parseLoop(code);
 			if (item in context)
 				throw new Error('Loop variable "' + item + '"already declared in an outer scope.');
 
@@ -75,9 +78,7 @@ function getContext(el) {
  *     <div>data-loop="this.items : item">
  *         <div data-val="item.name">
  *  The looped item becomes:
- *         <div data-val="this.items[0].name">
- *
- * */
+ *         <div data-val="this.items[0].name"> */
 function bind(self, el, context) {
 	var foreach, item;
 
@@ -154,8 +155,7 @@ function unbind(self, root) {
 
 	for (let el of els) {
 
-		var context = getContext(el);
-
+		let context;
 		for (let attr of el.attributes) {
 			if (attr.name.substr(0, 5) === 'data-') {
 				let code = attr.value;
@@ -166,7 +166,8 @@ function unbind(self, root) {
 				// Allow the "this." prefix to be optional for simple vars.
 				//if (isSimpleVar(code) && !code.startsWith('this'))
 				//	code = 'this.' + code;
-
+				if (!context)
+					context = getContext(el);
 				code = replaceVars(code, context);
 				var paths = parseVars(code);
 
@@ -262,15 +263,11 @@ function initHtml(self) {
 
 	// Shadow DOM:
 	self.attachShadow({mode: 'open'});
-
 	while (div.firstChild)
 		self.shadowRoot.appendChild(div.firstChild);
-
 	var root = self.shadowRoot || self;
 
 	/*
-
-
 	// Html within <x-classname>...</x-classname>, where the tag is added to another element.
 	// This only works in the Edge shim.  It's an empty string in chrome and firefox.
 	var slotHtml = self.innerHTML;
@@ -288,7 +285,6 @@ function initHtml(self) {
 	// Copy children from <x-classname> into the slot.
 	if (slotHtml)
 		(slot || self).innerHTML = slotHtml;
-
 	*/
 
 
@@ -311,9 +307,8 @@ function initHtml(self) {
 			node.removeAttribute('id');
 	}
 
-	// 3. Bind all data- attributes
+	// 3. Bind all data- and event attributes
 	bind(self, self);
-
 	bindEvents(self, root);
 
 
@@ -338,7 +333,7 @@ function initHtml(self) {
  * 5.  data-bind
  *     simple variables and automatic this.
  *
- * 6.  Events.  "this" and "event" var rewiring.
+ * 6.  Events.  "this" and "event" var rewiring, event.target.
  *
  *
  *
@@ -413,7 +408,7 @@ XElement.dataAttr = {
 				//console.log(action, actionPath, val);
 
 				// Sometimes action="set" is called on a parent path and we receive no "delete"
-				if (action === 'delete' || traversePath(self, path) === undefined) {
+				if (traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
 						el.checked = false;
 					else
@@ -450,7 +445,7 @@ XElement.dataAttr = {
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
 			watch(self, path, (action, actionPath, value) => {
-				el.innerHTML = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
+				el.innerHTML = traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 
@@ -463,7 +458,7 @@ XElement.dataAttr = {
 	text: function (self, code, el) {
 		for (let path of parseVars(code)) {
 			watch(self, path, (action, actionPath, value) => {
-				el.textContent = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
+				el.textContent = traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 
@@ -526,10 +521,11 @@ XElement.dataAttr = {
 	},
 
 	/*
-	'cls': function(self, field, el) {}, // data-cls="house.big" // Adds or removes the big class when the house.big var is true or false.
+	'cls': function(self, field, el) {}, // data-cls="{house: 'big'}" // Adds or removes the big class when the house property is true.
 	'style': function(self, field, el) {}, // Can point to an object to use for the style.
 	'if': function(self, field, el) {}, // Element is created or destroyed when data-if="code" evaluates to true or false.
 	'visible':
+	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
 
 	/**
@@ -545,7 +541,7 @@ XElement.dataAttr = {
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code)) {
 			watch(self, path, (action) => { // slice() to remove this.
-				if (action === 'delete' || traversePath(self, path) === undefined)
+				if (traversePath(self, path) === undefined)
 					el.removeAttribute(attr);
 				else {
 					var result = eval(code);

@@ -13,7 +13,7 @@ function createEl(html) {
  * @param array {string[]}
  * @returns {string} */
 function csv(array) {
-	return JSON.stringify(array).slice(1, -1); // Remove starting and ending [].
+	return JSON.stringify(array).slice(1, -1); // slice() to remove starting and ending [].
 }
 
 /**
@@ -47,8 +47,8 @@ function parentIndex(el) {
 /**
  * @param obj {object}
  * @param path {string[]}
- * @param create {boolean=false}
- * @param value If not undefined, set the object's path field to this value. */
+ * @param create {boolean=false} Create the path if it doesn't exist.
+ * @param value {*=} If not undefined, set the object's path field to this value. */
 function traversePath(obj, path, create, value) {
 	for (let i=0; i<path.length; i++) {
 		let srcProp = path[i];

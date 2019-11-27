@@ -20,6 +20,11 @@ function watchObj(root, callback) {
 		 * @param field {string} An object key or array index.
 		 * @returns {*} */
 		get(obj, field) {
+			if (field==='isProxy')
+				return true;
+			if (field==='unProxied')
+				return obj;
+
 			var result = obj[field];
 			if (typeof result === 'object' && result !== null) {
 
@@ -29,6 +34,8 @@ function watchObj(root, callback) {
 					paths.set(result, [...paths.get(obj), field]);
 
 				// If setting the value to an object or array, also create a proxy around that one.
+				if (result.isProxy)
+					return result; // TODO: Will this break having multiple proxies per object?
 				return new Proxy(result, handler);
 			}
 			return result;
@@ -42,6 +49,11 @@ function watchObj(root, callback) {
 		 * @param newVal {*}
 		 * @returns {boolean} */
 		set(obj, field, newVal) {
+
+			// Don't nest proxies.
+			while (newVal.isProxy)
+				newVal = newVal.unProxied;
+
 			var path = [...paths.get(obj), field];
 			//console.log('set', path, newVal);
 			if (field === 'length') { // Convert length changes to delete.  spice() will set length.
@@ -74,6 +86,15 @@ function watchObj(root, callback) {
 
 	return new Proxy(root, handler);
 }
+
+function keysStartWith(obj, prefix) {
+	var result = [];
+	for (let key in obj)
+		if (key.startsWith(prefix))
+			result.push(obj[key]);
+	return result;
+}
+
 
 /**
  * Allow subcribing only to specific properties of an object.
@@ -130,6 +151,9 @@ class WatchProperties {
 
 			// Set initial value from obj, creating the path to it.
 			let initialValue = traversePath(this.obj_, path);
+			if (initialValue && initialValue.isProxy) // optional check
+				throw new Error();
+
 			traversePath(this.fields_, path, true, initialValue);
 
 			// If we're subscribing to something within the top-level field for the first time,
@@ -174,31 +198,27 @@ class WatchProperties {
 			path = parseVars(path)[0];
 
 		// Remove the callback from this path and all parent paths.
-		var path2 = path.slice(); // shallow copy
-		//while(path2.length) {
-			let jpath = csv(path2);
-			if (jpath in this.subs_) {
+		let cpath = csv(path);
+		if (cpath in this.subs_) {
 
-				// Remove the callback from the subscriptions
-				if (callback) {
-					let callbackIndex = this.subs_[jpath].indexOf(callback);
-					this.subs_[jpath].splice(callbackIndex, 1); // splice() modifies array in-place
-				}
-
-				// Remove the jpath from subs when last callback unsubscribes.
-				if (!callback || !this.subs_[jpath].length) {
-
-					// Undo the Object.defineProperty() call.
-					delete this.obj_[path2[0]];
-					this.obj_[path2[0]] = this.proxy_[path2[0]];
-
-					// Remove the property from the subscriptions.
-					delete this.subs_[jpath];
-				}
+			// Remove the callback from the subscriptions
+			if (callback) {
+				let callbackIndex = this.subs_[cpath].indexOf(callback);
+				this.subs_[cpath].splice(callbackIndex, 1); // splice() modifies array in-place
 			}
 
-		//	path2.pop();
-		//}
+			// Remove the whole subscription array if it's empty.
+			if (!callback || !this.subs_[cpath].length)
+				delete this.subs_[cpath];
+
+			// Undo the Object.defineProperty() call when there are no more subscriptions to it.
+			let propCpath = csv([path[0]]);
+			if (!keysStartWith(this.subs_, propCpath).filter((x) => x.length).length) {
+
+				delete this.obj_[path[0]];
+				this.obj_[path[0]] = this.fields_[path[0]];
+			}
+		}
 	}
 }
 
@@ -250,10 +270,14 @@ function unwatch(obj, path, callback) {
 /*
 function watchlessGet(obj, path) {
 	let node = watched.get(obj).fields_;
-	while (path.length)
-		node = node[path.shift()];
+	for (let p of path) {
+		node = node[p];
+		if (node.isProxy)
+			throw new Error();
+	}
 	return node;
-}*/
+}
+*/
 
 function watchlessSet(obj, path, val) {
 	// TODO: Make this work instead:
@@ -262,8 +286,11 @@ function watchlessSet(obj, path, val) {
 
 	let node =  watched.get(obj).fields_;
 	let prop = path.slice(-1)[0];
-	for (let p of path.slice(0, -1))
+	for (let p of path.slice(0, -1)) {
 		node = node[p];
+		if (node.isProxy) /// optional sanity check
+			throw new Error();
+	}
 
 	return node[prop] = val;
 }

@@ -15,7 +15,7 @@ function createEl(html) {
  * @param array {string[]}
  * @returns {string} */
 function csv(array) {
-	return JSON.stringify(array).slice(1, -1); // Remove starting and ending [].
+	return JSON.stringify(array).slice(1, -1); // slice() to remove starting and ending [].
 }
 
 /**
@@ -49,8 +49,8 @@ function parentIndex(el) {
 /**
  * @param obj {object}
  * @param path {string[]}
- * @param create {boolean=false}
- * @param value If not undefined, set the object's path field to this value. */
+ * @param create {boolean=false} Create the path if it doesn't exist.
+ * @param value {*=} If not undefined, set the object's path field to this value. */
 function traversePath(obj, path, create, value) {
 	for (let i=0; i<path.length; i++) {
 		let srcProp = path[i];
@@ -243,6 +243,11 @@ function watchObj(root, callback) {
 		 * @param field {string} An object key or array index.
 		 * @returns {*} */
 		get(obj, field) {
+			if (field==='isProxy')
+				return true;
+			if (field==='unProxied')
+				return obj;
+
 			var result = obj[field];
 			if (typeof result === 'object' && result !== null) {
 
@@ -252,6 +257,8 @@ function watchObj(root, callback) {
 					paths.set(result, [...paths.get(obj), field]);
 
 				// If setting the value to an object or array, also create a proxy around that one.
+				if (result.isProxy)
+					return result; // TODO: Will this break having multiple proxies per object?
 				return new Proxy(result, handler);
 			}
 			return result;
@@ -265,6 +272,11 @@ function watchObj(root, callback) {
 		 * @param newVal {*}
 		 * @returns {boolean} */
 		set(obj, field, newVal) {
+
+			// Don't nest proxies.
+			while (newVal.isProxy)
+				newVal = newVal.unProxied;
+
 			var path = [...paths.get(obj), field];
 			//console.log('set', path, newVal);
 			if (field === 'length') { // Convert length changes to delete.  spice() will set length.
@@ -297,6 +309,15 @@ function watchObj(root, callback) {
 
 	return new Proxy(root, handler);
 }
+
+function keysStartWith(obj, prefix) {
+	var result = [];
+	for (let key in obj)
+		if (key.startsWith(prefix))
+			result.push(obj[key]);
+	return result;
+}
+
 
 /**
  * Allow subcribing only to specific properties of an object.
@@ -353,6 +374,9 @@ class WatchProperties {
 
 			// Set initial value from obj, creating the path to it.
 			let initialValue = traversePath(this.obj_, path);
+			if (initialValue && initialValue.isProxy) // optional check
+				throw new Error();
+
 			traversePath(this.fields_, path, true, initialValue);
 
 			// If we're subscribing to something within the top-level field for the first time,
@@ -397,31 +421,27 @@ class WatchProperties {
 			path = parseVars(path)[0];
 
 		// Remove the callback from this path and all parent paths.
-		var path2 = path.slice(); // shallow copy
-		//while(path2.length) {
-			let jpath = csv(path2);
-			if (jpath in this.subs_) {
+		let cpath = csv(path);
+		if (cpath in this.subs_) {
 
-				// Remove the callback from the subscriptions
-				if (callback) {
-					let callbackIndex = this.subs_[jpath].indexOf(callback);
-					this.subs_[jpath].splice(callbackIndex, 1); // splice() modifies array in-place
-				}
-
-				// Remove the jpath from subs when last callback unsubscribes.
-				if (!callback || !this.subs_[jpath].length) {
-
-					// Undo the Object.defineProperty() call.
-					delete this.obj_[path2[0]];
-					this.obj_[path2[0]] = this.proxy_[path2[0]];
-
-					// Remove the property from the subscriptions.
-					delete this.subs_[jpath];
-				}
+			// Remove the callback from the subscriptions
+			if (callback) {
+				let callbackIndex = this.subs_[cpath].indexOf(callback);
+				this.subs_[cpath].splice(callbackIndex, 1); // splice() modifies array in-place
 			}
 
-		//	path2.pop();
-		//}
+			// Remove the whole subscription array if it's empty.
+			if (!callback || !this.subs_[cpath].length)
+				delete this.subs_[cpath];
+
+			// Undo the Object.defineProperty() call when there are no more subscriptions to it.
+			let propCpath = csv([path[0]]);
+			if (!keysStartWith(this.subs_, propCpath).filter((x) => x.length).length) {
+
+				delete this.obj_[path[0]];
+				this.obj_[path[0]] = this.fields_[path[0]];
+			}
+		}
 	}
 }
 
@@ -473,10 +493,14 @@ function unwatch(obj, path, callback) {
 /*
 function watchlessGet(obj, path) {
 	let node = watched.get(obj).fields_;
-	while (path.length)
-		node = node[path.shift()];
+	for (let p of path) {
+		node = node[p];
+		if (node.isProxy)
+			throw new Error();
+	}
 	return node;
-}*/
+}
+*/
 
 function watchlessSet(obj, path, val) {
 	// TODO: Make this work instead:
@@ -485,8 +509,11 @@ function watchlessSet(obj, path, val) {
 
 	let node =  watched.get(obj).fields_;
 	let prop = path.slice(-1)[0];
-	for (let p of path.slice(0, -1))
+	for (let p of path.slice(0, -1)) {
 		node = node[p];
+		if (node.isProxy) /// optional sanity check
+			throw new Error();
+	}
 
 	return node[prop] = val;
 };
@@ -500,6 +527,10 @@ Fix failing Edge tests.
 implement other binding functions.
 create from <template> tag
 compress
+
+caching:
+auto cache results of parseVars() and other parse functions?
+cach the context of loop vars.
 
 shadow DOM - https://developers.google.com/web/fundamentals/web-components/shadowdom
 Move functions to outer scope so people can implement thier own attributes?
@@ -540,9 +571,8 @@ function getContext(el) {
 		let code = parent.getAttribute && parent.getAttribute('data-loop');
 		if (code) {
 
-			let [foreach, item] = parseLoop(code);
-
 			// Check for an inner loop having the same variable name
+			let [foreach, item] = parseLoop(code);
 			if (item in context)
 				throw new Error('Loop variable "' + item + '"already declared in an outer scope.');
 
@@ -568,9 +598,7 @@ function getContext(el) {
  *     <div>data-loop="this.items : item">
  *         <div data-val="item.name">
  *  The looped item becomes:
- *         <div data-val="this.items[0].name">
- *
- * */
+ *         <div data-val="this.items[0].name"> */
 function bind(self, el, context) {
 	var foreach, item;
 
@@ -647,8 +675,7 @@ function unbind(self, root) {
 
 	for (let el of els) {
 
-		var context = getContext(el);
-
+		let context;
 		for (let attr of el.attributes) {
 			if (attr.name.substr(0, 5) === 'data-') {
 				let code = attr.value;
@@ -659,7 +686,8 @@ function unbind(self, root) {
 				// Allow the "this." prefix to be optional for simple vars.
 				//if (isSimpleVar(code) && !code.startsWith('this'))
 				//	code = 'this.' + code;
-
+				if (!context)
+					context = getContext(el);
 				code = replaceVars(code, context);
 				var paths = parseVars(code);
 
@@ -755,15 +783,11 @@ function initHtml(self) {
 
 	// Shadow DOM:
 	self.attachShadow({mode: 'open'});
-
 	while (div.firstChild)
 		self.shadowRoot.appendChild(div.firstChild);
-
 	var root = self.shadowRoot || self;
 
 	/*
-
-
 	// Html within <x-classname>...</x-classname>, where the tag is added to another element.
 	// This only works in the Edge shim.  It's an empty string in chrome and firefox.
 	var slotHtml = self.innerHTML;
@@ -781,7 +805,6 @@ function initHtml(self) {
 	// Copy children from <x-classname> into the slot.
 	if (slotHtml)
 		(slot || self).innerHTML = slotHtml;
-
 	*/
 
 
@@ -804,9 +827,8 @@ function initHtml(self) {
 			node.removeAttribute('id');
 	}
 
-	// 3. Bind all data- attributes
+	// 3. Bind all data- and event attributes
 	bind(self, self);
-
 	bindEvents(self, root);
 
 
@@ -831,7 +853,7 @@ function initHtml(self) {
  * 5.  data-bind
  *     simple variables and automatic this.
  *
- * 6.  Events.  "this" and "event" var rewiring.
+ * 6.  Events.  "this" and "event" var rewiring, event.target.
  *
  *
  *
@@ -906,7 +928,7 @@ XElement.dataAttr = {
 				//console.log(action, actionPath, val);
 
 				// Sometimes action="set" is called on a parent path and we receive no "delete"
-				if (action === 'delete' || traversePath(self, path) === undefined) {
+				if (traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
 						el.checked = false;
 					else
@@ -943,7 +965,7 @@ XElement.dataAttr = {
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
 			watch(self, path, (action, actionPath, value) => {
-				el.innerHTML = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
+				el.innerHTML = traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 
@@ -956,7 +978,7 @@ XElement.dataAttr = {
 	text: function (self, code, el) {
 		for (let path of parseVars(code)) {
 			watch(self, path, (action, actionPath, value) => {
-				el.textContent = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
+				el.textContent = traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
 
@@ -1019,10 +1041,11 @@ XElement.dataAttr = {
 	},
 
 	/*
-	'cls': function(self, field, el) {}, // data-cls="house.big" // Adds or removes the big class when the house.big var is true or false.
+	'cls': function(self, field, el) {}, // data-cls="{house: 'big'}" // Adds or removes the big class when the house property is true.
 	'style': function(self, field, el) {}, // Can point to an object to use for the style.
 	'if': function(self, field, el) {}, // Element is created or destroyed when data-if="code" evaluates to true or false.
 	'visible':
+	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
 
 	/**
@@ -1038,7 +1061,7 @@ XElement.dataAttr = {
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code)) {
 			watch(self, path, (action) => { // slice() to remove this.
-				if (action === 'delete' || traversePath(self, path) === undefined)
+				if (traversePath(self, path) === undefined)
 					el.removeAttribute(attr);
 				else {
 					var result = eval(code);
