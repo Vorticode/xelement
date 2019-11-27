@@ -9,9 +9,17 @@ function createEl(html) {
 }
 
 /**
+ * Return the array as a quoted csv string.
+ * @param array {string[]}
+ * @returns {string} */
+function csv(array) {
+	return JSON.stringify(array).slice(1, -1); // Remove starting and ending [].
+}
+
+/**
  * Is name a valid attribute for el.
- * @param el
- * @param name
+ * @param el {HTMLElement}
+ * @param name {string}
  * @returns {boolean} */
 function isValidAttribute(el, name) {
 	if (name.startsWith('data-') || el.hasAttribute(name))
@@ -26,6 +34,9 @@ function isValidAttribute(el, name) {
 	return isAttr;
 }
 
+/**
+ * @param el {HTMLElement}
+ * @returns {int} */
 function parentIndex(el) {
 	if (!el.parentNode)
 		return 0;

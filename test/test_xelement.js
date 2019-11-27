@@ -58,7 +58,7 @@ var test_Watch = {
 			ops.push(Array.from(arguments));
 		});
 
-		o.a.shift();
+		o.a.shift(); // remove the 0 from the beginning.
 
 		assertEq(o.a.length, 1);
 		assertEq(o.a[0], 1);
@@ -83,7 +83,7 @@ var test_Watch = {
 
 
 		wp.subscribe(['a', 0], callback);
-		assertEq(Object.keys(wp.subs_).length, 2);
+		assertEq(Object.keys(wp.subs_).length, 1);
 		wp.unsubscribe(['a', 0], callback);
 		assertEq(Object.keys(wp.subs_).length, 0);
 	}
@@ -347,7 +347,6 @@ var test_XElement = {
 			// b.items[0] = 4;
 			// assertEq(b.shadowRoot.innerHTML, '<span data-text="item">4</span>');
 		})();
-		return;
 
 		// Loop with sub-properties, whitespace around nodes
 		(function () {
@@ -469,7 +468,7 @@ var test_XElement = {
 			// Calls action=set on the parent element, which sends no action="delete"
 			v.items = [];
 			assertEq(v.loop.children.length, 0);
-			assert(!watched.get(v)); // The object will be removed from teh watched weakmap if it has no subscribers.
+			//assert(!watched.get(v)); // The object will be removed from teh watched weakmap if it has no subscribers.
 		})();
 	},
 
@@ -489,9 +488,10 @@ var test_XElement = {
 			{name: 'B'},
 			{name: 'C'}
 		];
-		v.items.splice(1, 1);
+		
+		v.items.splice(1, 1); // remove B.
 
-		console.log(v.loop.children);
+		assertEq(v.loop.children.length, 2);
 	},
 
 

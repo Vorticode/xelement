@@ -144,6 +144,9 @@ function bind(self, el, context) {
 		delete context[item];
 }
 
+/**
+ * @param self {XElement}
+ * @param root {HTMLElement} */
 function unbind(self, root) {
 	var els = [...root.querySelectorAll('*')];
 	if (root.attributes)
@@ -405,8 +408,8 @@ XElement.dataAttr = {
 			});
 
 		// Update input value when object property changes.
-		for (let path of vars)
-			watch(self, path, (action, actionPath, val)=> {
+		for (let path of vars) {
+			watch(self, path, (action, actionPath, val) => {
 				//console.log(action, actionPath, val);
 
 				// Sometimes action="set" is called on a parent path and we receive no "delete"
@@ -424,14 +427,37 @@ XElement.dataAttr = {
 						el.value = eval(code);
 				}
 			});
+
+			// Set initial value.
+			(function () {
+				if (traversePath(self, path) === undefined) {
+					if (el.getAttribute('type') === 'checkbox')
+						el.checked = false;
+					else
+						el.value = '';
+				}
+				else {
+					if (el.getAttribute('type') === 'checkbox')
+						// noinspection EqualityComparisonWithCoercionJS
+						el.checked = eval(code) == true;
+					else
+						el.value = eval(code);
+				}
+			}).bind(this)();
+		}
 	},
 
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action, actionPath, value)=> {
+			watch(self, path, (action, actionPath, value) => {
 				el.innerHTML = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
+
+		// Set initial value.
+		(function() {
+			el.innerHTML = eval(code);
+		}).bind(this)();
 	},
 
 	text: function (self, code, el) {
@@ -440,6 +466,11 @@ XElement.dataAttr = {
 				el.textContent = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
+
+		// Set initial value.
+		(function() {
+			el.textContent = eval(code);
+		}).bind(this)();
 	},
 
 	loop: function (self, code, el) {
@@ -512,9 +543,9 @@ XElement.dataAttr = {
 
 		// If the variables in code, change, execute the code.
 		// Then set the attribute to the value returned by the code.
-		for (let path of parseVars(code))
-			watch(self, path, (action)=> { // slice() to remove this.
-				if (action==='delete' || traversePath(self, path) === undefined)
+		for (let path of parseVars(code)) {
+			watch(self, path, (action) => { // slice() to remove this.
+				if (action === 'delete' || traversePath(self, path) === undefined)
 					el.removeAttribute(attr);
 				else {
 					var result = eval(code);
@@ -524,6 +555,21 @@ XElement.dataAttr = {
 						el.setAttribute(attr, result + '');
 				}
 			});
+
+			// Set initial value.
+			(function() {
+				if (traversePath(self, path) === undefined)
+					el.removeAttribute(attr);
+				else {
+					var result = eval(code);
+					if (result === false)
+						el.removeAttribute(attr);
+					else
+						el.setAttribute(attr, result + '');
+				}
+			}).bind(this)();
+
+		}
 	}
 };
 

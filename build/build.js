@@ -10,6 +10,7 @@ var code = [
 	fs.readFileSync('../src/xelement.js', 'utf8')
 ];
 code =
+	'// https://github.com/Vorticode/xelement\r\n' +
 	'(function() {\r\n' +
 		//'%replace%\r\n' +
 		code.join(';\r\n\r\n') +

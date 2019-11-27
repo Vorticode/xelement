@@ -16,7 +16,7 @@ function watchObj(root, callback) {
 		/**
 		 * Overridden to wrap returned values in a Proxy, so we can see when they're changed.
 		 * And to keep track of the path as we traverse deeper into an object.
-		 * @param obj {object}
+		 * @param obj {Array|object}
 		 * @param field {string} An object key or array index.
 		 * @returns {*} */
 		get(obj, field) {
@@ -37,22 +37,32 @@ function watchObj(root, callback) {
 		/**
 		 * Trap called whenever anything in an array or object is set.
 		 * Changing and shifting array values will also call this function.
-		 * @param obj {object} root or an object within root that we're setting a property on.
+		 * @param obj {Array|object} root or an object within root that we're setting a property on.
 		 * @param field {string} An object key or array index.
 		 * @param newVal {*}
 		 * @returns {boolean} */
 		set(obj, field, newVal) {
-			if (field !== 'length')
-				callback('set', [...paths.get(obj), field], obj[field] = newVal);
+			var path = [...paths.get(obj), field];
+			console.log('set', path, newVal);
+			if (field === 'length') { // Convert length changes to delete.  spice() will set length.
+				// var oldLength = obj.length;
+				// obj.length = newVal;
+				// for (let i=oldLength; i<newVal; i++)
+				// 	callback('delete', path);
+			}
+			else
+				callback('set', path, obj[field] = newVal);
 			return true;
 		},
 
 		/**
 		 * Trap called whenever anything in an array or object is deleted.
-		 * @param obj {object} root or an object within root that we're deleting a property on.
+		 * @param obj {Array|object} root or an object within root that we're deleting a property on.
 		 * @param field {int|string} An object key or array index.
 		 * @returns {boolean} */
 		deleteProperty(obj, field) {
+			console.log('delete', [...paths.get(obj)], field);
+
 			if (Array.isArray(obj))
 				obj.splice(field, 1);
 			else
@@ -86,15 +96,22 @@ class WatchProperties {
 	notify(action, path, value) {
 
 		// Traverse up the path looking for anything subscribed.
-		path = path.slice();
-		while (path.length) {
-			var jpath = JSON.stringify(path); // TODO: This seems like a lot of work for any time a property is changed.
+		var path2 = path.slice(0, -1);
+		while (path2.length) {
+			let jpath = csv(path2); // TODO: This seems like a lot of work for any time a property is changed.
 
 			if (jpath in this.subs_)
 				for (let callback of this.subs_[jpath])
 					callback.apply(this.obj_, arguments) // "this.obj_" so it has the context of the original object.
-			path.pop();
+			path2.pop();
 		}
+
+		// Traverse to our current level and downward looking for anything subscribed
+		let jpath = csv(path);
+		for (let name in this.subs_)
+			if (name.startsWith(jpath))
+				for (let callback of this.subs_[name])
+					callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 	}
 
 	/**
@@ -131,22 +148,22 @@ class WatchProperties {
 
 
 		// Append to subscriptions.
-		// var jpath = JSON.stringify(path);
+		// var jpath = csv(path);
 		// if (!(jpath in self.subs))
 		// 	self.subs[jpath] = [];
 		// self.subs[jpath].push(callback);
 
 		// Add the callback to this path and all parent paths.
 		var path2 = path.slice();  // shallow copy
-		while(path2.length) {
+		//while(path2.length) {
 
-			let jpath = JSON.stringify(path2);
+			let jpath = csv(path2);
 			if (!(jpath in self.subs_))
 				self.subs_[jpath] = [];
 			self.subs_[jpath].push(callback);
 
-			path2.pop();
-		}
+		//	path2.pop();
+		//}
 
 	}
 
@@ -158,8 +175,8 @@ class WatchProperties {
 
 		// Remove the callback from this path and all parent paths.
 		var path2 = path.slice(); // shallow copy
-		while(path2.length) {
-			let jpath = JSON.stringify(path2);
+		//while(path2.length) {
+			let jpath = csv(path2);
 			if (jpath in this.subs_) {
 
 				// Remove the callback from the subscriptions
@@ -180,8 +197,8 @@ class WatchProperties {
 				}
 			}
 
-			path2.pop();
-		}
+		//	path2.pop();
+		//}
 	}
 }
 
@@ -213,6 +230,7 @@ function watch(obj, path, callback) {
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 function unwatch(obj, path, callback) {
 	var wp = watched.get(obj);
+
 	if (wp) {
 		wp.unsubscribe(path, callback);
 
