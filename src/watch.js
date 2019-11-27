@@ -64,7 +64,7 @@ function watchObj(root, callback) {
 			}
 			else
 				callback('set', path, obj[field] = newVal);
-			return true;
+			return true; // Proxy requires us to return true.
 		},
 
 		/**
@@ -215,8 +215,10 @@ class WatchProperties {
 			let propCpath = csv([path[0]]);
 			if (!keysStartWith(this.subs_, propCpath).filter((x) => x.length).length) {
 
-				delete this.obj_[path[0]];
+				delete this.obj_[path[0]]; // Remove the defined property.
 				this.obj_[path[0]] = this.fields_[path[0]];
+
+				delete this.fields_[path[0]];
 			}
 		}
 	}

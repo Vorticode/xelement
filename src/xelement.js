@@ -172,7 +172,9 @@ function unbind(self, root) {
 				var paths = parseVars(code);
 
 				for (let path of paths)
-					unwatch(self, path);
+					// watchedEls.get() returns callbacks from all paths, but unwatch only unsubscribes those of path.
+					for (let callback of watchedEls.get(el) || [])
+						unwatch(self, path, callback);
 			}
 		}
 	}
@@ -268,6 +270,7 @@ function initHtml(self) {
 	var root = self.shadowRoot || self;
 
 	/*
+	// Old version before shadow dom:
 	// Html within <x-classname>...</x-classname>, where the tag is added to another element.
 	// This only works in the Edge shim.  It's an empty string in chrome and firefox.
 	var slotHtml = self.innerHTML;
@@ -404,9 +407,7 @@ XElement.dataAttr = {
 
 		// Update input value when object property changes.
 		for (let path of vars) {
-			watch(self, path, (action, actionPath, val) => {
-				//console.log(action, actionPath, val);
-
+			let setVal = (action, actionPath, val) => {
 				// Sometimes action="set" is called on a parent path and we receive no "delete"
 				if (traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
@@ -421,9 +422,13 @@ XElement.dataAttr = {
 					else
 						el.value = eval(code);
 				}
-			});
+			};
+			watch(self, path, setVal);
+			addWatchedEl(el, setVal);
+
 
 			// Set initial value.
+			// TODO remove redundancy with f() in this and other dataAttr's.
 			(function () {
 				if (traversePath(self, path) === undefined) {
 					if (el.getAttribute('type') === 'checkbox')
@@ -438,15 +443,17 @@ XElement.dataAttr = {
 					else
 						el.value = eval(code);
 				}
-			}).bind(this)();
+			}).bind(self)();
 		}
 	},
 
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action, actionPath, value) => {
+			let setHtml = (action, actionPath, value) => {
 				el.innerHTML = traversePath(self, path) === undefined ? '' : eval(code);
-			});
+			};
+			watch(self, path, setHtml);
+			addWatchedEl(el, setHtml);
 		}
 
 		// Set initial value.
@@ -457,15 +464,17 @@ XElement.dataAttr = {
 
 	text: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action, actionPath, value) => {
+			let setText = (action, actionPath, value) => {
 				el.textContent = traversePath(self, path) === undefined ? '' : eval(code);
-			});
+			};
+			watch(self, path, setText);
+			addWatchedEl(el, setText);
 		}
 
 		// Set initial value.
 		(function() {
 			el.textContent = eval(code);
-		}).bind(this)();
+		}).bind(self)();
 	},
 
 	loop: function (self, code, el) {
@@ -501,6 +510,9 @@ XElement.dataAttr = {
 				el.removeChild(el.lastChild);
 			}
 
+			if (window.debug)
+				debugger;
+
 			// Recreate all children.
 			if (html.length)
 				for (let i in eval(code)) {
@@ -517,6 +529,7 @@ XElement.dataAttr = {
 		// Rebuild children when watched item changes.
 		for (let path of parseVars(code)) {
 			watch(self, path, rebuildChildren);
+			addWatchedEl(el, rebuildChildren);
 		}
 	},
 
@@ -540,7 +553,7 @@ XElement.dataAttr = {
 		// If the variables in code, change, execute the code.
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code)) {
-			watch(self, path, (action) => { // slice() to remove this.
+			var setAttr = (action) => {
 				if (traversePath(self, path) === undefined)
 					el.removeAttribute(attr);
 				else {
@@ -550,7 +563,9 @@ XElement.dataAttr = {
 					else
 						el.setAttribute(attr, result + '');
 				}
-			});
+			};
+			watch(self, path, setAttr);
+			addWatchedEl(el, setAttr);
 
 			// Set initial value.
 			(function() {
@@ -563,11 +578,21 @@ XElement.dataAttr = {
 					else
 						el.setAttribute(attr, result + '');
 				}
-			}).bind(this)();
+			}).bind(self)();
 
 		}
 	}
 };
+
+// A map between elements and the callback functions subscribed to them.
+// This way when we remove an element we know what to unbind.
+var watchedEls = new WeakMap();
+function addWatchedEl(el, callback) {
+	if (!watchedEls.has(el))
+		watchedEls.set(el, [callback]);
+	else
+		watchedEls.get(el).push(callback);
+}
 
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/

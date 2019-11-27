@@ -108,6 +108,10 @@ var test_Watch = {
 		wp.unsubscribe(['a'], cb);
 		assert(!o.a.isProxy);
 
+		// Make sure we can subscribe back again.
+		wp.subscribe(['a'], cb);
+		assert(o.a.isProxy);
+
 	}
 };
 
@@ -268,6 +272,23 @@ var test_XElement = {
 			b.spanHtml = text;
 			assertEq(b.shadowRoot.children[0].textContent, text);
 		})();
+	},
+
+	bind2: function() {
+		// Make sure unbinding one element doesn't unsubscribe() other watches.
+		class B5 extends XElement {}
+		B5.html =
+			'<div>' +
+				'<span data-text="item.name"></span>' +
+				'<p data-text="item.name"></p>' +
+			'</div>';
+		var b = new B5();
+		b.item = {name: 1};
+		console.log(b.shadowRoot.innerHTML);
+
+		console.log(b.item.isProxy);
+		unbind(b, b.shadowRoot.children[1]);
+		console.log(b.item.isProxy);
 	},
 
 	bindVal: function() {
@@ -488,7 +509,7 @@ var test_XElement = {
 			BL7.html = `
 			<div>
 				<div id="loop" data-loop="items: item">
-					<input data-val="item.name">					
+					<input data-val="item.name">
 				</div>
 			</div>`;
 
@@ -518,6 +539,8 @@ var test_XElement = {
 			];
 			assertEq(v.loop.children.length, 3);
 		})();
+
+		// TODO: foreach over sub-property of outer loop.
 	},
 
 	bindLoop2: function() {
@@ -525,9 +548,9 @@ var test_XElement = {
 		class BL3 extends XElement {}
 		BL3.html =
 			'<div data-loop="items:item">' +
-				'<div data-loop="cats:cat">' +
-					'<span data-text="cat+\':\'+item">Hi</span>' +
-				'</div>' +
+			'<div data-loop="cats:cat">' +
+			'<span data-text="cat+\':\'+item">Hi</span>' +
+			'</div>' +
 			'</div>';
 
 		var b = new BL3();
@@ -535,27 +558,29 @@ var test_XElement = {
 		b.cats = [1, 2];
 		assertEq(b.shadowRoot.innerHTML,
 			'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:1</span>' +
-				'<span data-text="cat+\':\'+item">2:1</span>' +
+			'<span data-text="cat+\':\'+item">1:1</span>' +
+			'<span data-text="cat+\':\'+item">2:1</span>' +
 			'</div>' +
 			'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:2</span>' +
-				'<span data-text="cat+\':\'+item">2:2</span>' +
+			'<span data-text="cat+\':\'+item">1:2</span>' +
+			'<span data-text="cat+\':\'+item">2:2</span>' +
 			'</div>');
 
+		// Since this removes all children, it will convert cats back to a regular field instead of a defined property.
+		// But it should convert it back to a proxy when rebuildChildren() is called.
 		b.items.pop();
 		assertEq(b.shadowRoot.innerHTML,
 			'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:1</span>' +
-				'<span data-text="cat+\':\'+item">2:1</span>' +
+			'<span data-text="cat+\':\'+item">1:1</span>' +
+			'<span data-text="cat+\':\'+item">2:1</span>' +
 			'</div>');
 
 		b.cats.push(3);
 		assertEq(b.shadowRoot.innerHTML,
 			'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:1</span>' +
-				'<span data-text="cat+\':\'+item">2:1</span>' +
-				'<span data-text="cat+\':\'+item">3:1</span>' +
+			'<span data-text="cat+\':\'+item">1:1</span>' +
+			'<span data-text="cat+\':\'+item">2:1</span>' +
+			'<span data-text="cat+\':\'+item">3:1</span>' +
 			'</div>');
 
 	},
