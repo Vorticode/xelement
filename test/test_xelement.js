@@ -488,7 +488,7 @@ var test_XElement = {
 			{name: 'B'},
 			{name: 'C'}
 		];
-		
+
 		v.items.splice(1, 1); // remove B.
 
 		assertEq(v.loop.children.length, 2);

@@ -1,3 +1,4 @@
+// https://github.com/Vorticode/xelement
 (function() {
 function arrayEq(array1, array2) {
 	return array1.length === array2.length && array1.every((value, index) => value === array2[index])
@@ -10,9 +11,17 @@ function createEl(html) {
 }
 
 /**
+ * Return the array as a quoted csv string.
+ * @param array {string[]}
+ * @returns {string} */
+function csv(array) {
+	return JSON.stringify(array).slice(1, -1); // Remove starting and ending [].
+}
+
+/**
  * Is name a valid attribute for el.
- * @param el
- * @param name
+ * @param el {HTMLElement}
+ * @param name {string}
  * @returns {boolean} */
 function isValidAttribute(el, name) {
 	if (name.startsWith('data-') || el.hasAttribute(name))
@@ -27,6 +36,9 @@ function isValidAttribute(el, name) {
 	return isAttr;
 }
 
+/**
+ * @param el {HTMLElement}
+ * @returns {int} */
 function parentIndex(el) {
 	if (!el.parentNode)
 		return 0;
@@ -227,7 +239,7 @@ function watchObj(root, callback) {
 		/**
 		 * Overridden to wrap returned values in a Proxy, so we can see when they're changed.
 		 * And to keep track of the path as we traverse deeper into an object.
-		 * @param obj {object}
+		 * @param obj {Array|object}
 		 * @param field {string} An object key or array index.
 		 * @returns {*} */
 		get(obj, field) {
@@ -248,22 +260,32 @@ function watchObj(root, callback) {
 		/**
 		 * Trap called whenever anything in an array or object is set.
 		 * Changing and shifting array values will also call this function.
-		 * @param obj {object} root or an object within root that we're setting a property on.
+		 * @param obj {Array|object} root or an object within root that we're setting a property on.
 		 * @param field {string} An object key or array index.
 		 * @param newVal {*}
 		 * @returns {boolean} */
 		set(obj, field, newVal) {
-			if (field !== 'length')
-				callback('set', [...paths.get(obj), field], obj[field] = newVal);
+			var path = [...paths.get(obj), field];
+			//console.log('set', path, newVal);
+			if (field === 'length') { // Convert length changes to delete.  spice() will set length.
+				// var oldLength = obj.length;
+				// obj.length = newVal;
+				// for (let i=oldLength; i<newVal; i++)
+				// 	callback('delete', path);
+			}
+			else
+				callback('set', path, obj[field] = newVal);
 			return true;
 		},
 
 		/**
 		 * Trap called whenever anything in an array or object is deleted.
-		 * @param obj {object} root or an object within root that we're deleting a property on.
+		 * @param obj {Array|object} root or an object within root that we're deleting a property on.
 		 * @param field {int|string} An object key or array index.
 		 * @returns {boolean} */
 		deleteProperty(obj, field) {
+			//console.log('delete', [...paths.get(obj)], field);
+
 			if (Array.isArray(obj))
 				obj.splice(field, 1);
 			else
@@ -297,15 +319,22 @@ class WatchProperties {
 	notify(action, path, value) {
 
 		// Traverse up the path looking for anything subscribed.
-		path = path.slice();
-		while (path.length) {
-			var jpath = JSON.stringify(path); // TODO: This seems like a lot of work for any time a property is changed.
+		var path2 = path.slice(0, -1);
+		while (path2.length) {
+			let jpath = csv(path2); // TODO: This seems like a lot of work for any time a property is changed.
 
 			if (jpath in this.subs_)
 				for (let callback of this.subs_[jpath])
 					callback.apply(this.obj_, arguments) // "this.obj_" so it has the context of the original object.
-			path.pop();
+			path2.pop();
 		}
+
+		// Traverse to our current level and downward looking for anything subscribed
+		let jpath = csv(path);
+		for (let name in this.subs_)
+			if (name.startsWith(jpath))
+				for (let callback of this.subs_[name])
+					callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 	}
 
 	/**
@@ -342,22 +371,22 @@ class WatchProperties {
 
 
 		// Append to subscriptions.
-		// var jpath = JSON.stringify(path);
+		// var jpath = csv(path);
 		// if (!(jpath in self.subs))
 		// 	self.subs[jpath] = [];
 		// self.subs[jpath].push(callback);
 
 		// Add the callback to this path and all parent paths.
 		var path2 = path.slice();  // shallow copy
-		while(path2.length) {
+		//while(path2.length) {
 
-			let jpath = JSON.stringify(path2);
+			let jpath = csv(path2);
 			if (!(jpath in self.subs_))
 				self.subs_[jpath] = [];
 			self.subs_[jpath].push(callback);
 
-			path2.pop();
-		}
+		//	path2.pop();
+		//}
 
 	}
 
@@ -369,8 +398,8 @@ class WatchProperties {
 
 		// Remove the callback from this path and all parent paths.
 		var path2 = path.slice(); // shallow copy
-		while(path2.length) {
-			let jpath = JSON.stringify(path2);
+		//while(path2.length) {
+			let jpath = csv(path2);
 			if (jpath in this.subs_) {
 
 				// Remove the callback from the subscriptions
@@ -391,8 +420,8 @@ class WatchProperties {
 				}
 			}
 
-			path2.pop();
-		}
+		//	path2.pop();
+		//}
 	}
 }
 
@@ -424,6 +453,7 @@ function watch(obj, path, callback) {
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 function unwatch(obj, path, callback) {
 	var wp = watched.get(obj);
+
 	if (wp) {
 		wp.unsubscribe(path, callback);
 
@@ -607,6 +637,9 @@ function bind(self, el, context) {
 		delete context[item];
 }
 
+/**
+ * @param self {XElement}
+ * @param root {HTMLElement} */
 function unbind(self, root) {
 	var els = [...root.querySelectorAll('*')];
 	if (root.attributes)
@@ -868,8 +901,8 @@ XElement.dataAttr = {
 			});
 
 		// Update input value when object property changes.
-		for (let path of vars)
-			watch(self, path, (action, actionPath, val)=> {
+		for (let path of vars) {
+			watch(self, path, (action, actionPath, val) => {
 				//console.log(action, actionPath, val);
 
 				// Sometimes action="set" is called on a parent path and we receive no "delete"
@@ -887,14 +920,37 @@ XElement.dataAttr = {
 						el.value = eval(code);
 				}
 			});
+
+			// Set initial value.
+			(function () {
+				if (traversePath(self, path) === undefined) {
+					if (el.getAttribute('type') === 'checkbox')
+						el.checked = false;
+					else
+						el.value = '';
+				}
+				else {
+					if (el.getAttribute('type') === 'checkbox')
+						// noinspection EqualityComparisonWithCoercionJS
+						el.checked = eval(code) == true;
+					else
+						el.value = eval(code);
+				}
+			}).bind(this)();
+		}
 	},
 
 	html: function (self, code, el) {
 		for (let path of parseVars(code)) {
-			watch(self, path, (action, actionPath, value)=> {
+			watch(self, path, (action, actionPath, value) => {
 				el.innerHTML = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
+
+		// Set initial value.
+		(function() {
+			el.innerHTML = eval(code);
+		}).bind(this)();
 	},
 
 	text: function (self, code, el) {
@@ -903,6 +959,11 @@ XElement.dataAttr = {
 				el.textContent = action === 'delete' || traversePath(self, path) === undefined ? '' : eval(code);
 			});
 		}
+
+		// Set initial value.
+		(function() {
+			el.textContent = eval(code);
+		}).bind(this)();
 	},
 
 	loop: function (self, code, el) {
@@ -975,9 +1036,9 @@ XElement.dataAttr = {
 
 		// If the variables in code, change, execute the code.
 		// Then set the attribute to the value returned by the code.
-		for (let path of parseVars(code))
-			watch(self, path, (action)=> { // slice() to remove this.
-				if (action==='delete' || traversePath(self, path) === undefined)
+		for (let path of parseVars(code)) {
+			watch(self, path, (action) => { // slice() to remove this.
+				if (action === 'delete' || traversePath(self, path) === undefined)
 					el.removeAttribute(attr);
 				else {
 					var result = eval(code);
@@ -987,6 +1048,21 @@ XElement.dataAttr = {
 						el.setAttribute(attr, result + '');
 				}
 			});
+
+			// Set initial value.
+			(function() {
+				if (traversePath(self, path) === undefined)
+					el.removeAttribute(attr);
+				else {
+					var result = eval(code);
+					if (result === false)
+						el.removeAttribute(attr);
+					else
+						el.setAttribute(attr, result + '');
+				}
+			}).bind(this)();
+
+		}
 	}
 };
 

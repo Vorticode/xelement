@@ -43,7 +43,7 @@ function watchObj(root, callback) {
 		 * @returns {boolean} */
 		set(obj, field, newVal) {
 			var path = [...paths.get(obj), field];
-			console.log('set', path, newVal);
+			//console.log('set', path, newVal);
 			if (field === 'length') { // Convert length changes to delete.  spice() will set length.
 				// var oldLength = obj.length;
 				// obj.length = newVal;
@@ -61,7 +61,7 @@ function watchObj(root, callback) {
 		 * @param field {int|string} An object key or array index.
 		 * @returns {boolean} */
 		deleteProperty(obj, field) {
-			console.log('delete', [...paths.get(obj)], field);
+			//console.log('delete', [...paths.get(obj)], field);
 
 			if (Array.isArray(obj))
 				obj.splice(field, 1);
