@@ -53,6 +53,7 @@ function getContext(el) {
 
 			// Check for an inner loop having the same variable name
 			let [foreach, item] = parseLoop(code);
+			foreach = addThis(foreach);
 			if (item in context)
 				throw new Error('Loop variable "' + item + '"already declared in an outer scope.');
 
@@ -69,6 +70,7 @@ function getContext(el) {
 	return context;
 }
 
+
 /**
  * Process all the data- attributes in el and its descendants.
  * @param self {XElement}
@@ -82,9 +84,6 @@ function getContext(el) {
 function bind(self, el, context) {
 	var foreach, item;
 
-	// Traverse through all parents to build the loop context.
-	if (!context)
-		context = getContext(el);
 
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
@@ -92,6 +91,10 @@ function bind(self, el, context) {
 			if (attr.name.substr(0, 5) === 'data-') {
 				let attrName = attr.name.substr(5); // remove data- prefix.
 				let code = attr.value;
+
+				// Get context only if needed.
+				if (!context)
+					context = getContext(el);
 
 				// Replace loopVars
 				if (attr.name === 'data-loop') { // only the foreach part of a data-loop="..."
@@ -104,17 +107,14 @@ function bind(self, el, context) {
 					// This is necessary for inner nested loops.
 					[foreach, item] = parseLoop(code);
 					foreach = replaceVars(foreach, context);
+					foreach = addThis(foreach, context);
 					code = foreach + ':' + item;
 				}
-				else
+				else {
 					code = replaceVars(code, context);
+					code = addThis(code, context);
+				}
 
-
-				// Allow the "this." prefix to be optional for simple vars.
-				// TODO: replaceVars() above already calls parseVars.
-				// We can store that result and make sure paths.length is 1 before calling isSimleVar_.
-				if (isSimpleVar_(code) && !code.trim().startsWith('this'))
-					code = 'this.' + code;
 
 				// If we have a dataAttr function to handle this specific data- attribute name.
 				if (XElement.dataAttr[attrName])
@@ -159,15 +159,12 @@ function unbind(self, root) {
 		for (let attr of el.attributes) {
 			if (attr.name.substr(0, 5) === 'data-') {
 				let code = attr.value;
+				if (!context)
+					context = getContext(el);
 
 				if (attr.name === 'data-loop') // only the foreach part of a data-loop="..."
 					code = parseLoop(code)[0];
 
-				// Allow the "this." prefix to be optional for simple vars.
-				//if (isSimpleVar(code) && !code.startsWith('this'))
-				//	code = 'this.' + code;
-				if (!context)
-					context = getContext(el);
 				code = replaceVars(code, context);
 				var paths = parseVars(code);
 
@@ -199,11 +196,9 @@ function bindEvents(self, root) {
 
 				// If it's a simple function that exists in the parent class,
 				// add the "this" prefix.
-				if (isSimpleCall_(code) && !code.trim().startsWith('this')) {
-					let path = parseVars(code, false, true)[0];
-					if (path && traversePath(self, path) instanceof Function)
-						code = 'this.' + code;
-				}
+				let path = parseVars(code, false, true)[0];
+				if (path && traversePath(self, path) instanceof Function)
+					code = addThis(code, getContext(el), isSimpleCall_);
 
 				// The code in the attribute can reference:
 				// 1. event, assigned to the current event.

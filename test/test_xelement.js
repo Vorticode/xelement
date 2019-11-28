@@ -41,10 +41,10 @@ var test_Watch = {
 		wp.subscribe(['a', 0], (action, path, value) => {});
 		wp.subscribe(['a', 1], (action, path, value) => {});
 
-		console.log(wp.subs_);
+		assert(wp.subs_);
 		o.a.pop();
 
-		console.log(wp.subs_); // doesn't remove the watch.  But I think that's correct behavior.
+		assert(wp.subs_); // doesn't remove the watch.  But I think that's correct behavior.
 
 	},
 
@@ -374,9 +374,6 @@ var test_XElement = {
 			//document.body.appendChild(b);
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span><span data-text="item">2</span>');
 
-			var wp = watched.get(b);
-			console.log(wp.subs_);
-
 			b.items.pop();
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span>');
 
@@ -538,49 +535,87 @@ var test_XElement = {
 			];
 			assertEq(v.loop.children.length, 3);
 		})();
-
-		// TODO: foreach over sub-property of outer loop.
 	},
 
 	bindNestedLoop: function() {
 
-		class BL3 extends XElement {}
-		BL3.html =
-			'<div data-loop="items:item">' +
-			'<div data-loop="cats:cat">' +
-			'<span data-text="cat+\':\'+item">Hi</span>' +
-			'</div>' +
-			'</div>';
+		// Nested loop over two separate properties
+		(function() {
 
-		var b = new BL3();
-		b.items = [1, 2];
-		b.cats = [1, 2];
-		assertEq(b.shadowRoot.innerHTML,
-			'<div data-loop="cats:cat">' +
-			'<span data-text="cat+\':\'+item">1:1</span>' +
-			'<span data-text="cat+\':\'+item">2:1</span>' +
-			'</div>' +
-			'<div data-loop="cats:cat">' +
-			'<span data-text="cat+\':\'+item">1:2</span>' +
-			'<span data-text="cat+\':\'+item">2:2</span>' +
-			'</div>');
+			class BL3 extends XElement {}
+			BL3.html =
+				'<div data-loop="items:item">' +
+				'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">Hi</span>' +
+				'</div>' +
+				'</div>';
 
-		// Since this removes all children, it will convert cats back to a regular field instead of a defined property.
-		// But it should convert it back to a proxy when rebuildChildren() is called.
-		b.items.pop();
-		assertEq(b.shadowRoot.innerHTML,
-			'<div data-loop="cats:cat">' +
-			'<span data-text="cat+\':\'+item">1:1</span>' +
-			'<span data-text="cat+\':\'+item">2:1</span>' +
-			'</div>');
+			var b = new BL3();
+			b.items = [1, 2];
+			b.cats = [1, 2];
+			assertEq(b.shadowRoot.innerHTML,
+				'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:1</span>' +
+				'<span data-text="cat+\':\'+item">2:1</span>' +
+				'</div>' +
+				'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:2</span>' +
+				'<span data-text="cat+\':\'+item">2:2</span>' +
+				'</div>');
 
-		b.cats.push(3);
-		assertEq(b.shadowRoot.innerHTML,
-			'<div data-loop="cats:cat">' +
-			'<span data-text="cat+\':\'+item">1:1</span>' +
-			'<span data-text="cat+\':\'+item">2:1</span>' +
-			'<span data-text="cat+\':\'+item">3:1</span>' +
-			'</div>');
+			// Since this removes all children, it will convert cats back to a regular field instead of a defined property.
+			// But it should convert it back to a proxy when rebuildChildren() is called.
+			b.items.pop();
+			assertEq(b.shadowRoot.innerHTML,
+				'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:1</span>' +
+				'<span data-text="cat+\':\'+item">2:1</span>' +
+				'</div>');
+
+			b.cats.push(3);
+			assertEq(b.shadowRoot.innerHTML,
+				'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">1:1</span>' +
+				'<span data-text="cat+\':\'+item">2:1</span>' +
+				'<span data-text="cat+\':\'+item">3:1</span>' +
+				'</div>');
+
+		})();
+
+		// Nested loop over sub properties.
+		(function() {
+			class BL8 extends XElement {}
+			BL8.html =
+				'<div data-loop="families:family">' +
+					'<div data-loop="family.species:species">' +
+						'<span data-text="family.name+\':\'+species">Hi</span>' +
+					'</div>' +
+				'</div>';
+
+			var b = new BL8();
+			b.families = [
+				{
+					name: 'equids',
+					species: ['horse', 'donkey', 'zebra']
+				},
+				{
+					name: 'cats',
+					species: ['lion', 'tiger']
+				}
+			];
+
+			assertEq(b.shadowRoot.innerHTML,
+				'<div data-loop="family.species:species">' +
+					'<span data-text="family.name+\':\'+species">equids:horse</span>' +
+					'<span data-text="family.name+\':\'+species">equids:donkey</span>' +
+					'<span data-text="family.name+\':\'+species">equids:zebra</span>' +
+				'</div>' +
+					'<div data-loop="family.species:species">' +
+					'<span data-text="family.name+\':\'+species">cats:lion</span>' +
+					'<span data-text="family.name+\':\'+species">cats:tiger</span>' +
+				'</div>');
+
+		})();
 	},
 
 

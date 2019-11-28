@@ -119,8 +119,21 @@ function parseLoop(code) {
 	var loopVar = code.substr(colon+1).trim();
 	code = code.substr(0, colon);
 
-	if (isSimpleVar_(code) && !code.startsWith('this'))
-		code = 'this.' + code;
-
 	return [code, loopVar];
+}
+
+
+function addThis(code, context, isSimple) {
+	isSimple = isSimple || isSimpleVar_;
+	if (!isSimple(code))
+		return code;
+
+	// If it starts with this or an item in context, do nothing.
+	code = code.trim();
+	var prefixes = ['this', ...Object.keys(context || {})];
+	for (let prefix of prefixes)
+		if (code.match(new RegExp('^' + prefix + '\s*[\.[]'))) // starts with "prefix." or "prefix["
+			return code;
+
+	return 'this.' + code;
 }
