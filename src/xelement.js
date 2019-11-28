@@ -1,30 +1,27 @@
 /*
 Inherit from XElement to create custom HTML Components.
 
-TODO:
-speed up data-loop by only modifying changed elements.
+TODO
 Fix failing Edge tests.
+bind to drag/drop events, allow sortable?
 implement other binding functions.
-create from <template> tag
-compress
 allow index in data-loop
 allow loop over more than one item.
+cache results of parseVars() and other parse functions?
+cache the context of loop vars.
 
-caching:
-auto cache results of parseVars() and other parse functions?
-cach the context of loop vars.
-
-shadow DOM - https://developers.google.com/web/fundamentals/web-components/shadowdom
-Move functions to outer scope so people can implement thier own attributes?
+create from <template> tag
+improve minifcation.
+speed up data-loop by only modifying changed elements for non-simple vars.
+Expose dataAttr in minified version.
 non-ascii variable names.
 throttle, debounce?
 Auto two-way bind for simple variables?
 bind to <input type="file">
-bind to drag/drop events, allow sortable?
 bind to clipboard events
 Named slot support? - https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_templates_and_slots
 Separate out a lite version that doesn't do binding?
-This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
+	This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
 TODO:
 What if an xelment is embeded in another, and the inner element has a data-binding.  Which one does it apply to?
 If specified on its definition?  If the data-binding is on its embed?
@@ -400,9 +397,9 @@ XElement.dataAttr = {
 				else if (el.getAttribute('type') === 'checkbox')
 					value = el.checked;
 				else
-					value = el.value || el.innerHTML || '';
+					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
 
-				watchlessSet(self, vars[0], value); // works for input, select, textarea, [contenteditable]
+				watchlessSet(self, vars[0], value);
 			});
 
 		// Update input value when object property changes.
@@ -507,22 +504,25 @@ XElement.dataAttr = {
 		}
 
 		function rebuildChildren(action, path, value) {
+			// TODO: Keep all elements the same and only update bound values?
+			// Then we only need to add and remove items from the end of the children.
+			// But this would break unbound inputs when removing from the middle of the list.
 
 			if (path)
 				var index = getModifiedIndex(path);
 
-			// If code is a simple var and path modifies only one item.
-			if (path !== undefined && index !== false) {
+			// If code is a simple var and path modifies only one item:
+			if (path && index !== false) {
 				let existingChild = el.children[index];
 
-				if (action === 'set') {
+				if (action === 'set') { // add or replace item.
 					let newChild = createEl(html);
-					el.insertBefore(newChild, existingChild);
+					el.insertBefore(newChild, existingChild); // if existingChild is null, will be inserted at end.
 					bind(self, newChild);
 					bindEvents(self, newChild);
 				}
 
-				if (existingChild) {
+				if (existingChild) { // action==='delete' or removing item replaced by set.
 					unbind(self, existingChild);
 					el.removeChild(existingChild);
 				}
@@ -532,11 +532,6 @@ XElement.dataAttr = {
 			else {
 
 				// Remove all children.
-				// TODO: Use rebuildChildren args to only modify children that have changed.
-				// I should also detect when an item is removed from the middle, by checking if the value is the next value in the lst.
-				// Then I can simply remove one child and keep unbound textboxes from losing their values when they're destroyed/created.
-				// Otherwise iterating and adding one item at a time will keep clearing and
-				// resetting thie children at each iteration!
 				while (el.lastChild) {
 					if (el.lastChild.nodeType === 1)
 						// If we don't unbind, changing the array will still updated these detached elements.
@@ -557,7 +552,7 @@ XElement.dataAttr = {
 						bindEvents(self, child);
 					}
 			}
-		};
+		}
 
 		// Set initial children
 		rebuildChildren.call(self);

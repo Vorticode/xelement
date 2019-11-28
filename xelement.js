@@ -37,6 +37,14 @@ function isValidAttribute(el, name) {
 	return isAttr;
 }
 
+function keysStartWith(obj, prefix) {
+	var result = [];
+	for (let key in obj)
+		if (key.startsWith(prefix))
+			result.push(obj[key]);
+	return result;
+}
+
 /**
  * @param el {HTMLElement}
  * @returns {int} */
@@ -259,7 +267,7 @@ function watchObj(root, callback) {
 		get(obj, field) {
 			if (field==='isProxy')
 				return true;
-			if (field==='unProxied')
+			if (field==='removeProxy')
 				return obj;
 
 			var result = obj[field];
@@ -270,9 +278,11 @@ function watchObj(root, callback) {
 				if (!paths.has(result))
 					paths.set(result, [...paths.get(obj), field]);
 
-				// If setting the value to an object or array, also create a proxy around that one.
+				// Create a new Proxy instead of wrapping the original obj in two proxies.
 				if (result.isProxy)
-					return result; // TODO: Will this break having multiple proxies per object?
+					result = result.removeProxy;
+
+				// If setting the value to an object or array, also create a proxy around that one.
 				return new Proxy(result, handler);
 			}
 			return result;
@@ -287,9 +297,9 @@ function watchObj(root, callback) {
 		 * @returns {boolean} */
 		set(obj, field, newVal) {
 
-			// Don't nest proxies.
-			while (newVal.isProxy)
-				newVal = newVal.unProxied;
+			// Don't allow setting proxies on underlying obj.
+			// We need to remove them recursivly in case newVal=[Proxy(obj)].
+			newVal = removeProxies(newVal);
 
 			var path = [...paths.get(obj), field];
 			//console.log('set', path, newVal);
@@ -324,14 +334,27 @@ function watchObj(root, callback) {
 	return new Proxy(root, handler);
 }
 
-function keysStartWith(obj, prefix) {
-	var result = [];
-	for (let key in obj)
-		if (key.startsWith(prefix))
-			result.push(obj[key]);
-	return result;
-}
 
+function removeProxies(obj, visited) {
+
+
+	if (obj.isProxy)
+		obj = obj.removeProxy;
+
+
+	if (obj !== null && typeof obj === 'object') {
+		if (!visited)
+			visited = new WeakSet([obj]);
+		else if (visited.has(obj))
+			return obj;
+		else
+			visited.add(obj);
+
+		for (let name in obj)
+			obj[name] = removeProxies(obj[name], visited);
+	}
+	return obj;
+}
 
 /**
  * Allow subcribing only to specific properties of an object.
@@ -341,7 +364,7 @@ class WatchProperties {
 
 	constructor(obj) {
 		this.obj_ = obj;   // Original object being watched.
-		this.fields_ = {}; // Unproxied underlying fields that store the data.
+		this.fields_ = {}; // removeProxy underlying fields that store the data.
 		                   // This is necessary to store the values of obj_ after defineProperty() is called.
 		this.proxy_ = watchObj(this.fields_, this.notify.bind(this));
 		this.subs_ = {};
@@ -454,6 +477,7 @@ class WatchProperties {
 	}
 }
 
+
 // Keeps track of which objects we're watching.
 // That way watch() and unwatch() can work without adding any new fields to the objects they watch.
 var watched = new WeakMap();
@@ -513,7 +537,7 @@ function watchlessGet(obj, path) {
 
 function watchlessSet(obj, path, val) {
 	// TODO: Make this work instead:
-	// Or just use unProxied prop?
+	// Or just use removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
 
@@ -521,7 +545,7 @@ function watchlessSet(obj, path, val) {
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
-		if (node.isProxy) /// optional sanity check
+		if (node.isProxy) // optional sanity check
 			throw new Error();
 	}
 
@@ -531,30 +555,27 @@ function watchlessSet(obj, path, val) {
 /*
 Inherit from XElement to create custom HTML Components.
 
-TODO:
-speed up data-loop by only modifying changed elements.
+TODO
 Fix failing Edge tests.
+bind to drag/drop events, allow sortable?
 implement other binding functions.
-create from <template> tag
-compress
 allow index in data-loop
 allow loop over more than one item.
+cache results of parseVars() and other parse functions?
+cache the context of loop vars.
 
-caching:
-auto cache results of parseVars() and other parse functions?
-cach the context of loop vars.
-
-shadow DOM - https://developers.google.com/web/fundamentals/web-components/shadowdom
-Move functions to outer scope so people can implement thier own attributes?
+create from <template> tag
+improve minifcation.
+speed up data-loop by only modifying changed elements for non-simple vars.
+Expose dataAttr in minified version.
 non-ascii variable names.
 throttle, debounce?
 Auto two-way bind for simple variables?
 bind to <input type="file">
-bind to drag/drop events, allow sortable?
 bind to clipboard events
 Named slot support? - https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_templates_and_slots
 Separate out a lite version that doesn't do binding?
-This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
+	This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
 TODO:
 What if an xelment is embeded in another, and the inner element has a data-binding.  Which one does it apply to?
 If specified on its definition?  If the data-binding is on its embed?
@@ -930,9 +951,9 @@ XElement.dataAttr = {
 				else if (el.getAttribute('type') === 'checkbox')
 					value = el.checked;
 				else
-					value = el.value || el.innerHTML || '';
+					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
 
-				watchlessSet(self, vars[0], value); // works for input, select, textarea, [contenteditable]
+				watchlessSet(self, vars[0], value);
 			});
 
 		// Update input value when object property changes.
@@ -1037,22 +1058,25 @@ XElement.dataAttr = {
 		}
 
 		function rebuildChildren(action, path, value) {
+			// TODO: Keep all elements the same and only update bound values?
+			// Then we only need to add and remove items from the end of the children.
+			// But this would break unbound inputs when removing from the middle of the list.
 
 			if (path)
 				var index = getModifiedIndex(path);
 
-			// If code is a simple var and path modifies only one item.
-			if (path !== undefined && index !== false) {
+			// If code is a simple var and path modifies only one item:
+			if (path && index !== false) {
 				let existingChild = el.children[index];
 
-				if (action === 'set') {
+				if (action === 'set') { // add or replace item.
 					let newChild = createEl(html);
-					el.insertBefore(newChild, existingChild);
+					el.insertBefore(newChild, existingChild); // if existingChild is null, will be inserted at end.
 					bind(self, newChild);
 					bindEvents(self, newChild);
 				}
 
-				if (existingChild) {
+				if (existingChild) { // action==='delete' or removing item replaced by set.
 					unbind(self, existingChild);
 					el.removeChild(existingChild);
 				}
@@ -1062,11 +1086,6 @@ XElement.dataAttr = {
 			else {
 
 				// Remove all children.
-				// TODO: Use rebuildChildren args to only modify children that have changed.
-				// I should also detect when an item is removed from the middle, by checking if the value is the next value in the lst.
-				// Then I can simply remove one child and keep unbound textboxes from losing their values when they're destroyed/created.
-				// Otherwise iterating and adding one item at a time will keep clearing and
-				// resetting thie children at each iteration!
 				while (el.lastChild) {
 					if (el.lastChild.nodeType === 1)
 						// If we don't unbind, changing the array will still updated these detached elements.
@@ -1087,7 +1106,7 @@ XElement.dataAttr = {
 						bindEvents(self, child);
 					}
 			}
-		};
+		}
 
 		// Set initial children
 		rebuildChildren.call(self);

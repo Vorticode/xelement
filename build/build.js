@@ -94,5 +94,5 @@ var options = {
 
 var result = Terser.minify(code, options);
 
-console.log(result.error || 'Success');
+console.log(result.error || 'Successfully created xelement.js and xelement.min.js');
 fs.writeFileSync('../xelement.min.js', result.code);

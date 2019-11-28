@@ -34,6 +34,14 @@ function isValidAttribute(el, name) {
 	return isAttr;
 }
 
+function keysStartWith(obj, prefix) {
+	var result = [];
+	for (let key in obj)
+		if (key.startsWith(prefix))
+			result.push(obj[key]);
+	return result;
+}
+
 /**
  * @param el {HTMLElement}
  * @returns {int} */

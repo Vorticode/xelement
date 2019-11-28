@@ -25,13 +25,27 @@ var test_ParseVar = {
 var test_Watch = {
 
 	init: function() {
+		(function() {
+			var o = {a: [0, 1]};
+			var wp = new WatchProperties(o);
+			wp.subscribe(['a'], (action, path, value) => {
+			});
+			assertEq(o.a.length, 2);
+			assertEq(o.a[0], 0);
+			assertEq(o.a[1], 1);
+		})();
 
-		var o = { a: [0, 1] };
-		var wp = new WatchProperties(o);
-		wp.subscribe(['a'], (action, path, value) => {});
-		assertEq(o.a.length, 2);
-		assertEq(o.a[0], 0);
-		assertEq(o.a[1], 1);
+		// Assign proxied.
+		(function() {
+			var b = {
+				items: [{name: 1}]
+			};
+			watch(b, 'items', ()=>{});
+
+			// Make sure setting an array with a proxied item inside doesn't add the proxy to the underlying object.
+			b.items = [b.items[0]]; // new array, proxied original object inside.
+			assert(!b.items.removeProxy[0].isProxy);
+		})();
 	},
 
 	pop: function() {
@@ -45,7 +59,6 @@ var test_Watch = {
 		o.a.pop();
 
 		assert(wp.subs_); // doesn't remove the watch.  But I think that's correct behavior.
-
 	},
 
 
@@ -555,17 +568,7 @@ var test_XElement = {
 		// TODO: Test loop over non-simple var.
 	},
 
-	bindLoop2: function() {
-		class BL2 extends XElement {}
-		BL2.html =
-			'<div data-loop="items:item">' +
-				'<span data-text="item"></span>' +
-			'</div>';
-
-		var b = new BL2();
-		b.items = [1, 2, 3];
-		b.items.splice(1, 1);
-
+	temp: function() {
 	},
 
 	bindNestedLoop: function() {

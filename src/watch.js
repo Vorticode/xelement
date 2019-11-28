@@ -22,7 +22,7 @@ function watchObj(root, callback) {
 		get(obj, field) {
 			if (field==='isProxy')
 				return true;
-			if (field==='unProxied')
+			if (field==='removeProxy')
 				return obj;
 
 			var result = obj[field];
@@ -33,9 +33,11 @@ function watchObj(root, callback) {
 				if (!paths.has(result))
 					paths.set(result, [...paths.get(obj), field]);
 
-				// If setting the value to an object or array, also create a proxy around that one.
+				// Create a new Proxy instead of wrapping the original obj in two proxies.
 				if (result.isProxy)
-					return result; // TODO: Will this break having multiple proxies per object?
+					result = result.removeProxy;
+
+				// If setting the value to an object or array, also create a proxy around that one.
 				return new Proxy(result, handler);
 			}
 			return result;
@@ -50,9 +52,9 @@ function watchObj(root, callback) {
 		 * @returns {boolean} */
 		set(obj, field, newVal) {
 
-			// Don't nest proxies.
-			while (newVal.isProxy)
-				newVal = newVal.unProxied;
+			// Don't allow setting proxies on underlying obj.
+			// We need to remove them recursivly in case newVal=[Proxy(obj)].
+			newVal = removeProxies(newVal);
 
 			var path = [...paths.get(obj), field];
 			//console.log('set', path, newVal);
@@ -87,14 +89,27 @@ function watchObj(root, callback) {
 	return new Proxy(root, handler);
 }
 
-function keysStartWith(obj, prefix) {
-	var result = [];
-	for (let key in obj)
-		if (key.startsWith(prefix))
-			result.push(obj[key]);
-	return result;
-}
 
+function removeProxies(obj, visited) {
+
+
+	if (obj.isProxy)
+		obj = obj.removeProxy;
+
+
+	if (obj !== null && typeof obj === 'object') {
+		if (!visited)
+			visited = new WeakSet([obj]);
+		else if (visited.has(obj))
+			return obj;
+		else
+			visited.add(obj);
+
+		for (let name in obj)
+			obj[name] = removeProxies(obj[name], visited);
+	}
+	return obj;
+}
 
 /**
  * Allow subcribing only to specific properties of an object.
@@ -104,7 +119,7 @@ class WatchProperties {
 
 	constructor(obj) {
 		this.obj_ = obj;   // Original object being watched.
-		this.fields_ = {}; // Unproxied underlying fields that store the data.
+		this.fields_ = {}; // removeProxy underlying fields that store the data.
 		                   // This is necessary to store the values of obj_ after defineProperty() is called.
 		this.proxy_ = watchObj(this.fields_, this.notify.bind(this));
 		this.subs_ = {};
@@ -217,6 +232,7 @@ class WatchProperties {
 	}
 }
 
+
 // Keeps track of which objects we're watching.
 // That way watch() and unwatch() can work without adding any new fields to the objects they watch.
 var watched = new WeakMap();
@@ -276,7 +292,7 @@ function watchlessGet(obj, path) {
 
 function watchlessSet(obj, path, val) {
 	// TODO: Make this work instead:
-	// Or just use unProxied prop?
+	// Or just use removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
 
@@ -284,7 +300,7 @@ function watchlessSet(obj, path, val) {
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
-		if (node.isProxy) /// optional sanity check
+		if (node.isProxy) // optional sanity check
 			throw new Error();
 	}
 
