@@ -551,6 +551,21 @@ var test_XElement = {
 			assertEq(b.shadowRoot.children[0].children[0].value, '1');
 			assertEq(b.shadowRoot.children[1].children[0].value, '2');
 		})();
+
+		// TODO: Test loop over non-simple var.
+	},
+
+	bindLoop2: function() {
+		class BL2 extends XElement {}
+		BL2.html =
+			'<div data-loop="items:item">' +
+				'<span data-text="item"></span>' +
+			'</div>';
+
+		var b = new BL2();
+		b.items = [1, 2, 3];
+		b.items.splice(1, 1);
+
 	},
 
 	bindNestedLoop: function() {

@@ -8,6 +8,7 @@ implement other binding functions.
 create from <template> tag
 compress
 allow index in data-loop
+allow loop over more than one item.
 
 caching:
 auto cache results of parseVars() and other parse functions?
@@ -467,8 +468,7 @@ XElement.dataAttr = {
 			let setText = (action, actionPath, value) => {
 				el.textContent = traversePath(self, path) === undefined ? '' : eval(code);
 			};
-			// if (window.debug)
-			// 	debugger;
+
 			watch(self, path, setText);
 			addWatchedEl(el, setText);
 		}
@@ -487,6 +487,7 @@ XElement.dataAttr = {
 		// Parse code into foreach parts.
 		var loopVar;
 		[code, loopVar] = parseLoop(code);
+		var paths = parseVars(code);
 
 		// The code we'll loop over.
 		var html = el.innerHTML.trim();
@@ -494,40 +495,75 @@ XElement.dataAttr = {
 			el.removeChild(el.lastChild);
 
 
-		var rebuildChildren = (function (action, path, value) {
+		var isSimple = isSimpleVar_(code);
+		function getModifiedIndex(path) {
 
-			// Remove all children.
-			// TODO: Use rebuildChildren args to only modify children that have changed.
-			// I should also detect when an item is removed from the middle, by checking if the value is the next value in the lst.
-			// Then I can simply remove one child and keep unbound textboxes from losing their values when they're destroyed/created.
-			// Otherwise iterating and adding one item at a time will keep clearing and
-			// resetting thie children at each iteration!
-			while (el.lastChild) {
-				if (el.lastChild.nodeType === 1)
-					// If we don't unbind, changing the array will still updated these detached elements.
-					// This will cause errors because these detached elements can't traverse upward to find their array contexts.
-					// TODO: unbindEvents()?
-					unbind(self, el.lastChild);
+			// Can't calc for non-simple var.
+			// Can't calc if path doesn't match simple var path.
+			if (!isSimple || !arrayEq(path.slice(0, -1), paths[0]))
+				return false;
 
-				el.removeChild(el.lastChild);
+			return parseInt(path[path.length-1]);
+		}
+
+		function rebuildChildren(action, path, value) {
+
+			if (path)
+				var index = getModifiedIndex(path);
+
+			// If code is a simple var and path modifies only one item.
+			if (path !== undefined && index !== false) {
+				let existingChild = el.children[index];
+
+				if (action === 'set') {
+					let newChild = createEl(html);
+					el.insertBefore(newChild, existingChild);
+					bind(self, newChild);
+					bindEvents(self, newChild);
+				}
+
+				if (existingChild) {
+					unbind(self, existingChild);
+					el.removeChild(existingChild);
+				}
 			}
 
-			// Recreate all children.
-			if (html.length)
-				for (let i in eval(code)) {
-					let child = createEl(html);
-					el.appendChild(child);
+			// Otherwise we have to rebuild all children.
+			else {
 
-					bind(self, child);
-					bindEvents(self, child);
+				// Remove all children.
+				// TODO: Use rebuildChildren args to only modify children that have changed.
+				// I should also detect when an item is removed from the middle, by checking if the value is the next value in the lst.
+				// Then I can simply remove one child and keep unbound textboxes from losing their values when they're destroyed/created.
+				// Otherwise iterating and adding one item at a time will keep clearing and
+				// resetting thie children at each iteration!
+				while (el.lastChild) {
+					if (el.lastChild.nodeType === 1)
+						// If we don't unbind, changing the array will still updated these detached elements.
+						// This will cause errors because these detached elements can't traverse upward to find their array contexts.
+						// TODO: unbindEvents()?
+						unbind(self, el.lastChild);
+
+					el.removeChild(el.lastChild);
 				}
-		}).bind(self);
+
+				// Recreate all children.
+				if (html.length)
+					for (let i in eval(code)) {
+						let child = createEl(html);
+						el.appendChild(child);
+
+						bind(self, child);
+						bindEvents(self, child);
+					}
+			}
+		};
 
 		// Set initial children
 		rebuildChildren.call(self);
 
 		// Rebuild children when watched item changes.
-		for (let path of parseVars(code)) {
+		for (let path of paths) {
 			watch(self, path, rebuildChildren);
 			addWatchedEl(el, rebuildChildren);
 		}
