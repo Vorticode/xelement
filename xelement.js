@@ -1,5 +1,6 @@
 // https://github.com/Vorticode/xelement
 (function() {
+//%replace%
 function arrayEq(array1, array2) {
 	return array1.length === array2.length && array1.every((value, index) => value === array2[index])
 }
@@ -536,6 +537,7 @@ Fix failing Edge tests.
 implement other binding functions.
 create from <template> tag
 compress
+allow index in data-loop
 
 caching:
 auto cache results of parseVars() and other parse functions?
@@ -568,7 +570,7 @@ If specified on its definition?  If the data-binding is on its embed?
 function getContext(el) {
 	let context = {};
 	let parent = el;
-	let lastParent = el;
+	let lastEl = el;
 
 	// Parent.host lets us traverse up beyond the shadow root, 
 	// in case data-loop is defined on the shadow host.
@@ -587,10 +589,13 @@ function getContext(el) {
 				throw new Error('Loop variable "' + item + '"already declared in an outer scope.');
 
 			// As we traverse upward, we set the index of variables.
-			context[item] = foreach + '[' + parentIndex(lastParent) + ']';
-
-			lastParent = parent;
+			if (lastEl)
+				context[item] = foreach + '[' + parentIndex(lastEl) + ']';
 		}
+
+		if (!(parent instanceof DocumentFragment))
+			lastEl = parent;
+
 
 		// Stop once we reach an XElement.
 		if (parent instanceof XElement)

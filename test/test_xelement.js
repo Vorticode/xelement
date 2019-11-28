@@ -535,6 +535,22 @@ var test_XElement = {
 			];
 			assertEq(v.loop.children.length, 3);
 		})();
+
+		// bound data is not a direct child of loop (this used to fail due to a bug in getContext()).
+		(function() {
+			class BL8 extends XElement {}
+			BL8.html = `
+				<div data-loop="items: item">
+					<div>
+						<input data-val="item">
+					</div>
+				</div>`;
+
+			var b = new BL8();
+			b.items = [1, 2];
+			assertEq(b.shadowRoot.children[0].children[0].value, '1');
+			assertEq(b.shadowRoot.children[1].children[0].value, '2');
+		})();
 	},
 
 	bindNestedLoop: function() {

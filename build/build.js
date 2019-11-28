@@ -17,7 +17,7 @@ var code = [
 code =
 	'// https://github.com/Vorticode/xelement\r\n' +
 	'(function() {\r\n' +
-		//'%replace%\r\n' +
+		'//%replace%\r\n' +
 		code.join(';\r\n\r\n') +
 	'\r\n})();';
 
@@ -31,10 +31,14 @@ var replacementFuncs = {
 	//"eval": 'Q',
 	'document': 'd',
 	'Object.defineProperty': 'O',
+	'Object.keys': 'K',
 	'customElements': 'm',
 };
 
-var replacementProps = {
+var replacementProps = { // These appear as .name
+	'shadowRoot': 'S',
+	'isProxy': 'P',
+	'filter': 'F',
 	"length": 'l',
 	"substr": 's',
 	"addEventListener": 'a',
@@ -73,7 +77,6 @@ for (let name in replacementProps) {
 	code = code.replace(regex, '['+replacementProps[name]+']');
 	a.push('var ' + replacementProps[name] + '=' + "'" + name + "';");
 }
-
 code = code.replace('//%replace%', a.join(''));
 
 
