@@ -5,7 +5,7 @@
  * @param root {object}
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
-function watchObj(root, callback) {
+var watchObj = (root, callback) => {
 
 	// A map between objects and their string[] path.
 	// This is passed to callback whenever a prop changes so we know what changed.
@@ -26,7 +26,7 @@ function watchObj(root, callback) {
 				return obj;
 
 			var result = obj[field];
-			if (typeof result === 'object' && result !== null) {
+			if (isObj(result)) {
 
 				// Keep track of paths.
 				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
@@ -54,11 +54,10 @@ function watchObj(root, callback) {
 
 			// Don't allow setting proxies on underlying obj.
 			// We need to remove them recursivly in case of something like newVal=[Proxy(obj)].
-			newVal = removeProxies(newVal);
 
 			var path = [...paths.get(obj), field];
 			if (field !== 'length')
-				callback('set', path, obj[field] = newVal);
+				callback('set', path, obj[field] = removeProxies(newVal));
 			return true; // Proxy requires us to return true.
 		},
 
@@ -78,18 +77,18 @@ function watchObj(root, callback) {
 	};
 
 	return new Proxy(root, handler);
-}
+};
 
 /**
  *
  * @param obj {*}
  * @param visited {WeakSet=} Used internally.
  * @returns {*} */
-function removeProxies(obj, visited) {
+var removeProxies = (obj, visited) => {
 	if (obj.isProxy)
 		obj = obj.removeProxy;
 
-	if (obj !== null && typeof obj === 'object') {
+	if (isObj(obj)) {
 		if (!visited)
 			visited = new WeakSet([obj]);
 		else if (visited.has(obj))
@@ -101,7 +100,7 @@ function removeProxies(obj, visited) {
 			obj[name] = removeProxies(obj[name], visited);
 	}
 	return obj;
-}
+};
 
 /**
  * Allow subcribing only to specific properties of an object.
@@ -125,14 +124,14 @@ class WatchProperties {
 	notify(action, path, value) {
 
 		// Traverse up the path looking for anything subscribed.
-		var path2 = path.slice(0, -1);
-		while (path2.length) {
-			let jpath = csv(path2); // TODO: This seems like a lot of work for any time a property is changed.
+		var parentPath = path.slice(0, -1);
+		while (parentPath.length) {
+			let cpath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
-			if (jpath in this.subs_)
-				for (let callback of this.subs_[jpath])
+			if (cpath in this.subs_)
+				for (let callback of this.subs_[cpath])
 					callback.apply(this.obj_, arguments) // "this.obj_" so it has the context of the original object.
-			path2.pop();
+			parentPath.pop();
 		}
 
 		// Traverse to our current level and downward looking for anything subscribed
@@ -180,9 +179,7 @@ class WatchProperties {
 		}
 
 		// Create the full path if it doesn't exist.
-		let initialValue = traversePath(this.fields_, path);
-		if (initialValue === undefined)
-			traversePath(this.fields_, path, true);
+		traversePath(this.fields_, path, true);
 
 		// Add to subscriptions
 		let cpath = csv(path);
@@ -234,7 +231,7 @@ var watched = new WeakMap();
  * @param obj {object}
  * @param path {string|string[]}
  * @param callback {function(action:string, path:string[], value:string?)} */
-function watch(obj, path, callback) {
+var watch = (obj, path, callback) => {
 	var wp;
 	if (!watched.has(obj)) {
 		wp = new WatchProperties(obj);
@@ -244,14 +241,14 @@ function watch(obj, path, callback) {
 		wp = watched.get(obj);
 
 	wp.subscribe(path, callback);
-}
+};
 
 /**
  *
  * @param obj {object}
  * @param path {string|string[]}
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
-function unwatch(obj, path, callback) {
+var unwatch = (obj, path, callback) => {
 	var wp = watched.get(obj);
 
 	if (wp) {
@@ -261,7 +258,7 @@ function unwatch(obj, path, callback) {
 		if (!Object.keys(wp.subs_).length)
 			watched.delete(obj);
 	}
-}
+};
 
 /**
  * This function is unused.
@@ -282,7 +279,7 @@ function watchlessGet(obj, path) {
 }
 */
 
-function watchlessSet(obj, path, val) {
+var watchlessSet = (obj, path, val) => {
 	// TODO: Make this work instead:
 	// Or just use removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
@@ -297,4 +294,4 @@ function watchlessSet(obj, path, val) {
 	}
 
 	return node[prop] = val;
-}
+};

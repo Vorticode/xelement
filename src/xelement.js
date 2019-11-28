@@ -29,13 +29,23 @@ If specified on its definition?  If the data-binding is on its embed?
 
 
 
+// A map between elements and the callback functions subscribed to them.
+// This way when we remove an element we know what to unbind.
+var watchedEls = new WeakMap();
+
+var addWatchedEl = (el, callback) => {
+	if (!watchedEls.has(el))
+		watchedEls.set(el, [callback]);
+	else
+		watchedEls.get(el).push(callback);
+};
 
 /**
  * Traverse through all parents to build the loop context.
  * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
  * @param el
  * @return {object<string, string>} */
-function getContext(el) {
+var getContext = (el) => {
 	let context = {};
 	let parent = el;
 	let lastEl = el;
@@ -54,23 +64,23 @@ function getContext(el) {
 			let [foreach, item] = parseLoop(code);
 			foreach = addThis(foreach);
 			if (item in context)
-				throw new Error('Loop variable "' + item + '"already declared in an outer scope.');
+				throw new Error('Loop variable "' + item + '" already used in a parent loop.');
 
 			// As we traverse upward, we set the index of variables.
 			if (lastEl)
 				context[item] = foreach + '[' + parentIndex(lastEl) + ']';
 		}
 
-		if (!(parent instanceof DocumentFragment))
+		// If not a DocumentFragment from the ShadowRoot.
+		if (parent.getAttribute)
 			lastEl = parent;
-
 
 		// Stop once we reach an XElement.
 		if (parent instanceof XElement)
 			break;
 	}
 	return context;
-}
+};
 
 
 /**
@@ -83,7 +93,7 @@ function getContext(el) {
  *         <div data-val="item.name">
  *  The looped item becomes:
  *         <div data-val="this.items[0].name"> */
-function bind(self, el, context) {
+var bind = (self, el, context) => {
 	var foreach, item;
 
 
@@ -145,12 +155,12 @@ function bind(self, el, context) {
 	// Remove the loop context after we traverse outside of it.
 	if (item)
 		delete context[item];
-}
+};
 
 /**
  * @param self {XElement}
  * @param root {HTMLElement} */
-function unbind(self, root) {
+var unbind = (self, root) => {
 	var els = [...root.querySelectorAll('*')];
 	if (root.attributes)
 		els.unshift(root);
@@ -177,14 +187,14 @@ function unbind(self, root) {
 			}
 		}
 	}
-}
+};
 
 /**
  * We rebind event attributes because otherwise there's no way
  * to make them call the class methods.
  * @param self {XElement}
  * @param root {HTMLElement} */
-function bindEvents(self, root) {
+var bindEvents = (self, root) => {
 
 	var els = [...root.querySelectorAll('*')];
 	if (root.attributes)
@@ -214,9 +224,9 @@ function bindEvents(self, root) {
 			}
 		}
 	}
-}
+};
 
-function initHtml(self) {
+var initHtml = (self) => {
 	if (self.init_)
 		return;
 
@@ -307,7 +317,7 @@ function initHtml(self) {
 
 
 	self.init_ = true;
-}
+};
 
 /**
  * Inherit from this class to make a custom HTML element.
@@ -379,16 +389,14 @@ class XElement extends HTMLElement {
 XElement.dataAttr = {
 
 	// Special 2-way binding
-	val: function (self, code, el) {
+	val: (self, code, el) => {
 
 		// Update object property when input value changes, only if a simple var.
 		var vars = parseVars(code);
 		if (vars.length === 1 && isSimpleVar_(code))
 			el.addEventListener('input', () => {
 				let value;
-				if (el.tagName === 'SELECT')
-					value = el.selectedIndex >= 0 ? el.options[el.selectedIndex].value : null;
-				else if (el.getAttribute('type') === 'checkbox')
+				if (el.getAttribute('type') === 'checkbox')
 					value = el.checked;
 				else
 					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
@@ -398,7 +406,7 @@ XElement.dataAttr = {
 
 		let setVal = function(/*action, path, value*/) {
 			if (el.getAttribute('type') === 'checkbox')
-			// noinspection EqualityComparisonWithCoercionJS
+				// noinspection EqualityComparisonWithCoercionJS
 				el.checked = eval(code) == true;
 			else
 				el.value = eval(code);
@@ -414,7 +422,7 @@ XElement.dataAttr = {
 		setVal();
 	},
 
-	html: function (self, code, el) {
+	html: (self, code, el) => {
 		let setHtml = function(/*action, path, value*/) {
 			el.innerHTML = eval(code);
 		}.bind(self);
@@ -428,7 +436,7 @@ XElement.dataAttr = {
 		setHtml();
 	},
 
-	text: function (self, code, el) {
+	text: (self, code, el) => {
 		let setText = function(/*action, path, value*/) {
 			el.textContent = eval(code);
 		}.bind(self);
@@ -441,7 +449,7 @@ XElement.dataAttr = {
 		setText();
 	},
 
-	loop: function (self, code, el) {
+	loop: (self, code, el) => {
 		if (el.shadowRoot)
 			el = el.shadowRoot;
 
@@ -458,15 +466,14 @@ XElement.dataAttr = {
 
 
 		var isSimple = isSimpleVar_(code);
-		function getModifiedIndex(path) {
-
+		var getModifiedIndex = (path) => {
 			// Can't calc for non-simple var.
 			// Can't calc if path doesn't match simple var path.
 			if (!isSimple || !arrayEq(path.slice(0, -1), paths[0]))
 				return false;
 
 			return parseInt(path[path.length-1]);
-		}
+		};
 
 		function rebuildChildren(action, path, value) {
 			// TODO: Keep all elements the same and only update bound values?
@@ -544,7 +551,7 @@ XElement.dataAttr = {
 	 * @param code {string}
 	 * @param el {HTMLElement}
 	 * @param attr {string} Name of the attribute on el that's being bound.  Doesn't include 'data-' prefix. */
-	attr: function (self, code, el, attr) {
+	attr: (self, code, el, attr) => {
 
 		let setAttr = function(/*action, path, value*/) {
 			var result = eval(code);
@@ -565,16 +572,6 @@ XElement.dataAttr = {
 		setAttr();
 	}
 };
-
-// A map between elements and the callback functions subscribed to them.
-// This way when we remove an element we know what to unbind.
-var watchedEls = new WeakMap();
-function addWatchedEl(el, callback) {
-	if (!watchedEls.has(el))
-		watchedEls.set(el, [callback]);
-	else
-		watchedEls.get(el).push(callback);
-}
 
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/

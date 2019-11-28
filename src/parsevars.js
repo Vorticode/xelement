@@ -19,17 +19,20 @@ var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 // https://mathiasbynens.be/notes/javascript-identifiers
 var nonVars = 'length,caller,callee,prototype,arguments,true,false,null,undefined,NaN,Infinity,break,case,catch,continue,debugger,default,delete,do,else,finally,for,function,if,in,instanceof,new,return,switch,throw,try,typeof,var,void,while,with,class,const,enum,export,extends,import,super,implements,interface,let,package,private,protected,public,static,yield'.split(/,/g);
 
-function isSimpleVar_(code) {
-	return code.trim().match(isSimpleVarRegex) !== null;
-}
-function isSimpleCall_(code) {
+var isSimpleVar_ = (code) => {
+	return !!code.trim().match(isSimpleVarRegex);
+};
+var isSimpleCall_ = (code) => {
 	// if it starts with a variable followed by ( and has no more than one semicolon.
 	code = code.trim();
-	var semiCount = (code.match(/;/g) ||[]).length;
-	if (semiCount > 1 || semiCount===1 && code.slice(-1) !== ';')
-		return false; // code has more than one semicolon, or one semicolon that's not at the end.
-	return code.match(isSimpleCallRegex) !== null;
-}
+
+	// If there's a semicolon other than at the end.
+	var semi = code.indexOf(';');
+	if (semi !== -1 && semi !== code.length-1)
+		return false;
+
+	return !!code.match(isSimpleCallRegex);
+};
 
 /**
  * Take a string of code and parse out all JavaScript variable names,
@@ -41,42 +44,44 @@ function isSimpleCall_(code) {
  * @example
  *     parseVars('this.person.firstName.substr()', true) // returns [['this', 'person', 'firstName']]
  *     parseVars('var a = b["c"]') // returns [['a'], ['b', 'c']] */
-function parseVars(code, includeThis, allowCall) {
+var parseVars = (code, includeThis, allowCall) => {
 	//code = code.trim(); // Breaks indices.
 	var result = [];
 	var index = 0;
 
 	while (code.length) {
+		let regex = varStartRegex; // Reset for looking for start of a variable.
+		let keepGoing = true;
 		let current = [], matches;
 		current.index_ = []; // track the index of each match within code.
-		var regex = varStartRegex; // Reset for looking for start of a variable.
-		while (code.length && (matches = regex.exec(code)) !== null) {
+		while (keepGoing && code.length && !!(matches = regex.exec(code))) {
 
-			//regex.lastIndex = matches.index; // reset the regex.
+			// Add the start of the match.
 			index += matches.index;
 
 			code = code.substr(regex.lastIndex); // advance forward in parsing code.
 			regex.lastIndex = 0; // reset the regex.
 
-			// fitler() removes undefineds from matches.
-			// This lets us get the first non-undefiend parenthetical submatch.
-			let item = matches.filter(Boolean)[1];
-
 			// Don't grab functions or common functions properties as vars unless they are within brackets.
 			// matches[1] is the match for a .variable and not something in brackets.
-			if ((!allowCall && matches[0].endsWith('(')) || nonVars.includes(matches[1])) {
-				index += matches[0].length;
-				break;
+			keepGoing = (allowCall || !matches[0].endsWith('(')) && !nonVars.includes(matches[1]);
+			if (keepGoing) {
+
+				// fitler() removes undefineds from matches.
+				// This lets us get the first non-undefiend parenthetical submatch.
+				let item = matches.filter(Boolean)[1];
+
+				// Add varible property to current path
+				if (includeThis || item !== 'this') {
+					current.push(item);
+					current.index_.push(index);
+				}
+
+				regex = varPropRegex; // switch to reading subsequent parts of the variable.
 			}
 
-			// Add varible property to current path
-			if (includeThis || item !== 'this') {
-				current.push(item);
-				current.index_.push(index);
-			}
-
+			// Add the length of the match.
 			index += matches[0].length;
-			regex = varPropRegex; // switch to reading subsequent parts of the variable.
 		}
 
 		// Start parsing a new variable.
@@ -89,13 +94,13 @@ function parseVars(code, includeThis, allowCall) {
 	}
 
 	return result;
-}
+};
 
 /**
  * @param code {string}
  * @param replacements {object<string, string>}
  * @returns {string} */
-function replaceVars(code, replacements) {
+var replaceVars = (code, replacements) => {
 	var paths = parseVars(code, true);
 	for (let path of paths.reverse()) // We loop in reverse so the replacement indices don't get messed up.
 		for (let oldVar in replacements) {
@@ -105,25 +110,25 @@ function replaceVars(code, replacements) {
 		}
 
 	return code;
-}
+};
 
 /**
  * Parse "items : item" into two part, always splitting on the last colon.
  * @param code {string}
  * @return {[string, string]} */
-function parseLoop(code) {
+var parseLoop = (code) => {
 	// Parse code into foreach parts.
 	var colon = code.lastIndexOf(':');
 	if (colon === -1)
-		throw new Error('data-loop attribute value "' + code + '" must include colon.');
-	var loopVar = code.substr(colon+1).trim();
-	code = code.substr(0, colon);
+		throw new Error('data-loop attribute "' + code + '" missing colon.');
+	return [
+		code.substr(0, colon),      // foreach part
+		code.substr(colon+1).trim() // loop var
+	];
+};
 
-	return [code, loopVar];
-}
 
-
-function addThis(code, context, isSimple) {
+var addThis = (code, context, isSimple) => {
 	isSimple = isSimple || isSimpleVar_;
 	if (!isSimple(code))
 		return code;
@@ -136,4 +141,4 @@ function addThis(code, context, isSimple) {
 			return code;
 
 	return 'this.' + code;
-}
+};

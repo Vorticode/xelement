@@ -1,27 +1,31 @@
-function arrayEq(array1, array2) {
+var arrayEq = (array1, array2) => {
 	return array1.length === array2.length && array1.every((value, index) => value === array2[index])
 }
 
-function createEl(html) {
+var createEl = (html) => {
 	var div = document.createElement('div');
 	div.innerHTML = html;
 	return div.removeChild(div.firstChild);
-}
+};
 
 /**
  * Return the array as a quoted csv string.
  * @param array {string[]}
  * @returns {string} */
-function csv(array) {
+var csv = (array) => {
 	return JSON.stringify(array).slice(1, -1); // slice() to remove starting and ending [].
-}
+};
+
+var isObj = (obj) => {
+	return obj !== null && typeof obj === 'object';
+};
 
 /**
  * Is name a valid attribute for el.
  * @param el {HTMLElement}
  * @param name {string}
  * @returns {boolean} */
-function isValidAttribute(el, name) {
+var isValidAttribute = (el, name) => {
 	if (name.startsWith('data-') || el.hasAttribute(name))
 		return true;
 	if (name in el)
@@ -32,24 +36,24 @@ function isValidAttribute(el, name) {
 	var isAttr = el.hasAttribute(name);
 	delete el[name];
 	return isAttr;
-}
+};
 
-function keysStartWith(obj, prefix) {
+var keysStartWith = (obj, prefix) => {
 	var result = [];
 	for (let key in obj)
 		if (key.startsWith(prefix))
 			result.push(obj[key]);
 	return result;
-}
+};
 
 /**
  * @param el {HTMLElement}
  * @returns {int} */
-function parentIndex(el) {
+var parentIndex = (el) => {
 	if (!el.parentNode)
 		return 0;
 	return Array.prototype.indexOf.call(el.parentNode.children, el);
-}
+};
 
 
 /**
@@ -57,7 +61,7 @@ function parentIndex(el) {
  * @param path {string[]}
  * @param create {boolean=false} Create the path if it doesn't exist.
  * @param value {*=} If not undefined, set the object's path field to this value. */
-function traversePath(obj, path, create, value) {
+var traversePath = (obj, path, create, value) => {
 	for (let i=0; i<path.length; i++) {
 		let srcProp = path[i];
 
@@ -88,7 +92,7 @@ function traversePath(obj, path, create, value) {
 	}
 
 	return obj;
-}
+};
 
 
 

@@ -33,6 +33,7 @@ var replacementFuncs = {
 	'Object.defineProperty': 'O',
 	'Object.keys': 'K',
 	'customElements': 'm',
+	'WeakMap': 'W',
 };
 
 var replacementProps = { // These appear as .name
@@ -80,10 +81,12 @@ for (let name in replacementProps) {
 code = code.replace('//%replace%', a.join(''));
 
 
-//fs.writeFileSync('../xelement.r.js', code);
+fs.writeFileSync('../xelement.r.js', code);
 
 var options = {
-	compress: true,
+	compress: {
+		passes: 5
+	},
 	mangle: {
 		reserved: ['event'],
 		eval: true,

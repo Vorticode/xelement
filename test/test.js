@@ -59,7 +59,7 @@ var Tests = {
 					result[name] = val;
 
 				// If member is an object, recurse:
-				else if (typeof val === 'object' && val !== null) {
+				else if (isObj(val)) {
 
 					// If the object's name matches startsWith, include all of its functions.
 					// Otherwise only include its functions that match startsWith.
