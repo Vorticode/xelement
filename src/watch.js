@@ -58,7 +58,7 @@ var watchObj = (root, callback) => {
 			var path = [...paths.get(obj), field];
 			if (field !== 'length')
 				callback('set', path, obj[field] = removeProxies(newVal));
-			return true; // Proxy requires us to return true.
+			return 1; // Proxy requires us to return true.
 		},
 
 		/**
@@ -72,7 +72,7 @@ var watchObj = (root, callback) => {
 			else
 				delete obj[field];
 			callback('delete', [...paths.get(obj), field]);
-			return true;
+			return 1; // Proxy requires us to return true.
 		}
 	};
 
@@ -167,8 +167,8 @@ class WatchProperties {
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
 			Object.defineProperty(self.obj_, field, {
-				enumerable: true,
-				configurable: true,
+				enumerable: 1,
+				configurable: 1,
 				get: () => {
 					return self.proxy_[field];
 				},
@@ -179,7 +179,7 @@ class WatchProperties {
 		}
 
 		// Create the full path if it doesn't exist.
-		traversePath(this.fields_, path, true);
+		traversePath(this.fields_, path, 1);
 
 		// Add to subscriptions
 		let cpath = csv(path);

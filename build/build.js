@@ -41,7 +41,7 @@ var replacementProps = { // These appear as .name
 	'isProxy': 'P',
 	'filter': 'F',
 	"length": 'l',
-	"substr": 's',
+	//"substr": 's', // we always use slice instead.
 	"addEventListener": 'a',
 	"innerHTML": 'H',
 	"querySelectorAll": 'q',
@@ -81,15 +81,16 @@ for (let name in replacementProps) {
 code = code.replace('//%replace%', a.join(''));
 
 
-fs.writeFileSync('../xelement.r.js', code);
+//fs.writeFileSync('../xelement.r.js', code);
 
 var options = {
+	//ecma: 8, // doesn't make it any smaller
 	compress: {
 		passes: 5
 	},
 	mangle: {
 		reserved: ['event'],
-		eval: true,
+		eval: true, // We use reserved words to not mangle names used in eval.
 		properties: { regex: /_$/ }
 	}
 };

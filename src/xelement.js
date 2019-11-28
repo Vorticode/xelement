@@ -100,8 +100,8 @@ var bind = (self, el, context) => {
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
-			if (attr.name.substr(0, 5) === 'data-') {
-				let attrName = attr.name.substr(5); // remove data- prefix.
+			if (attr.name.slice(0, 5) === 'data-') {
+				let attrName = attr.name.slice(5); // remove data- prefix.
 				let code = attr.value;
 
 				// Get context only if needed.
@@ -167,12 +167,11 @@ var unbind = (self, root) => {
 
 	for (let el of els) {
 
-		let context;
 		for (let attr of el.attributes) {
-			if (attr.name.substr(0, 5) === 'data-') {
+			if (attr.name.slice(0, 5) === 'data-') {
 				let code = attr.value;
 				if (!context)
-					context = getContext(el);
+					var context = getContext(el);
 
 				if (attr.name === 'data-loop') // only the foreach part of a data-loop="..."
 					code = parseLoop(code)[0];
@@ -198,7 +197,7 @@ var bindEvents = (self, root) => {
 
 	var els = [...root.querySelectorAll('*')];
 	if (root.attributes)
-		els.unshift(root);
+		els.unshift(root); // Add root if it's not a DocumentFragment.
 
 	for (let el of els) {
 		for (let event_ of events) {
@@ -208,7 +207,7 @@ var bindEvents = (self, root) => {
 
 				// If it's a simple function that exists in the parent class,
 				// add the "this" prefix.
-				let path = parseVars(code, false, true)[0];
+				let path = parseVars(code, 0, 1)[0];
 				if (path && traversePath(self, path) instanceof Function)
 					code = addThis(code, getContext(el), isSimpleCall_);
 
@@ -229,12 +228,11 @@ var bindEvents = (self, root) => {
 var initHtml = (self) => {
 	if (self.init_)
 		return;
+	self.init_ = 1;
 
 	// 1. Set attributes and html children.
-	var html = self.constructor._html;  // _html is set from ClassName.html = '...'
-
 	// Instantiate html string.
-	var div = createEl(html.trim());
+	var div = createEl(self.constructor._html.trim()); // _html is set from ClassName.html = '...'
 
 	// Merge attributes on definition (Item.html='<div attr="value"') and instantiation (<x-item attr="value">).
 	var attributes = {};
@@ -254,9 +252,9 @@ var initHtml = (self) => {
 			let arg = value;
 
 			// As javascript code to be evaluated.
-			if (arg && arg.length > 2 && arg.substr(0, 1) === '{' && arg.substr(arg.length - 1) === '}') {
+			if (arg && arg.length > 2 && arg.slice(0, 1) === '{' && arg.slice(-1) === '}') {
 				(() => { // Guard scope before calling eval.
-					arg = eval('(' + arg.substr(1, arg.length - 2) + ')'); // code to eval
+					arg = eval('(' + arg.slice(1, -1) + ')'); // code to eval
 				}).call(self); // Import "self" as "this" variable to eval'd code.  This lets us pass attribute="${this}" in html initialization.
 			}
 			else
@@ -305,8 +303,11 @@ var initHtml = (self) => {
 		let id = node.getAttribute('id');
 		Object.defineProperty(self, id, { // Make it readonly.
 			value: node,
-			writable: false
+			writable: 0
 		});
+
+		// Only leave the id attributes if we have a shadow root.
+		// Otherwise we'll have duplicate id's in the main document.
 		if (!self.shadowRoot)
 			node.removeAttribute('id');
 	}
@@ -314,9 +315,6 @@ var initHtml = (self) => {
 	// 3. Bind all data- and event attributes
 	bind(self, self);
 	bindEvents(self, root);
-
-
-	self.init_ = true;
 };
 
 /**
@@ -458,19 +456,17 @@ XElement.dataAttr = {
 		var loopVar;
 		[code, loopVar] = parseLoop(code);
 		var paths = parseVars(code);
+		var isSimple = isSimpleVar_(code);
 
 		// The code we'll loop over.
 		var html = el.innerHTML.trim();
-		while (el.lastChild)
-			el.removeChild(el.lastChild);
 
 
-		var isSimple = isSimpleVar_(code);
 		var getModifiedIndex = (path) => {
 			// Can't calc for non-simple var.
 			// Can't calc if path doesn't match simple var path.
 			if (!isSimple || !arrayEq(path.slice(0, -1), paths[0]))
-				return false;
+				return -1;
 
 			return parseInt(path[path.length-1]);
 		};
@@ -484,7 +480,7 @@ XElement.dataAttr = {
 				var index = getModifiedIndex(path);
 
 			// If code is a simple var and path modifies only one item:
-			if (path && index !== false) {
+			if (path && index >= 0) {
 				let existingChild = el.children[index];
 
 				if (action === 'set') { // add or replace item.
@@ -525,6 +521,11 @@ XElement.dataAttr = {
 					}
 			}
 		}
+
+		// Remove children before calling rebuildChildren()
+		// That way we don't unbind elements that were never bound.
+		while (el.lastChild)
+			el.removeChild(el.lastChild);
 
 		// Set initial children
 		rebuildChildren.call(self);

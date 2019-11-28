@@ -17,7 +17,8 @@ var varStartRegex = new RegExp(varStart, 'gi');
 var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 
 // https://mathiasbynens.be/notes/javascript-identifiers
-var nonVars = 'length,caller,callee,prototype,arguments,true,false,null,undefined,NaN,Infinity,break,case,catch,continue,debugger,default,delete,do,else,finally,for,function,if,in,instanceof,new,return,switch,throw,try,typeof,var,void,while,with,class,const,enum,export,extends,import,super,implements,interface,let,package,private,protected,public,static,yield'.split(/,/g);
+// We exclude 'let,package,interface,implements,private,protected,public,static,yield' because testing shows Chrome accepts these as valid var names.
+var nonVars = 'length,NaN,Infinity,caller,callee,prototype,arguments,true,false,null,undefined,break,case,catch,continue,debugger,default,delete,do,else,finally,for,function,if,in,instanceof,new,return,switch,throw,try,typeof,var,void,while,with,class,const,enum,export,extends,import,super'.split(/,/g);
 
 var isSimpleVar_ = (code) => {
 	return !!code.trim().match(isSimpleVarRegex);
@@ -51,7 +52,7 @@ var parseVars = (code, includeThis, allowCall) => {
 
 	while (code.length) {
 		let regex = varStartRegex; // Reset for looking for start of a variable.
-		let keepGoing = true;
+		let keepGoing = 1;
 		let current = [], matches;
 		current.index_ = []; // track the index of each match within code.
 		while (keepGoing && code.length && !!(matches = regex.exec(code))) {
@@ -59,11 +60,12 @@ var parseVars = (code, includeThis, allowCall) => {
 			// Add the start of the match.
 			index += matches.index;
 
-			code = code.substr(regex.lastIndex); // advance forward in parsing code.
+			code = code.slice(regex.lastIndex); // advance forward in parsing code.
 			regex.lastIndex = 0; // reset the regex.
 
 			// Don't grab functions or common functions properties as vars unless they are within brackets.
 			// matches[1] is the match for a .variable and not something in brackets.
+			// TODO: allow some nonvars if in brackets.
 			keepGoing = (allowCall || !matches[0].endsWith('(')) && !nonVars.includes(matches[1]);
 			if (keepGoing) {
 
@@ -101,12 +103,12 @@ var parseVars = (code, includeThis, allowCall) => {
  * @param replacements {object<string, string>}
  * @returns {string} */
 var replaceVars = (code, replacements) => {
-	var paths = parseVars(code, true);
+	var paths = parseVars(code, 1);
 	for (let path of paths.reverse()) // We loop in reverse so the replacement indices don't get messed up.
 		for (let oldVar in replacements) {
-			let newVar = replacements[oldVar];
 			if (path.length >= 1 && path[0] === oldVar)
-				code = code.substr(0, path.index_[0]) + newVar + code.substr(path.index_[0] + oldVar.length);
+				// replacements[oldVar] is newVar.
+				code = code.slice(0, path.index_[0]) + replacements[oldVar] + code.slice(path.index_[0] + oldVar.length);
 		}
 
 	return code;
@@ -122,8 +124,8 @@ var parseLoop = (code) => {
 	if (colon === -1)
 		throw new Error('data-loop attribute "' + code + '" missing colon.');
 	return [
-		code.substr(0, colon),      // foreach part
-		code.substr(colon+1).trim() // loop var
+		code.slice(0, colon),      // foreach part
+		code.slice(colon+1).trim() // loop var
 	];
 };
 
@@ -135,8 +137,7 @@ var addThis = (code, context, isSimple) => {
 
 	// If it starts with this or an item in context, do nothing.
 	code = code.trim();
-	var prefixes = ['this', ...Object.keys(context || {})];
-	for (let prefix of prefixes)
+	for (let prefix of ['this', ...Object.keys(context || {})])
 		if (code.match(new RegExp('^' + prefix + '\s*[\.[]'))) // starts with "prefix." or "prefix["
 			return code;
 
