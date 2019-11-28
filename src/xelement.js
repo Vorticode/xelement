@@ -293,15 +293,9 @@ function initHtml(self) {
 	var nodes = root.querySelectorAll('[id]');
 	for (let i = 0, node; node = nodes[i]; i++) {
 		let id = node.getAttribute('id');
-		//self[id] = node;
 		Object.defineProperty(self, id, { // Make it readonly.
-			get: function() {
-				return node;
-			},
-			set: function() {
-				throw new Error('Reassigning id properties is not supported.');
-				// TODO: Allow replacing DOM node and updating reference to it.
-			}
+			value: node,
+			writable: false
 		});
 		if (!self.shadowRoot)
 			node.removeAttribute('id');
@@ -402,78 +396,49 @@ XElement.dataAttr = {
 				watchlessSet(self, vars[0], value);
 			});
 
+		let setVal = function(/*action, path, value*/) {
+			if (el.getAttribute('type') === 'checkbox')
+			// noinspection EqualityComparisonWithCoercionJS
+				el.checked = eval(code) == true;
+			else
+				el.value = eval(code);
+		}.bind(self);
+
 		// Update input value when object property changes.
 		for (let path of vars) {
-			let setVal = (action, actionPath, val) => {
-				// Sometimes action="set" is called on a parent path and we receive no "delete"
-				if (traversePath(self, path) === undefined) {
-					if (el.getAttribute('type') === 'checkbox')
-						el.checked = false;
-					else
-						el.value = '';
-				}
-				else {
-					if (el.getAttribute('type') === 'checkbox')
-						// noinspection EqualityComparisonWithCoercionJS
-						el.checked = eval(code) == true;
-					else
-						el.value = eval(code);
-				}
-			};
 			watch(self, path, setVal);
 			addWatchedEl(el, setVal);
-
-
-			// Set initial value.
-			// TODO remove redundancy with f() in this and other dataAttr's.
-			// TODO: This doesn't need to be inside the loop.
-			(function () {
-				if (traversePath(self, path) === undefined) {
-					if (el.getAttribute('type') === 'checkbox')
-						el.checked = false;
-					else
-						el.value = '';
-				}
-				else {
-					if (el.getAttribute('type') === 'checkbox')
-						// noinspection EqualityComparisonWithCoercionJS
-						el.checked = eval(code) == true;
-					else
-						el.value = eval(code);
-				}
-			}).bind(self)();
 		}
+
+		// Set initial value.
+		setVal();
 	},
 
 	html: function (self, code, el) {
+		let setHtml = function(/*action, path, value*/) {
+			el.innerHTML = eval(code);
+		}.bind(self);
+
 		for (let path of parseVars(code)) {
-			let setHtml = (action, actionPath, value) => {
-				el.innerHTML = traversePath(self, path) === undefined ? '' : eval(code);
-			};
 			watch(self, path, setHtml);
 			addWatchedEl(el, setHtml);
 		}
 
 		// Set initial value.
-		(function() {
-			el.innerHTML = eval(code);
-		}).bind(self)();
+		setHtml();
 	},
 
 	text: function (self, code, el) {
+		let setText = function(/*action, path, value*/) {
+			el.textContent = eval(code);
+		}.bind(self);
 		for (let path of parseVars(code)) {
-			let setText = (action, actionPath, value) => {
-				el.textContent = traversePath(self, path) === undefined ? '' : eval(code);
-			};
-
 			watch(self, path, setText);
 			addWatchedEl(el, setText);
 		}
 
 		// Set initial value.
-		(function() {
-			el.textContent = eval(code);
-		}).bind(self)();
+		setText();
 	},
 
 	loop: function (self, code, el) {
@@ -581,37 +546,23 @@ XElement.dataAttr = {
 	 * @param attr {string} Name of the attribute on el that's being bound.  Doesn't include 'data-' prefix. */
 	attr: function (self, code, el, attr) {
 
+		let setAttr = function(/*action, path, value*/) {
+			var result = eval(code);
+			if (result === false || result === null || result === undefined)
+				el.removeAttribute(attr);
+			else
+				el.setAttribute(attr, result + '');
+
+		}.bind(self);
+
 		// If the variables in code, change, execute the code.
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code)) {
-			var setAttr = (action) => {
-				if (traversePath(self, path) === undefined)
-					el.removeAttribute(attr);
-				else {
-					var result = eval(code);
-					if (result === false)
-						el.removeAttribute(attr);
-					else
-						el.setAttribute(attr, result + '');
-				}
-			};
 			watch(self, path, setAttr);
 			addWatchedEl(el, setAttr);
-
-			// Set initial value.
-			(function() {
-				if (traversePath(self, path) === undefined)
-					el.removeAttribute(attr);
-				else {
-					var result = eval(code);
-					if (result === false)
-						el.removeAttribute(attr);
-					else
-						el.setAttribute(attr, result + '');
-				}
-			}).bind(self)();
-
 		}
+
+		setAttr();
 	}
 };
 

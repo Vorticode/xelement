@@ -84,19 +84,17 @@ var test_Watch = {
 
 		var o = { a: [0, 1] };
 		var wp = new WatchProperties(o);
-		var callback = function(action, path, value) {
-			ops.push(Array.from(arguments));
-		};
-		wp.subscribe(['a'], callback);
+		var cb = ()=>{};
+		wp.subscribe(['a'], cb);
 		assertEq(Object.keys(wp.subs_).length, 1);
 
-		wp.unsubscribe(['a'], callback);
+		wp.unsubscribe(['a'], cb);
 		assertEq(Object.keys(wp.subs_).length, 0);
 
 
-		wp.subscribe(['a', 0], callback);
+		wp.subscribe(['a', 0], cb);
 		assertEq(Object.keys(wp.subs_).length, 1);
-		wp.unsubscribe(['a', 0], callback);
+		wp.unsubscribe(['a', 0], cb);
 		assertEq(Object.keys(wp.subs_).length, 0);
 	},
 

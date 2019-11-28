@@ -53,18 +53,11 @@ function watchObj(root, callback) {
 		set(obj, field, newVal) {
 
 			// Don't allow setting proxies on underlying obj.
-			// We need to remove them recursivly in case newVal=[Proxy(obj)].
+			// We need to remove them recursivly in case of something like newVal=[Proxy(obj)].
 			newVal = removeProxies(newVal);
 
 			var path = [...paths.get(obj), field];
-			//console.log('set', path, newVal);
-			if (field === 'length') { // Convert length changes to delete.  spice() will set length.
-				// var oldLength = obj.length;
-				// obj.length = newVal;
-				// for (let i=oldLength; i<newVal; i++)
-				// 	callback('delete', path);
-			}
-			else
+			if (field !== 'length')
 				callback('set', path, obj[field] = newVal);
 			return true; // Proxy requires us to return true.
 		},
@@ -75,8 +68,6 @@ function watchObj(root, callback) {
 		 * @param field {int|string} An object key or array index.
 		 * @returns {boolean} */
 		deleteProperty(obj, field) {
-			//console.log('delete', [...paths.get(obj)], field);
-
 			if (Array.isArray(obj))
 				obj.splice(field, 1);
 			else
@@ -89,13 +80,14 @@ function watchObj(root, callback) {
 	return new Proxy(root, handler);
 }
 
-
+/**
+ *
+ * @param obj {*}
+ * @param visited {WeakSet=} Used internally.
+ * @returns {*} */
 function removeProxies(obj, visited) {
-
-
 	if (obj.isProxy)
 		obj = obj.removeProxy;
-
 
 	if (obj !== null && typeof obj === 'object') {
 		if (!visited)
