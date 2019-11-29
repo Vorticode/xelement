@@ -63,8 +63,10 @@ var getContext = (el) => {
 			// Check for an inner loop having the same variable name
 			let [foreach, item] = parseLoop(code);
 			foreach = addThis(foreach);
+			//#IFDEV
 			if (item in context)
 				throw new Error('Loop variable "' + item + '" already used in a parent loop.');
+			//#ENDIF
 
 			// As we traverse upward, we set the index of variables.
 			if (lastEl)
@@ -129,12 +131,12 @@ var bind = (self, el, context) => {
 
 
 				// If we have a dataAttr function to handle this specific data- attribute name.
-				if (XElement.dataAttr[attrName])
-					XElement.dataAttr[attrName].call(self, self, code, el);
+				if (dataAttr[attrName])
+					dataAttr[attrName].call(self, self, code, el);
 
 				// Otherwise just use the dataAttr.attr function.
 				else
-					XElement.dataAttr.attr.call(self, self, code, el, attrName);
+					dataAttr.attr.call(self, self, code, el, attrName);
 			}
 		}
 
@@ -232,7 +234,7 @@ var initHtml = (self) => {
 
 	// 1. Set attributes and html children.
 	// Instantiate html string.
-	var div = createEl(self.constructor._html.trim()); // _html is set from ClassName.html = '...'
+	var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
 
 	// Merge attributes on definition (Item.html='<div attr="value"') and instantiation (<x-item attr="value">).
 	var attributes = {};
@@ -349,13 +351,17 @@ var initHtml = (self) => {
 class XElement extends HTMLElement {
 
 	constructor() {
+		//#IFDEV
 		try {
+		//#ENDIF
 			super();
+		//#IFDEV
 		} catch (error) {
 			if (error instanceof TypeError) // Add helpful message to error:
 				error.message += '\nMake sure to set the .html property before instantiating the class "' + this.name + '".';
 			throw error;
 		}
+		//#ENDIF
 
 		// Only initHtml on construction if not instantiated wit
 		// If it's instantiated with new ClassName() instead of via <x-classname>,
@@ -384,7 +390,7 @@ class XElement extends HTMLElement {
 }
 
 
-XElement.dataAttr = {
+var dataAttr = {
 
 	// Special 2-way binding
 	val: (self, code, el) => {
@@ -578,7 +584,7 @@ XElement.dataAttr = {
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
 Object.defineProperty(XElement, 'html', {
 	get: function () {
-		return this._html;
+		return this.html_;
 	},
 	set: function (html) {
 		var self = this;
@@ -604,11 +610,12 @@ Object.defineProperty(XElement, 'html', {
 		// 	}
 		// }
 
-		var name = 'x-' + self.name.toLowerCase();
+		var lname = self.name.toLowerCase();
+		var name = 'x-' + lname;
 
 		// If name exists, add an incrementing integer to the end.
 		for (let i = 2; customElements.get(name); i++)
-			name = 'x-' + self.name.toLowerCase() + i;
+			name = 'x-' + lname + i;
 
 		// New way where we pass attributes to teh constructor:
 		// customElements.define(name, Embedded);
@@ -617,9 +624,10 @@ Object.defineProperty(XElement, 'html', {
 		// Old way:
 		customElements.define(name, self);
 
-		return self._html = html;
+		return self.html_ = html;
 	}
 });
 
 // Exports
+XElement.dataAttr = dataAttr;
 window.XElement = XElement;

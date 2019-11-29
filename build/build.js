@@ -25,63 +25,93 @@ fs.writeFileSync('../xelement.js', code);
 
 
 // Do replacements
-var replacementFuncs = {
-	"RegExp" : 'R',
-	"JSON.stringify" : 'J',
-	//"eval": 'Q',
-	'document': 'd',
-	'Object.defineProperty': 'O',
-	'Object.keys': 'K',
-	'customElements': 'm',
-	'WeakMap': 'W',
-};
+var replacementFuncs = [
+	"RegExp",
+	"JSON.stringify",
+	"eval",
+	'document',
+	'Object.defineProperty',
+	'Object.keys',
+	'customElements',
+	'WeakMap',
+];
 
-var replacementProps = { // These appear as .name
-	'shadowRoot': 'S',
-	'isProxy': 'P',
-	'filter': 'F',
-	"length": 'l',
-	//"substr": 's', // we always use slice instead.
-	"addEventListener": 'a',
-	"innerHTML": 'H',
-	"querySelectorAll": 'q',
-	"slice": 'c',
-	"startsWith": 'w',
-	"value": 'v',
-	'firstChild': 'f',
-	'lastChild': 'L',
-	'children': 'h',
-	'parentNode': 'p',
-	'removeChild': 'o',
-	'selectedIndex': 'i',
-	'attributes': 't',
-	'setAttribute': 'x',
-	"getAttribute": 'A',
-	'hasAttribute': 'V',
-	'removeAttribute': 'r',
-	'name': 'n',
-	'appendChild': 'u',
-	'lastIndex': 'Y',
-	'match': 'M',
-	'trim': 'T',
-	//'connectedCallback': 'C'
-};
-
+var replacementProps = [ // These appear as .name
+	'shadowRoot',
+	'isProxy',
+	'filter',
+	"length",
+	//"substr", // we always use slice instead.
+	"addEventListener",
+	"innerHTML",
+	"querySelectorAll",
+	"slice",
+	"startsWith",
+	"value",
+	'firstChild',
+	'lastChild',
+	'children',
+	'parentNode',
+	'removeChild',
+	'attributes',
+	'setAttribute',
+	"getAttribute",
+	'hasAttribute',
+	'removeAttribute',
+	'name',
+	'appendChild',
+	'lastIndex',
+	'match',
+	'trim',
+	'bind',
+	'data-loop',
+	'data-',
+	'checkbox',
+	'removeProxy',
+	'checked', // makes no difference
+	//'push': 'PU', // makes no difference in size.
+	//'string': 'STR', // Increases size
+	//'connectedCallback': 'CC'
+];
+var i=0;
 var a = [];
-for (let name in replacementFuncs) {
-	code = code.replace(new RegExp(name+'(?![A-Za-z0-9_$])', 'g'), replacementFuncs[name]);
-	a.push('var ' + replacementFuncs[name] + '=' + name + ';');
+for (let name of replacementFuncs) {
+	let vname = 'i' + i;
+	code = code.replace(new RegExp(name+'(?![A-Za-z0-9_$])', 'g'), vname);
+
+	// Add variable definition.
+	a.push('var ' + vname + '=' + name + ';');
+
+	i++;
 }
 
-for (let name in replacementProps) {
+
+for (let name of replacementProps) {
+	let vname = 'i' + i;
+
+	// Replace .prop instances
 	let regex = new RegExp('\\.' + name + '(?![A-Za-z0-9_$])', 'g');
-	code = code.replace(regex, '['+replacementProps[name]+']');
-	a.push('var ' + replacementProps[name] + '=' + "'" + name + "';");
+	code = code.replace(regex, '['+vname+']');
+
+	// Replace string instances of the props
+	regex = new RegExp('"' + name + "'", 'g');
+	code = code.replace(regex, vname);
+
+	regex = new RegExp("'" + name + "'", 'g');
+	code = code.replace(regex, vname);
+
+	// Add variable definition.
+	a.push('var ' + vname + '=' + "'" + name + "';\r\n");
+	i++;
 }
+
+// Remove IFDEV preprocessor used for useful error messages.
+code = code.replace(/\/\/#IFDEV[\s\S]*?\/\/#ENDIF/gm, '');
+
 code = code.replace('//%replace%', a.join(''));
 
 
-//fs.writeFileSync('../xelement.r.js', code);
+fs.writeFileSync('../xelement.r.js', code);
 
 var options = {
 	//ecma: 8, // doesn't make it any smaller

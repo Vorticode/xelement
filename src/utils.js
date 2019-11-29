@@ -5,6 +5,8 @@ var arrayEq = (array1, array2) => {
 var createEl = (html) => {
 	var div = document.createElement('div');
 	div.innerHTML = html;
+
+	//  TODO: skip whitespace, comments
 	return div.removeChild(div.firstChild);
 };
 

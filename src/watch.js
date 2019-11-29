@@ -157,13 +157,6 @@ class WatchProperties {
 		if (!(field in self.fields_)) {
 			self.fields_[field] = self.obj_[field];
 
-			// Set initial value from obj, creating the path to it.
-			// let initialValue = traversePath(this.obj_, path);
-			// if (initialValue && initialValue.isProxy) // optional check
-			// 	throw new Error();
-			// traversePath(this.fields_, path, true, initialValue);
-
-
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
 			Object.defineProperty(self.obj_, field, {
@@ -289,8 +282,10 @@ var watchlessSet = (obj, path, val) => {
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
+		//#IFDEV
 		if (node.isProxy) // optional sanity check
-			throw new Error();
+			throw new Error('Variable is already a proxy.');
+		//#ENDIF
 	}
 
 	return node[prop] = val;

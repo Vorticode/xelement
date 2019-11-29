@@ -8,6 +8,8 @@ var arrayEq = (array1, array2) => {
 var createEl = (html) => {
 	var div = document.createElement('div');
 	div.innerHTML = html;
+
+	//  TODO: skip whitespace, comments
 	return div.removeChild(div.firstChild);
 };
 
@@ -137,6 +139,7 @@ var isSimpleCall_ = (code) => {
 	code = code.trim();
 
 	// If there's a semicolon other than at the end.
+	// TODO: This doesn't account for if there's a semicolon in a string argument to the function.
 	var semi = code.indexOf(';');
 	if (semi !== -1 && semi !== code.length-1)
 		return false;
@@ -162,8 +165,8 @@ var parseVars = (code, includeThis, allowCall) => {
 	while (code.length) {
 		let regex = varStartRegex; // Reset for looking for start of a variable.
 		let keepGoing = 1;
-		let current = [], matches;
-		current.index_ = []; // track the index of each match within code.
+		let currentVar = [], matches;
+		currentVar.index_ = []; // track the index of each match within code.
 		while (keepGoing && code.length && !!(matches = regex.exec(code))) {
 
 			// Add the start of the match.
@@ -184,8 +187,8 @@ var parseVars = (code, includeThis, allowCall) => {
 
 				// Add varible property to current path
 				if (includeThis || item !== 'this') {
-					current.push(item);
-					current.index_.push(index);
+					currentVar.push(item);
+					currentVar.index_.push(index);
 				}
 
 				regex = varPropRegex; // switch to reading subsequent parts of the variable.
@@ -198,8 +201,8 @@ var parseVars = (code, includeThis, allowCall) => {
 		// Start parsing a new variable.
 		index += regex.lastIndex;
 		regex.lastIndex = 0; // reset the regex.
-		if (current.length)
-			result.push(current);
+		if (currentVar.length)
+			result.push(currentVar);
 		else
 			break;
 	}
@@ -226,16 +229,38 @@ var replaceVars = (code, replacements) => {
 /**
  * Parse "items : item" into two part, always splitting on the last colon.
  * @param code {string}
- * @return {[string, string]} */
+ * @return {[string, string, string]} foreach, loopVar, index (optional) */
 var parseLoop = (code) => {
+	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
+
+	//#IFDEV
+	if (!isSimpleVar_(result[1]))
+		throw new Error('Could not parse loop variable in data-loop attribute "' + code + '".');
+	if (result.length > 2 && !isSimpleVar_(result[2]))
+		throw new Error('Invalid index variable in data-loop attribute "' + code + '".');
+	if (result.length > 3)
+		throw new Error('Could not parse data-loop attribute "' + code + '".');
+	//#ENDIF
+
+	return result;
+
+	/*
 	// Parse code into foreach parts.
 	var colon = code.lastIndexOf(':');
-	if (colon === -1)
+	if (colon < 0) // -1
 		throw new Error('data-loop attribute "' + code + '" missing colon.');
-	return [
-		code.slice(0, colon),      // foreach part
-		code.slice(colon+1).trim() // loop var
-	];
+	var result = [code.slice(0, colon)];       // foreach part
+	var loopVar = code.slice(colon+1).trim(); // loop var
+	var comma = loopVar.indexOf(',');
+	if (comma >= 0) { // If index.
+		result.push(loopVar.slice(0, comma).trim());
+		result.push((loopVar.slice(comma+1).trim()));
+	}
+	else
+		result.push(loopVar)
+
+	return result;
+	*/
 };
 
 
@@ -412,13 +437,6 @@ class WatchProperties {
 		if (!(field in self.fields_)) {
 			self.fields_[field] = self.obj_[field];
 
-			// Set initial value from obj, creating the path to it.
-			// let initialValue = traversePath(this.obj_, path);
-			// if (initialValue && initialValue.isProxy) // optional check
-			// 	throw new Error();
-			// traversePath(this.fields_, path, true, initialValue);
-
-
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
 			Object.defineProperty(self.obj_, field, {
@@ -544,8 +562,10 @@ var watchlessSet = (obj, path, val) => {
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
+		//#IFDEV
 		if (node.isProxy) // optional sanity check
-			throw new Error();
+			throw new Error('Variable is already a proxy.');
+		//#ENDIF
 	}
 
 	return node[prop] = val;
@@ -616,8 +636,10 @@ var getContext = (el) => {
 			// Check for an inner loop having the same variable name
 			let [foreach, item] = parseLoop(code);
 			foreach = addThis(foreach);
+			//#IFDEV
 			if (item in context)
 				throw new Error('Loop variable "' + item + '" already used in a parent loop.');
+			//#ENDIF
 
 			// As we traverse upward, we set the index of variables.
 			if (lastEl)
@@ -682,12 +704,12 @@ var bind = (self, el, context) => {
 
 
 				// If we have a dataAttr function to handle this specific data- attribute name.
-				if (XElement.dataAttr[attrName])
-					XElement.dataAttr[attrName].call(self, self, code, el);
+				if (dataAttr[attrName])
+					dataAttr[attrName].call(self, self, code, el);
 
 				// Otherwise just use the dataAttr.attr function.
 				else
-					XElement.dataAttr.attr.call(self, self, code, el, attrName);
+					dataAttr.attr.call(self, self, code, el, attrName);
 			}
 		}
 
@@ -785,7 +807,7 @@ var initHtml = (self) => {
 
 	// 1. Set attributes and html children.
 	// Instantiate html string.
-	var div = createEl(self.constructor._html.trim()); // _html is set from ClassName.html = '...'
+	var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
 
 	// Merge attributes on definition (Item.html='<div attr="value"') and instantiation (<x-item attr="value">).
 	var attributes = {};
@@ -902,13 +924,17 @@ var initHtml = (self) => {
 class XElement extends HTMLElement {
 
 	constructor() {
+		//#IFDEV
 		try {
+		//#ENDIF
 			super();
+		//#IFDEV
 		} catch (error) {
 			if (error instanceof TypeError) // Add helpful message to error:
 				error.message += '\nMake sure to set the .html property before instantiating the class "' + this.name + '".';
 			throw error;
 		}
+		//#ENDIF
 
 		// Only initHtml on construction if not instantiated wit
 		// If it's instantiated with new ClassName() instead of via <x-classname>,
@@ -937,7 +963,7 @@ class XElement extends HTMLElement {
 }
 
 
-XElement.dataAttr = {
+var dataAttr = {
 
 	// Special 2-way binding
 	val: (self, code, el) => {
@@ -1131,7 +1157,7 @@ XElement.dataAttr = {
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
 Object.defineProperty(XElement, 'html', {
 	get: function () {
-		return this._html;
+		return this.html_;
 	},
 	set: function (html) {
 		var self = this;
@@ -1157,11 +1183,12 @@ Object.defineProperty(XElement, 'html', {
 		// 	}
 		// }
 
-		var name = 'x-' + self.name.toLowerCase();
+		var lname = self.name.toLowerCase();
+		var name = 'x-' + lname;
 
 		// If name exists, add an incrementing integer to the end.
 		for (let i = 2; customElements.get(name); i++)
-			name = 'x-' + self.name.toLowerCase() + i;
+			name = 'x-' + lname + i;
 
 		// New way where we pass attributes to teh constructor:
 		// customElements.define(name, Embedded);
@@ -1170,10 +1197,11 @@ Object.defineProperty(XElement, 'html', {
 		// Old way:
 		customElements.define(name, self);
 
-		return self._html = html;
+		return self.html_ = html;
 	}
 });
 
 // Exports
+XElement.dataAttr = dataAttr;
 window.XElement = XElement;
 })();
