@@ -1,7 +1,7 @@
 # XElement
 
 
-![header](img\header.jpg)
+![header](img/header.jpg)
 
 Pronounced ex-element, XElement is a lightweight JavaScript library making it easy to create HTML user interface components:
 
