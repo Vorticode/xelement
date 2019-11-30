@@ -7,11 +7,7 @@
 XElement  is a lightweight JavaScript library making it easy to create HTML user interface components:
 
 ```html
-<template id="Inventory">
-	<style>
-        :host { border: 1px solid black } // styles whole element.
-        input { width: 10em }
-    </style>
+<template id="Inventory">4
     <button onclick="addItem()">Add Item</button>
     <div data-loop="items:item">
         <div>
@@ -29,6 +25,7 @@ class Inventory extends XElement {
 }
 Inventory.html = '#Inventory';
 </script>
+
 <x-inventory></x-inventory>
 ```
 
@@ -41,7 +38,7 @@ Features:
 - Uses standard html.  No need to learn a templating language.
 - Uses ShadowDOM by default, so each XElement can have its own styles.
 
-## Basic Use
+## Minimal Example
 
 In this minimal example, we make a new class called Hello and set its html.  Any class that extends XElement automatically creates a new html tag with a name of "x-" plus the lower case version of the class name.
 
@@ -50,12 +47,15 @@ In this minimal example, we make a new class called Hello and set its html.  Any
 <script>
 	class Hello extends XElement {}
     Hello.html = `<div>Hello XElement!</div>`;
-}
 </script>
 
 <!-- Prints an element with textContent = "Hello XElement!" -->
 <x-hello></x-hello>
 ```
+
+Subsequent examples omit the  ```javascript <script src="xelement.js"></script> ``` tag for brevity.
+
+## Basic Use
 
 An XElement can also be instantiated with the new keyword:
 
@@ -64,7 +64,7 @@ var hello = new Hello();
 document.body.appendChild(hello);
 ```
 
-If the html property is set to a valid css selector, XElement will pull its html from that element.  This can be useful if using an IDE that don't support syntax highlighting html inside of strings.
+If the html property is set to a valid CSS selector, XElement will pull its html from that element.  This can be useful if using an IDE that don't support syntax highlighting html inside of strings.
 
 ```html
 <template id="hello">Hello XElement!</template>
@@ -89,6 +89,20 @@ Car.html = `
         <x-wheel></x-wheel>
         <x-wheel></x-wheel>
         <x-wheel></x-wheel>
+	</div>`;
+```
+
+XElements create their html children as [ShadowDOM](https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_shadow_DOM).  This allows styles to be embedded that only apply to the html of the XElement.  The *:host* selector is used to style the element itself, per the ShadowDOM specification.
+
+```javascript
+class Fancy extends XElement {}
+Fancy.html = `
+	<div>		
+		<p>Fancy text!</p>
+		<style>
+			:host { border: 10px dashed red }
+			p { text-shadow: 0 0 5px orange }
+		</style>
 	</div>`;
 ```
 
