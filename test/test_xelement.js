@@ -429,13 +429,6 @@ var test_XElement = {
 			assertEq(b.loop.children[0].value, '2');
 		})();
 
-		// Nested loop
-		(function () {
-
-
-
-		})();
-
 		// Loop on nested XElement with val binding.
 		(function () {
 			class BL4 extends XElement {}
@@ -565,13 +558,13 @@ var test_XElement = {
 
 		// Loop with index.
 		(function() {
-			class BL8 extends XElement {}
-			BL8.html = `
+			class BL9 extends XElement {}
+			BL9.html = `
 				<div data-loop="items: i, item">
 					<span data-text="i"></span>
 				</div>`;
 
-			var b = new BL8();
+			var b = new BL9();
 			b.items = ['A', 'B'];
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="i">0</span><span data-text="i">1</span>');
 		})();
@@ -587,15 +580,15 @@ var test_XElement = {
 		// Nested loop over two separate properties
 		(function() {
 
-			class BL3 extends XElement {}
-			BL3.html =
+			class BL30 extends XElement {}
+			BL30.html =
 				'<div data-loop="items:item">' +
 				'<div data-loop="cats:cat">' +
 				'<span data-text="cat+\':\'+item">Hi</span>' +
 				'</div>' +
 				'</div>';
 
-			var b = new BL3();
+			var b = new BL30();
 			b.items = [1, 2];
 			b.cats = [1, 2];
 			assertEq(b.shadowRoot.innerHTML,
@@ -629,15 +622,15 @@ var test_XElement = {
 
 		// Nested loop over sub properties.
 		(function() {
-			class BL8 extends XElement {}
-			BL8.html =
+			class BL31 extends XElement {}
+			BL31.html =
 				'<div data-loop="families:family">' +
 					'<div data-loop="family.species:species">' +
 						'<span data-text="family.name+\':\'+species">Hi</span>' +
 					'</div>' +
 				'</div>';
 
-			var b = new BL8();
+			var b = new BL31();
 			b.families = [
 				{
 					name: 'equids',
@@ -659,20 +652,36 @@ var test_XElement = {
 					'<span data-text="family.name+\':\'+species">cats:lion</span>' +
 					'<span data-text="family.name+\':\'+species">cats:tiger</span>' +
 				'</div>');
+		})();
+
+		// Nexted loop with index.
+		(function() {
+			class BL32 extends XElement {}
+			BL32.html = `
+				<div data-loop="items: i, item">
+					<p data-loop="items: j, item2">
+						<span data-text="i+j"></span>
+					</p>
+				</div>`;
+
+			var b = new BL32();
+
+			b.items = [1, 2];
+			assertEq(b.shadowRoot.innerHTML, '<p data-loop="items: j, item2"><span data-text="i+j">0</span><span data-text="i+j">1</span></p><p data-loop="items: j, item2"><span data-text="i+j">1</span><span data-text="i+j">2</span></p>');
 
 		})();
 
 		// Nexted loop with duplicate loopVar.
 		(function() {
-			class BL8 extends XElement {}
-			BL8.html = `
+			class BL33 extends XElement {}
+			BL33.html = `
 				<div data-loop="items: i, item">
 					<div data-loop="items: i2, item">
 						<span data-text="i"></span>
 					</div>
 				</div>`;
 
-			var b = new BL8();
+			var b = new BL33();
 
 			var error;
 			try {
@@ -686,15 +695,15 @@ var test_XElement = {
 
 		// Nexted loop with duplicate index.
 		(function() {
-			class BL8 extends XElement {}
-			BL8.html = `
+			class BL34 extends XElement {}
+			BL34.html = `
 				<div data-loop="items: i, item">
 					<div data-loop="items: i, item2">
 						<span data-text="i"></span>
 					</div>
 				</div>`;
 
-			var b = new BL8();
+			var b = new BL34();
 
 			var error;
 			try {

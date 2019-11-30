@@ -9,6 +9,8 @@ allow index in data-loop
 allow loop over more than one item.
 cache results of parseVars() and other parse functions?
 cache the context of loop vars.
+flag to enable/disable updates.
+function to trigger updates?
 
 create from <template> tag
 improve minifcation.
@@ -44,7 +46,7 @@ var addWatchedEl = (el, callback) => {
  * Traverse through all parents to build the loop context.
  * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
  * @param el
- * @return {object<string, string>} */
+ * @return {object<string, string|int>} */
 var getContext = (el) => {
 	let context = {};
 	let parent = el;
@@ -84,7 +86,7 @@ var getContext = (el) => {
 			lastEl = parent;
 
 		// Stop once we reach an XElement.
-		if (parent instanceof XElement)
+		if (parent.dataAttr)
 			break;
 	}
 	return context;
@@ -102,7 +104,7 @@ var getContext = (el) => {
  *  The looped item becomes:
  *         <div data-val="this.items[0].name"> */
 var bind = (self, el, context) => {
-	var foreach, item;
+	var foreach, item, indexVar;
 
 
 	// Seach attributes for data- bindings.
@@ -120,15 +122,18 @@ var bind = (self, el, context) => {
 				if (attr.name === 'data-loop') { // only the foreach part of a data-loop="..."
 
 					// Don't do data-loop binding for nested XElements.  They will do their own binding.
-					if (el !== self && el instanceof XElement)
+					if (el !== self && el.dataAttr)
 						continue;
 
 					// Replace vars only in the part of the foreach loop before the ":"
 					// This is necessary for inner nested loops.
-					[foreach, item] = parseLoop(code);
+					[foreach, item, indexVar] = parseLoop(code);
 					foreach = replaceVars(foreach, context);
 					foreach = addThis(foreach, context);
-					code = foreach + ':' + item;
+					if (indexVar)
+						code = foreach + ':' + indexVar + ',' + item;
+					else
+						code = foreach + ':' + item;
 				}
 				else {
 					code = replaceVars(code, context);
@@ -155,8 +160,11 @@ var bind = (self, el, context) => {
 	for (let i = 0; i < root.children.length; i++) {
 
 		// Add to context as we descend.
-		if (foreach)
+		if (foreach) {
 			context[item] = foreach + '[' + i + ']';
+			context[indexVar] = i;
+		}
+
 		bind(self, root.children[i], context);
 	}
 

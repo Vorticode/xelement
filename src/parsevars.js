@@ -123,7 +123,7 @@ var parseLoop = (code) => {
 	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
 	if (result[2])
 		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so index is last.
-	
+
 	//#IFDEV
 	if (!isSimpleVar_(result[1]))
 		throw new XElementError('Could not parse loop variable in data-loop attribute "' + code + '".');
