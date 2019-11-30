@@ -266,7 +266,7 @@ function watchlessGet(obj, path) {
 	for (let p of path) {
 		node = node[p];
 		if (node.isProxy)
-			throw new Error();
+			throw new XElementError();
 	}
 	return node;
 }
@@ -284,7 +284,7 @@ var watchlessSet = (obj, path, val) => {
 		node = node[p];
 		//#IFDEV
 		if (node.isProxy) // optional sanity check
-			throw new Error('Variable is already a proxy.');
+			throw new XElementError('Variable is already a proxy.');
 		//#ENDIF
 	}
 

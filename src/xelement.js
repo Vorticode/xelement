@@ -61,16 +61,22 @@ var getContext = (el) => {
 		if (code) {
 
 			// Check for an inner loop having the same variable name
-			let [foreach, item] = parseLoop(code);
+			let [foreach, itemVar, indexVar] = parseLoop(code);
 			foreach = addThis(foreach);
 			//#IFDEV
-			if (item in context)
-				throw new Error('Loop variable "' + item + '" already used in a parent loop.');
+			if (itemVar in context)
+				throw new XElementError('Loop variable "' + itemVar + '" already used in a parent loop.');
+			if (indexVar && indexVar in context)
+				throw new XElementError('Loop index "' + indexVar + '" already used in a parent loop.');
 			//#ENDIF
 
 			// As we traverse upward, we set the index of variables.
-			if (lastEl)
-				context[item] = foreach + '[' + parentIndex(lastEl) + ']';
+			if (lastEl) {
+				let index = parentIndex(lastEl);
+				context[itemVar] = foreach + '[' + index + ']';
+				if (indexVar) // will be undefined if it doesn't exist.
+					context[indexVar] = index;
+			}
 		}
 
 		// If not a DocumentFragment from the ShadowRoot.
@@ -175,11 +181,11 @@ var unbind = (self, root) => {
 				if (!context)
 					var context = getContext(el);
 
-				if (attr.name === 'data-loop') // only the foreach part of a data-loop="..."
+				if (attr.name === 'data-loop') // get vars from only the foreach part of a data-loop="..."
 					code = parseLoop(code)[0];
 
 				code = replaceVars(code, context);
-				var paths = parseVars(code);
+				let paths = parseVars(code);
 
 				for (let path of paths)
 					// watchedEls.get() returns callbacks from all paths, but unwatch only unsubscribes those of path.

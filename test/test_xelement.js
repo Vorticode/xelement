@@ -28,8 +28,7 @@ var test_Watch = {
 		(function() {
 			var o = {a: [0, 1]};
 			var wp = new WatchProperties(o);
-			wp.subscribe(['a'], (action, path, value) => {
-			});
+			wp.subscribe(['a'], (action, path, value) => {});
 			assertEq(o.a.length, 2);
 			assertEq(o.a[0], 0);
 			assertEq(o.a[1], 1);
@@ -563,6 +562,20 @@ var test_XElement = {
 			assertEq(b.shadowRoot.children[1].children[0].value, '2');
 		})();
 
+
+		// Loop with index.
+		(function() {
+			class BL8 extends XElement {}
+			BL8.html = `
+				<div data-loop="items: i, item">
+					<span data-text="i"></span>
+				</div>`;
+
+			var b = new BL8();
+			b.items = ['A', 'B'];
+			assertEq(b.shadowRoot.innerHTML, '<span data-text="i">0</span><span data-text="i">1</span>');
+		})();
+
 		// TODO: Test loop over non-simple var.
 	},
 
@@ -647,6 +660,50 @@ var test_XElement = {
 					'<span data-text="family.name+\':\'+species">cats:tiger</span>' +
 				'</div>');
 
+		})();
+
+		// Nexted loop with duplicate loopVar.
+		(function() {
+			class BL8 extends XElement {}
+			BL8.html = `
+				<div data-loop="items: i, item">
+					<div data-loop="items: i2, item">
+						<span data-text="i"></span>
+					</div>
+				</div>`;
+
+			var b = new BL8();
+
+			var error;
+			try {
+				b.items = [1, 2];
+			} catch (e) {
+				error = e;
+			}
+
+			assert(error instanceof XElementError);
+		})();
+
+		// Nexted loop with duplicate index.
+		(function() {
+			class BL8 extends XElement {}
+			BL8.html = `
+				<div data-loop="items: i, item">
+					<div data-loop="items: i, item2">
+						<span data-text="i"></span>
+					</div>
+				</div>`;
+
+			var b = new BL8();
+
+			var error;
+			try {
+				b.items = [1, 2];
+			} catch (e) {
+				error = e;
+			}
+
+			assert(error instanceof XElementError);
 		})();
 	},
 

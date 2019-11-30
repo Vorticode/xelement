@@ -118,17 +118,19 @@ var replaceVars = (code, replacements) => {
 /**
  * Parse "items : item" into two part, always splitting on the last colon.
  * @param code {string}
- * @return {[string, string, string]} foreach, loopVar, index (optional) */
+ * @return {[string, string, string]} foreachCode, loopVar, indexVar (optional) */
 var parseLoop = (code) => {
 	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
-
+	if (result[2])
+		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so index is last.
+	
 	//#IFDEV
 	if (!isSimpleVar_(result[1]))
-		throw new Error('Could not parse loop variable in data-loop attribute "' + code + '".');
-	if (result.length > 2 && !isSimpleVar_(result[2]))
-		throw new Error('Invalid index variable in data-loop attribute "' + code + '".');
+		throw new XElementError('Could not parse loop variable in data-loop attribute "' + code + '".');
+	if (result[2] && !isSimpleVar_(result[2]))
+		throw new XElementError('Invalid index variable in data-loop attribute "' + code + '".');
 	if (result.length > 3)
-		throw new Error('Could not parse data-loop attribute "' + code + '".');
+		throw new XElementError('Could not parse data-loop attribute "' + code + '".');
 	//#ENDIF
 
 	return result;
@@ -137,7 +139,7 @@ var parseLoop = (code) => {
 	// Parse code into foreach parts.
 	var colon = code.lastIndexOf(':');
 	if (colon < 0) // -1
-		throw new Error('data-loop attribute "' + code + '" missing colon.');
+		throw new XElementError('data-loop attribute "' + code + '" missing colon.');
 	var result = [code.slice(0, colon)];       // foreach part
 	var loopVar = code.slice(colon+1).trim(); // loop var
 	var comma = loopVar.indexOf(',');

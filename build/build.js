@@ -111,7 +111,7 @@ code = code.replace(/\/\/#IFDEV[\s\S]*?\/\/#ENDIF/gm, '');
 code = code.replace('//%replace%', a.join(''));
 
 
-fs.writeFileSync('../xelement.r.js', code);
+//fs.writeFileSync('../xelement.r.js', code);
 
 var options = {
 	//ecma: 8, // doesn't make it any smaller

@@ -1,6 +1,14 @@
 // https://github.com/Vorticode/xelement
 (function() {
 //%replace%
+//#IFDEV
+class XElementError extends Error {
+	constructor(msg) {
+		super(msg);
+	}
+}
+//#ENDIF
+
 var arrayEq = (array1, array2) => {
 	return array1.length === array2.length && array1.every((value, index) => value === array2[index])
 };
@@ -229,17 +237,22 @@ var replaceVars = (code, replacements) => {
 /**
  * Parse "items : item" into two part, always splitting on the last colon.
  * @param code {string}
- * @return {[string, string, string]} foreach, loopVar, index (optional) */
+ * @return {[string, string, string]} foreachCode, loopVar, indexVar (optional) */
 var parseLoop = (code) => {
 	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
+	if (result[2]) {
+		//result = [result[0], result[2], result[1]];
+
+		result[2] = result.splice(1, 1, result[2])[0]; // swap elements 1 and 2, so index is last.
+	}
 
 	//#IFDEV
 	if (!isSimpleVar_(result[1]))
-		throw new Error('Could not parse loop variable in data-loop attribute "' + code + '".');
-	if (result.length > 2 && !isSimpleVar_(result[2]))
-		throw new Error('Invalid index variable in data-loop attribute "' + code + '".');
+		throw new XElementError('Could not parse loop variable in data-loop attribute "' + code + '".');
+	if (result[2] && !isSimpleVar_(result[2]))
+		throw new XElementError('Invalid index variable in data-loop attribute "' + code + '".');
 	if (result.length > 3)
-		throw new Error('Could not parse data-loop attribute "' + code + '".');
+		throw new XElementError('Could not parse data-loop attribute "' + code + '".');
 	//#ENDIF
 
 	return result;
@@ -248,7 +261,7 @@ var parseLoop = (code) => {
 	// Parse code into foreach parts.
 	var colon = code.lastIndexOf(':');
 	if (colon < 0) // -1
-		throw new Error('data-loop attribute "' + code + '" missing colon.');
+		throw new XElementError('data-loop attribute "' + code + '" missing colon.');
 	var result = [code.slice(0, colon)];       // foreach part
 	var loopVar = code.slice(colon+1).trim(); // loop var
 	var comma = loopVar.indexOf(',');
@@ -546,7 +559,7 @@ function watchlessGet(obj, path) {
 	for (let p of path) {
 		node = node[p];
 		if (node.isProxy)
-			throw new Error();
+			throw new XElementError();
 	}
 	return node;
 }
@@ -564,7 +577,7 @@ var watchlessSet = (obj, path, val) => {
 		node = node[p];
 		//#IFDEV
 		if (node.isProxy) // optional sanity check
-			throw new Error('Variable is already a proxy.');
+			throw new XElementError('Variable is already a proxy.');
 		//#ENDIF
 	}
 
@@ -634,16 +647,22 @@ var getContext = (el) => {
 		if (code) {
 
 			// Check for an inner loop having the same variable name
-			let [foreach, item] = parseLoop(code);
+			let [foreach, itemVar, indexVar] = parseLoop(code);
 			foreach = addThis(foreach);
 			//#IFDEV
-			if (item in context)
-				throw new Error('Loop variable "' + item + '" already used in a parent loop.');
+			if (itemVar in context)
+				throw new XElementError('Loop variable "' + itemVar + '" already used in a parent loop.');
+			if (indexVar && indexVar in context)
+				throw new XElementError('Loop index "' + indexVar + '" already used in a parent loop.');
 			//#ENDIF
 
 			// As we traverse upward, we set the index of variables.
-			if (lastEl)
-				context[item] = foreach + '[' + parentIndex(lastEl) + ']';
+			if (lastEl) {
+				let index = parentIndex(lastEl);
+				context[itemVar] = foreach + '[' + index + ']';
+				if (indexVar) // will be undefined if it doesn't exist.
+					context[indexVar] = index;
+			}
 		}
 
 		// If not a DocumentFragment from the ShadowRoot.
@@ -748,11 +767,11 @@ var unbind = (self, root) => {
 				if (!context)
 					var context = getContext(el);
 
-				if (attr.name === 'data-loop') // only the foreach part of a data-loop="..."
+				if (attr.name === 'data-loop') // get vars from only the foreach part of a data-loop="..."
 					code = parseLoop(code)[0];
 
 				code = replaceVars(code, context);
-				var paths = parseVars(code);
+				let paths = parseVars(code);
 
 				for (let path of paths)
 					// watchedEls.get() returns callbacks from all paths, but unwatch only unsubscribes those of path.
