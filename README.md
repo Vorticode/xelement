@@ -37,6 +37,7 @@ Features:
 - Doesn't take over your whole project.  Use it only where you need it.
 - Uses standard html.  No need to learn a templating language.
 - Uses ShadowDOM by default, so each XElement can have its own styles.
+- MIT license.  Free for commercial use.
 
 ## Minimal Example
 
@@ -53,8 +54,7 @@ In this minimal example, we make a new class called Hello and set its html.  Any
 <x-hello></x-hello>
 ```
 
-Subsequent examples omit the  ```javascript <script src="xelement.js"></script> ``` tag for brevity.
-
+Subsequent examples omit the  ```<script src="xelement.js"></script>``` tag for brevity.
 ## Basic Use
 
 An XElement can also be instantiated with the new keyword:
@@ -114,10 +114,11 @@ Any element in the html with an id is automatically bound to a property with the
 class Car extends XElement {}
 Car.html = `
 	<div>
-		<input id="driver">
+		<input id="driver" value="Vermin Supreme">
 	</div>`;
 
 var car = new Car();
+console.log(car.driver.value);     // Vermin Supreme
 car.driver.value = 'Chuck Norris'; // Puts text in input box.
 car.driver = 3; // Error, property is read-only.
 ```
@@ -128,27 +129,69 @@ TODO
 
 ## Slots
 
+TODO
+
 ## Data Binding
 
 XElement performs data-binding with any element that has an attribute name with the *data-* prefix.
 
 ### Attributes
 
+Attributes are bound to class properties with the data-*name* attribute, where *name* can be any valid html attribute.  The value of these attributes can be any valid html code:
+
+```javascript
+class Car extends XElement {}
+Car.html = `
+	<div data-title="this.hoverText + 'Do it now!'">
+		<input data-required="mustHaveDriver" value="Vermin Supreme">
+	</div>`;
+var car = new Car();
+car.mustHaveDriver = true;  // Sets required attribute on input.
+car.mustHaveDriver = false; // Removes required attribute.
+car.hoverText = 'Get in! '; // Sets title to "Get in! Do it now!"
+```
+
+Note that the *this.* prefix is optional when using a simple variable name.  Bound variables are created on the class instance if they don't already exist.
+
+#### What is a simple variable?
+
+A simple variable is any property that can be directly accessed without evaluating any code.  These are simple variables:
+
+- mustHaveDriver
+- this.that.somethingElse
+- cats[3].color['red']
+
+These are not simple variables:
+
+- !mustHaveDriver
+- cats.length
+- cats[3].purr()
+- cats[myCat]
+- window.location
+
 ### Text and Html
+
+TODO
 
 ### Val
 
+data-val is a special two-way data binding for form elements.  It's two way because not only is the html updated when the class property changes, but the class property is also changed when a user interacts with a data-val bound form element:
+
 ### Visible
+
+The data-visible attribute sets an element to be display: none if it evaluates to a false-like value.
 
 ### Classes
 
+TODO
+
 ### Loop
 
-
+TODO
 
 ## Events
 
-
+TODO
 
 
 
