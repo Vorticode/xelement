@@ -113,9 +113,9 @@ Any element in the html with an id is automatically bound to a property with the
 ```javascript
 class Car extends XElement {}
 Car.html = `
-	<div>
-		<input id="driver" value="Vermin Supreme">
-	</div>`;
+    <div>
+        <input id="driver" value="Vermin Supreme">
+    </div>`;
 
 var car = new Car();
 console.log(car.driver.value);     // Vermin Supreme
@@ -142,31 +142,31 @@ XElement performs data-binding with any element that has an attribute name with 
 
 ### Attributes
 
-Attributes are bound to class properties with the data-*name* attribute, where *name* can be any valid html attribute.  The value of these attributes can be any valid html code:
+Attributes are bound to class properties with the `data-name` attribute, where *name* can be any valid html attribute.  The value of these attributes can be any valid html code:
 
 ```javascript
 class Car extends XElement {}
 Car.html = `
-	<div data-title="this.hoverText + 'Do it now!'">
-		<input data-required="mustHaveDriver" value="Vermin Supreme">
-	</div>`;
+    <div data-title="this.hoverText + 'Do it now!'">
+        <input data-required="mustHaveDriver">
+    </div>`;
 var car = new Car();
 car.mustHaveDriver = true;  // Sets required attribute on input.
 car.mustHaveDriver = false; // Removes required attribute.
 car.hoverText = 'Get in! '; // Sets title to "Get in! Do it now!"
 ```
 
-Note that the *this.* prefix is optional when using a simple variable name.  Bound variables are created on the class instance if they don't already exist.
+Variables are automatically created on the class instance if they don't already exist.  Note that the `this.` prefix is optional when the expression is a standalone variable and nothing more.  Complex expressions require the `this.` prefix when referencing class properties
 
-#### What is a simple variable?
+#### What counts as a standalone variable?
 
-A simple variable is any property that can be directly accessed without evaluating any code.  These are simple variables:
+A variable is any expression that evaluates.  These are simple variables:
 
 - mustHaveDriver
 - this.that.somethingElse
 - cats[3].color['red']
 
-These are not simple variables:
+These expressions are not standalone variables:
 
 - !mustHaveDriver
 - cats.length
@@ -180,19 +180,47 @@ TODO
 
 ### Val
 
-data-val is a special two-way data binding for form elements.  It's two way because not only is the html updated when the class property changes, but the class property is also changed when a user interacts with a data-val bound form element:
+`data-val` is a special two-way data binding for form elements.  It's two way because not only is the html updated when the class property changes, but the class property is also changed when a user interacts with a `data-val` bound form element:
 
 ### Visible
 
-The data-visible attribute sets an element to be display: none if it evaluates to a false-like value.
+The `data-visible` attribute sets an element to be display: none if it evaluates to a false-like value.
 
 ### Classes
 
-TODO
+The `data-classes` attribute allows toggling classes on or off  when an expression evaluates to true or false.  The code below renders the span as `<span classes="big: this.height>10, scary: isScary">It's a monster!</span>`
+
+```javascript
+class Monster extends XElement {}
+Monster.html = `
+    <div>
+        <span data-classes="big: this.height>10, scary: isScary">It's a monster!</span>
+    </div>`;
+var m = new Monster();
+m.height = 11;
+m.isScary = true;
+```
+
+
 
 ### Loop
 
-TODO
+```javascript
+class Car extends XElement {}
+Car.html = `
+    <div data-loop="wheels: wheel">
+        <span data-text="wheel.name"></span>
+    </div>`;
+var car = new Car();
+car.wheels = [
+    {name: 'front-left'}, 
+    {name: 'front-right'},
+    {name: 'rear-left'},
+    {name: 'rear-right'}
+];
+```
+
+
 
 ## Events
 

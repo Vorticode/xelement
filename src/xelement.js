@@ -5,13 +5,18 @@ TODO
 Fix failing Edge tests.
 bind to drag/drop events, allow sortable?
 implement other binding functions.
-allow loop over more than one item.
+allow loop over more than one html tag.
 cache results of parseVars() and other parse functions?
 cache the context of loop vars.
-flag to enable/disable updates.
+functions to enable/disable updates.
 function to trigger updates?
 
+Make data- prefix optional.  But then how to bind to raw attributes?
+   attributes="title: val" vs data-title="val"
 create from <template> tag
+When a change occurs, create a Set of functions to call, then later call them all.
+	That way we remove duplicate updates.
+Auto bind to this in complex expressions if the class property already exists and the var is otherwise undefined?
 improve minifcation.
 speed up data-loop by only modifying changed elements for non-simple vars.
 Expose dataAttr in minified version.
@@ -27,8 +32,6 @@ TODO:
 What if an xelment is embeded in another, and the inner element has a data-binding.  Which one does it apply to?
 If specified on its definition?  If the data-binding is on its embed?
 
-When a change occurs, create a Set of functions to call, then later call them all.
-That way we remove duplicate updates.
 
 We could even add enableUpdates() / disableUpdates() / clearUpdates() functions.
 */
@@ -232,7 +235,7 @@ var bindEvents = (self, root) => {
 				// add the "this" prefix.
 				let path = parseVars(code, 0, 1)[0];
 				if (path && traversePath(self, path) instanceof Function)
-					code = addThis(code, context, isSimpleCall_);
+					code = addThis(code, context, isStandaloneCall);
 
 				// The code in the attribute can reference:
 				// 1. event, assigned to the current event.
@@ -448,24 +451,30 @@ var dataAttr = {
 		// Split on ;
 		// Split on :
 		// No need for \s* after : because parseVars can handle it.
-		let assignments = code.replace(/^{|}$/g, '').split(/;/g).map((x) => x.trim().split(/\s*:/g));
+		let assignments = code/*.replace(/^{|}$/g, '')*/.split(/;/g).map((x) => x.trim().split(/\s*:/g));
 
+		for (let cls of assignments) {
+			let classExpr = addThis(cls[1]);
 
-
-
-		for (let cls in assignments) {
-			let code2 = assignments[cls];
+			// This code is called on every update.
 			let updateClass = function() {
-				let result = eval(code2);
+				let result = eval(classExpr);
 				if (result)
-					el.classList.add(cls);
-				else
-					el.classList.remove(cls);
+					el.classList.add(cls[0]);
+				else {
+					el.classList.remove(cls[0]);
+					if (!el.classList.length) // remove attribute after last class removed.
+						el.removeAttribute('class');
+				}
 			}.bind(self);
 
-			let path = parseVars(code2)[0];
-			watch(self, path, updateClass);
+			// Create properties and watch for changes.
+			for (let path of parseVars(classExpr)) {
+				traversePath(self, path, true); // Create properties.
+				watch(self, path, updateClass);
+			}
 
+			// Set initial values.
 			updateClass();
 		}
 	},
@@ -508,7 +517,7 @@ var dataAttr = {
 		var loopVar;
 		[code, loopVar] = parseLoop(code);
 		var paths = parseVars(code);
-		var isSimple = isSimpleVar_(code);
+		var isSimple = isStandaloneVar(code);
 
 		// The code we'll loop over.
 		var html = el.innerHTML.trim();
@@ -594,7 +603,7 @@ var dataAttr = {
 
 		// Update object property when input value changes, only if a simple var.
 		var vars = parseVars(code);
-		if (vars.length === 1 && isSimpleVar_(code))
+		if (vars.length === 1 && isStandaloneVar(code))
 			el.addEventListener('input', () => {
 				let value;
 				if (el.getAttribute('type') === 'checkbox')

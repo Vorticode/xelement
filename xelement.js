@@ -118,31 +118,31 @@ var events = Object.keys(document.__proto__.__proto__)
 ;
 
 // Regex for matching javascript variables.  Made from pieces of this regex:  https://www.regexpal.com/?fam=112426
-var varStart = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
-var varDotStart = '\\.\\s*' + varStart;
+var identifier = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
+var dotIdentifier = '\\.\\s*' + identifier;
 var varBrD = '\\[\\s*"(([^"]|\\")*)"\\s*]';  // A ["as\"df"] index
 var varBrS = varBrD.replace(/"/g, "'");      // A ['as\'df'] index
 var varNum = "\\[\\s*(\\d+)\\s*]";           // A [3] index (numerical)
 
 var or = '\\s*|\\s*';
-var varProp = varDotStart + or + varBrD + or + varBrS + or + varNum;
+var varProp = dotIdentifier + or + varBrD + or + varBrS + or + varNum;
 
 var or2 = '\\s*\\(?|^\\s*';
-var varPropOrFunc = '^\\s*' + varDotStart + or2 + varBrD + or2 + varBrS + or2 + varNum + '\\s*\\(?';
+var varPropOrFunc = '^\\s*' + dotIdentifier + or2 + varBrD + or2 + varBrS + or2 + varNum + '\\s*\\(?';
 
-var isSimpleVarRegex = new RegExp('^' + varStart + '(' + varProp + ')*$', 'i');
-var isSimpleCallRegex = new RegExp('^' + varStart + '(' + varProp + ')*\\(', 'i');
-var varStartRegex = new RegExp(varStart, 'gi');
+var isStandaloneVarRegex = new RegExp('^' + identifier + '(' + varProp + ')*$', 'i');
+var isSimpleCallRegex = new RegExp('^' + identifier + '(' + varProp + ')*\\(', 'i');
+var varStartRegex = new RegExp(identifier, 'gi');
 var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 
 // https://mathiasbynens.be/notes/javascript-identifiers
 // We exclude 'let,package,interface,implements,private,protected,public,static,yield' because testing shows Chrome accepts these as valid var names.
 var nonVars = 'length,NaN,Infinity,caller,callee,prototype,arguments,true,false,null,undefined,break,case,catch,continue,debugger,default,delete,do,else,finally,for,function,if,in,instanceof,new,return,switch,throw,try,typeof,var,void,while,with,class,const,enum,export,extends,import,super'.split(/,/g);
 
-var isSimpleVar_ = (code) => {
-	return !!code.trim().match(isSimpleVarRegex);
+var isStandaloneVar = (code) => {
+	return !!code.trim().match(isStandaloneVarRegex);
 };
-var isSimpleCall_ = (code) => {
+var isStandaloneCall = (code) => {
 	// if it starts with a variable followed by ( and has no more than one semicolon.
 	code = code.trim();
 
@@ -241,12 +241,12 @@ var replaceVars = (code, replacements) => {
 var parseLoop = (code) => {
 	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
 	if (result[2])
-		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so index is last.
+		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so indexVar is last.
 
 	//#IFDEV
-	if (!isSimpleVar_(result[1]))
+	if (!isStandaloneVar(result[1]))
 		throw new XElementError('Could not parse loop variable in data-loop attribute "' + code + '".');
-	if (result[2] && !isSimpleVar_(result[2]))
+	if (result[2] && !isStandaloneVar(result[2]))
 		throw new XElementError('Invalid index variable in data-loop attribute "' + code + '".');
 	if (result.length > 3)
 		throw new XElementError('Could not parse data-loop attribute "' + code + '".');
@@ -275,7 +275,7 @@ var parseLoop = (code) => {
 
 
 var addThis = (code, context, isSimple) => {
-	isSimple = isSimple || isSimpleVar_;
+	isSimple = isSimple || isStandaloneVar;
 	if (!isSimple(code))
 		return code;
 
@@ -588,14 +588,18 @@ TODO
 Fix failing Edge tests.
 bind to drag/drop events, allow sortable?
 implement other binding functions.
-allow index in data-loop
-allow loop over more than one item.
+allow loop over more than one html tag.
 cache results of parseVars() and other parse functions?
 cache the context of loop vars.
-flag to enable/disable updates.
+functions to enable/disable updates.
 function to trigger updates?
 
+Make data- prefix optional.  But then how to bind to raw attributes?
+   attributes="title: val" vs data-title="val"
 create from <template> tag
+When a change occurs, create a Set of functions to call, then later call them all.
+	That way we remove duplicate updates.
+Auto bind to this in complex expressions if the class property already exists and the var is otherwise undefined?
 improve minifcation.
 speed up data-loop by only modifying changed elements for non-simple vars.
 Expose dataAttr in minified version.
@@ -610,6 +614,9 @@ Separate out a lite version that doesn't do binding?
 TODO:
 What if an xelment is embeded in another, and the inner element has a data-binding.  Which one does it apply to?
 If specified on its definition?  If the data-binding is on its embed?
+
+
+We could even add enableUpdates() / disableUpdates() / clearUpdates() functions.
 */
 
 
@@ -804,11 +811,14 @@ var bindEvents = (self, root) => {
 			let code = el.getAttribute('on' + event_);
 			if (code) {
 
+				let context = getContext(el);
+				code = replaceVars(code, context);
+
 				// If it's a simple function that exists in the parent class,
 				// add the "this" prefix.
 				let path = parseVars(code, 0, 1)[0];
 				if (path && traversePath(self, path) instanceof Function)
-					code = addThis(code, getContext(el), isSimpleCall_);
+					code = addThis(code, context, isStandaloneCall);
 
 				// The code in the attribute can reference:
 				// 1. event, assigned to the current event.
@@ -986,41 +996,83 @@ class XElement extends HTMLElement {
 	}
 }
 
-
+// TODO: write a function to replace common code among these.
 var dataAttr = {
 
-	// Special 2-way binding
-	val: (self, code, el) => {
 
-		// Update object property when input value changes, only if a simple var.
-		var vars = parseVars(code);
-		if (vars.length === 1 && isSimpleVar_(code))
-			el.addEventListener('input', () => {
-				let value;
-				if (el.getAttribute('type') === 'checkbox')
-					value = el.checked;
-				else
-					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
 
-				watchlessSet(self, vars[0], value);
-			});
+	/**
+	 * When self.field changes, update the value of <el attr>.
+	 * This binding is used if one of the other names above isn't matched.
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param attr {string} Name of the attribute on el that's being bound.  Doesn't include 'data-' prefix. */
+	attr: (self, code, el, attr) => {
 
-		let setVal = function(/*action, path, value*/) {
-			if (el.getAttribute('type') === 'checkbox')
-				// noinspection EqualityComparisonWithCoercionJS
-				el.checked = eval(code) == true;
+		let setAttr = function(/*action, path, value*/) {
+			var result = eval(code);
+			if (result === false || result === null || result === undefined)
+				el.removeAttribute(attr);
 			else
-				el.value = eval(code);
+				el.setAttribute(attr, result + '');
+
 		}.bind(self);
 
-		// Update input value when object property changes.
-		for (let path of vars) {
-			watch(self, path, setVal);
-			addWatchedEl(el, setVal);
+		// If the variables in code, change, execute the code.
+		// Then set the attribute to the value returned by the code.
+		for (let path of parseVars(code)) {
+			watch(self, path, setAttr);
+			addWatchedEl(el, setAttr);
+		}
+
+		setAttr();
+	},
+
+	classes: (self, code, el) => {
+		// remove leading and trailing {}.
+		// Split on ;
+		// Split on :
+		// No need for \s* after : because parseVars can handle it.
+		let assignments = code/*.replace(/^{|}$/g, '')*/.split(/;/g).map((x) => x.trim().split(/\s*:/g));
+
+		for (let cls of assignments) {
+			let classExpr = addThis(cls[1]);
+
+			// This code is called on every update.
+			let updateClass = function() {
+				let result = eval(classExpr);
+				if (result)
+					el.classList.add(cls[0]);
+				else {
+					el.classList.remove(cls[0]);
+					if (!el.classList.length) // remove attribute after last class removed.
+						el.removeAttribute('class');
+				}
+			}.bind(self);
+
+			// Create properties and watch for changes.
+			for (let path of parseVars(classExpr)) {
+				traversePath(self, path, true); // Create properties.
+				watch(self, path, updateClass);
+			}
+
+			// Set initial values.
+			updateClass();
+		}
+	},
+
+	text: (self, code, el) => {
+		let setText = function(/*action, path, value*/) {
+			el.textContent = eval(code);
+		}.bind(self);
+		for (let path of parseVars(code)) {
+			watch(self, path, setText);
+			addWatchedEl(el, setText);
 		}
 
 		// Set initial value.
-		setVal();
+		setText();
 	},
 
 	html: (self, code, el) => {
@@ -1037,18 +1089,7 @@ var dataAttr = {
 		setHtml();
 	},
 
-	text: (self, code, el) => {
-		let setText = function(/*action, path, value*/) {
-			el.textContent = eval(code);
-		}.bind(self);
-		for (let path of parseVars(code)) {
-			watch(self, path, setText);
-			addWatchedEl(el, setText);
-		}
 
-		// Set initial value.
-		setText();
-	},
 
 	loop: (self, code, el) => {
 		if (el.shadowRoot)
@@ -1059,7 +1100,7 @@ var dataAttr = {
 		var loopVar;
 		[code, loopVar] = parseLoop(code);
 		var paths = parseVars(code);
-		var isSimple = isSimpleVar_(code);
+		var isSimple = isStandaloneVar(code);
 
 		// The code we'll loop over.
 		var html = el.innerHTML.trim();
@@ -1105,9 +1146,9 @@ var dataAttr = {
 				// Remove all children.
 				while (el.lastChild) {
 					if (el.lastChild.nodeType === 1)
-						// If we don't unbind, changing the array will still updated these detached elements.
-						// This will cause errors because these detached elements can't traverse upward to find their array contexts.
-						// TODO: unbindEvents()?
+					// If we don't unbind, changing the array will still updated these detached elements.
+					// This will cause errors because these detached elements can't traverse upward to find their array contexts.
+					// TODO: unbindEvents()?
 						unbind(self, el.lastChild);
 
 					el.removeChild(el.lastChild);
@@ -1140,6 +1181,57 @@ var dataAttr = {
 		}
 	},
 
+	// Special 2-way binding
+	val: (self, code, el) => {
+
+		// Update object property when input value changes, only if a simple var.
+		var vars = parseVars(code);
+		if (vars.length === 1 && isStandaloneVar(code))
+			el.addEventListener('input', () => {
+				let value;
+				if (el.getAttribute('type') === 'checkbox')
+					value = el.checked;
+				else
+					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
+
+				watchlessSet(self, vars[0], value);
+			});
+
+		let setVal = function(/*action, path, value*/) {
+			if (el.getAttribute('type') === 'checkbox')
+			// noinspection EqualityComparisonWithCoercionJS
+				el.checked = eval(code) == true;
+			else
+				el.value = eval(code);
+		}.bind(self);
+
+		// Update input value when object property changes.
+		for (let path of vars) {
+			watch(self, path, setVal);
+			addWatchedEl(el, setVal);
+		}
+
+		// Set initial value.
+		setVal();
+	},
+
+	visible: (self, code, el) => {
+		var displayNormal = el.style.display;
+		if (displayNormal === 'none')
+			displayNormal = '';
+
+		let setVisible = function(/*action, path, value*/) {
+			el.style.display = eval(code) ? displayNormal : 'none';
+		}.bind(self);
+		for (let path of parseVars(code)) {
+			watch(self, path, setVisible);
+			addWatchedEl(el, setVisible);
+		}
+
+		// Set initial value.
+		setVisible();
+	},
+
 	/*
 	'cls': function(self, field, el) {}, // data-cls="{house: 'big'}" // Adds or removes the big class when the house property is true.
 	'style': function(self, field, el) {}, // Can point to an object to use for the style.
@@ -1147,34 +1239,6 @@ var dataAttr = {
 	'visible':
 	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
-
-	/**
-	 * When self.field changes, update the value of <el attr>.
-	 * This binding is used if one of the other names above isn't matched.
-	 * @param self {XElement}
-	 * @param code {string}
-	 * @param el {HTMLElement}
-	 * @param attr {string} Name of the attribute on el that's being bound.  Doesn't include 'data-' prefix. */
-	attr: (self, code, el, attr) => {
-
-		let setAttr = function(/*action, path, value*/) {
-			var result = eval(code);
-			if (result === false || result === null || result === undefined)
-				el.removeAttribute(attr);
-			else
-				el.setAttribute(attr, result + '');
-
-		}.bind(self);
-
-		// If the variables in code, change, execute the code.
-		// Then set the attribute to the value returned by the code.
-		for (let path of parseVars(code)) {
-			watch(self, path, setAttr);
-			addWatchedEl(el, setAttr);
-		}
-
-		setAttr();
-	}
 };
 
 /**

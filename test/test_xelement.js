@@ -572,7 +572,50 @@ var test_XElement = {
 		// TODO: Test loop over non-simple var.
 	},
 
-	temp: function() {
+	classes: function() {
+
+		(function() {
+			class C1 extends XElement {}
+			C1.html = `
+				<div>
+					<span id="span" data-classes="a: firstClass; b: object.secondClass"></span>
+				</div>`;
+
+			var c = new C1();
+			assert(!c.span.getAttribute('class'));
+
+			c.firstClass = true;
+			assertEq(c.span.getAttribute('class'), 'a');
+
+			c.object.secondClass = true;
+			assertEq(c.span.getAttribute('class'), 'a b');
+
+			c.firstClass = 0;
+			assertEq(c.span.getAttribute('class'), 'b');
+
+			// Test delete, make sure class attribute is removed.
+			delete c.object.secondClass;
+			assert(!c.span.hasAttribute('class'));
+		})();
+
+
+		// Test with existing class, evaluated code.
+		(function() {
+			class C1 extends XElement {}
+			C1.html = `
+				<div>
+					<span id="span" data-classes="a: this.num1 + this.num2 === 12" class="b"></span>
+				</div>`;
+
+			var c = new C1();
+			assertEq(c.span.getAttribute('class'), 'b');
+
+			c.num1 = c.num2 = 6;
+			assertEq(c.span.getAttribute('class'), 'b a');
+
+			c.num1 = c.num2 = 5;
+			assertEq(c.span.getAttribute('class'), 'b');
+		})();
 	},
 
 	bindNestedLoop: function() {

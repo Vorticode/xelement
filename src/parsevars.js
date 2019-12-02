@@ -1,17 +1,17 @@
 // Regex for matching javascript variables.  Made from pieces of this regex:  https://www.regexpal.com/?fam=112426
 var identifier = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
-var varDotStart = '\\.\\s*' + identifier;
+var dotIdentifier = '\\.\\s*' + identifier;
 var varBrD = '\\[\\s*"(([^"]|\\")*)"\\s*]';  // A ["as\"df"] index
 var varBrS = varBrD.replace(/"/g, "'");      // A ['as\'df'] index
 var varNum = "\\[\\s*(\\d+)\\s*]";           // A [3] index (numerical)
 
 var or = '\\s*|\\s*';
-var varProp = varDotStart + or + varBrD + or + varBrS + or + varNum;
+var varProp = dotIdentifier + or + varBrD + or + varBrS + or + varNum;
 
 var or2 = '\\s*\\(?|^\\s*';
-var varPropOrFunc = '^\\s*' + varDotStart + or2 + varBrD + or2 + varBrS + or2 + varNum + '\\s*\\(?';
+var varPropOrFunc = '^\\s*' + dotIdentifier + or2 + varBrD + or2 + varBrS + or2 + varNum + '\\s*\\(?';
 
-var isSimpleVarRegex = new RegExp('^' + identifier + '(' + varProp + ')*$', 'i');
+var isStandaloneVarRegex = new RegExp('^' + identifier + '(' + varProp + ')*$', 'i');
 var isSimpleCallRegex = new RegExp('^' + identifier + '(' + varProp + ')*\\(', 'i');
 var varStartRegex = new RegExp(identifier, 'gi');
 var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
@@ -20,10 +20,10 @@ var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 // We exclude 'let,package,interface,implements,private,protected,public,static,yield' because testing shows Chrome accepts these as valid var names.
 var nonVars = 'length,NaN,Infinity,caller,callee,prototype,arguments,true,false,null,undefined,break,case,catch,continue,debugger,default,delete,do,else,finally,for,function,if,in,instanceof,new,return,switch,throw,try,typeof,var,void,while,with,class,const,enum,export,extends,import,super'.split(/,/g);
 
-var isSimpleVar_ = (code) => {
-	return !!code.trim().match(isSimpleVarRegex);
+var isStandaloneVar = (code) => {
+	return !!code.trim().match(isStandaloneVarRegex);
 };
-var isSimpleCall_ = (code) => {
+var isStandaloneCall = (code) => {
 	// if it starts with a variable followed by ( and has no more than one semicolon.
 	code = code.trim();
 
@@ -125,9 +125,9 @@ var parseLoop = (code) => {
 		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so indexVar is last.
 
 	//#IFDEV
-	if (!isSimpleVar_(result[1]))
+	if (!isStandaloneVar(result[1]))
 		throw new XElementError('Could not parse loop variable in data-loop attribute "' + code + '".');
-	if (result[2] && !isSimpleVar_(result[2]))
+	if (result[2] && !isStandaloneVar(result[2]))
 		throw new XElementError('Invalid index variable in data-loop attribute "' + code + '".');
 	if (result.length > 3)
 		throw new XElementError('Could not parse data-loop attribute "' + code + '".');
@@ -156,7 +156,7 @@ var parseLoop = (code) => {
 
 
 var addThis = (code, context, isSimple) => {
-	isSimple = isSimple || isSimpleVar_;
+	isSimple = isSimple || isStandaloneVar;
 	if (!isSimple(code))
 		return code;
 
