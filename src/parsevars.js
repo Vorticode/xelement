@@ -1,6 +1,6 @@
 // Regex for matching javascript variables.  Made from pieces of this regex:  https://www.regexpal.com/?fam=112426
-var varStart = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
-var varDotStart = '\\.\\s*' + varStart;
+var identifier = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
+var varDotStart = '\\.\\s*' + identifier;
 var varBrD = '\\[\\s*"(([^"]|\\")*)"\\s*]';  // A ["as\"df"] index
 var varBrS = varBrD.replace(/"/g, "'");      // A ['as\'df'] index
 var varNum = "\\[\\s*(\\d+)\\s*]";           // A [3] index (numerical)
@@ -11,9 +11,9 @@ var varProp = varDotStart + or + varBrD + or + varBrS + or + varNum;
 var or2 = '\\s*\\(?|^\\s*';
 var varPropOrFunc = '^\\s*' + varDotStart + or2 + varBrD + or2 + varBrS + or2 + varNum + '\\s*\\(?';
 
-var isSimpleVarRegex = new RegExp('^' + varStart + '(' + varProp + ')*$', 'i');
-var isSimpleCallRegex = new RegExp('^' + varStart + '(' + varProp + ')*\\(', 'i');
-var varStartRegex = new RegExp(varStart, 'gi');
+var isSimpleVarRegex = new RegExp('^' + identifier + '(' + varProp + ')*$', 'i');
+var isSimpleCallRegex = new RegExp('^' + identifier + '(' + varProp + ')*\\(', 'i');
+var varStartRegex = new RegExp(identifier, 'gi');
 var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 
 // https://mathiasbynens.be/notes/javascript-identifiers
@@ -122,7 +122,7 @@ var replaceVars = (code, replacements) => {
 var parseLoop = (code) => {
 	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
 	if (result[2])
-		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so index is last.
+		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so indexVar is last.
 
 	//#IFDEV
 	if (!isSimpleVar_(result[1]))

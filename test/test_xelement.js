@@ -762,7 +762,20 @@ var test_XElement = {
 			e.bt4.dispatchEvent(new Event('click'));
 			assert(e.itWorked4);
 		})();
+
+		// Make sure events can access the loop context.
+		(function() {
+			class BL9 extends XElement {}
+			BL9.html = `
+				<div data-loop="items: i, item">
+					<span onclick="this.result = i + item"></span>
+				</div>`;
+
+			var b = new BL9();
+			b.items = ['A', 'B'];
+
+			b.shadowRoot.children[0].dispatchEvent(new Event('click'));
+			assertEq(b.result, '0A');
+		})();
 	}
-
-
 };

@@ -36,7 +36,7 @@ Features:
 - Zero dependencies.  Just include xelement.js or xelement.min.js.
 - Doesn't take over your whole project.  Use it only where you need it.
 - Uses standard html.  No need to learn a templating language.
-- Uses ShadowDOM by default, so each XElement can have its own styles.
+- Uses [ShadowDOM](https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_shadow_DOM) by default, so each XElement can have its own styles.
 - MIT license.  Free for commercial use.
 
 ## Minimal Example
@@ -46,7 +46,7 @@ In this minimal example, we make a new class called Hello and set its html.  Any
 ```html
 <script src="xelement.js"></script>
 <script>
-	class Hello extends XElement {}
+    class Hello extends XElement {}
     Hello.html = `<div>Hello XElement!</div>`;
 </script>
 
@@ -70,7 +70,7 @@ If the html property is set to a valid CSS selector, XElement will pull its html
 <template id="hello">Hello XElement!</template>
 
 <script>
-	class Hello extends XElement {}
+    class Hello extends XElement {}
     HelloWorld.html = '#hello';
 }
 </script>
@@ -84,12 +84,12 @@ Wheel.html = '<div>O</div>';
 
 class Car extends XElement {}
 Car.html = `
-	<div>
-		<x-wheel></x-wheel>
+    <div>
         <x-wheel></x-wheel>
         <x-wheel></x-wheel>
         <x-wheel></x-wheel>
-	</div>`;
+        <x-wheel></x-wheel>
+    </div>`;
 ```
 
 XElements create their html children as [ShadowDOM](https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_shadow_DOM).  This allows styles to be embedded that only apply to the html of the XElement.  The *:host* selector is used to style the element itself, per the ShadowDOM specification.
@@ -123,9 +123,14 @@ car.driver.value = 'Chuck Norris'; // Puts text in input box.
 car.driver = 3; // Error, property is read-only.
 ```
 
-## Attributes
+## Initializers
 
-TODO
+Setting attributes on the XElement's root html element will:
+
+- If the attribute names are valid html attributes, set those attributes on the XElement instance.
+- If they are not, set properties with those names on the XElement.
+
+Any attribute values wrapped in braces {} will have their values evaluated as JavaScript code.  This is an easy way to pass data to an XElement when creating it.
 
 ## Slots
 
