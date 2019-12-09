@@ -187,7 +187,6 @@ var test_XElement = {
 	embed: function() {
 		class E1 extends XElement {}
 		E1.html = '<div title="E1">E1</div>';
-
 		var e1 = new E1();
 		assertEq(e1.shadowRoot.innerHTML, 'E1');
 
@@ -618,13 +617,13 @@ var test_XElement = {
 
 		// Make sure loop items property unsubscribe as they're removed.  This used to fail.
 		(function () {
-			class BL1 extends XElement {}
-			BL1.html =
+			class BL10 extends XElement {}
+			BL10.html =
 				'<div data-loop="items:item">' +
 				'<span data-text="item.name"></span>' +
 				'</div>';
 
-			var b = new BL1();
+			var b = new BL10();
 			window.b = b;
 			b.items = [{name: 1}, {name: 2}];
 
@@ -640,6 +639,20 @@ var test_XElement = {
 			assertEq(subs[0], '"items"');
 			assertEq(subs.length, 1);
 		})();
+
+		// Loop over var that doesn't initially exist.
+		(function () {
+
+			class Wheel extends XElement {}
+			Wheel.html = `				
+				<div data-loop="parts.wheels: wheel">
+				    <span></span>
+				</div>`;
+
+			var p = new Wheel();
+			p.parts = null; // TypeError is caught.  Can't evaluate code of loop.
+		})();
+
 
 		// TODO: Test loop over non-simple var.
 	},
@@ -847,6 +860,31 @@ var test_XElement = {
 	},
 
 
-	temp: function() {
+	temp2: function() {
+
+
+		class Wheel extends XElement {}
+		Wheel.html = `				
+			<div>
+			    <b>Wheel</b>
+			</div>`;
+
+		class Car extends XElement {}
+		Car.html = `				
+			<div data-loop="wheels: wheel">
+			    <x-wheel data-title="wheel"></x-wheel>
+			</div>`;
+		var c = new Car();
+		c.wheels = [];
+		c.wheels.push(1);
+		setTimeout(function() {
+			c.wheels.push(1);
+
+			// This used to fail when done asynchronously, back when we used connectedCallback()
+			assert(c.shadowRoot.children[1].shadowRoot);
+
+
+		}, 10);
+
 	}
 };

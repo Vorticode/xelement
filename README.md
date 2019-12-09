@@ -24,6 +24,7 @@ Inventory.html = `
     </template>`;
 
 var inv = new Inventory();
+document.body.append(inv); // Is used as a DOM element.
 ```
 
 Features:

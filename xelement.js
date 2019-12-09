@@ -588,6 +588,7 @@ var watchlessSet = (obj, path, val) => {
 Inherit from XElement to create custom HTML Components.
 
 TODO
+Make data- prefix optional.  Move attributes to data-attr="..." like data-classes.
 Fix failing Edge tests.
 bind to drag/drop events, allow sortable?
 implement other binding functions.
@@ -937,6 +938,17 @@ var initHtml = (self) => {
 	bindEvents(self, root);
 };
 
+function safeEval(expr) {
+	try {
+		return eval(expr);
+	}
+	catch (e) { // Don't fail for null values.
+		if (!(e instanceof TypeError))
+			throw e;
+	}
+	return undefined;
+}
+
 /**
  * Inherit from this class to make a custom HTML element.
  * If you extend from XElement, you can't instantiate your class unless you first set the html property.
@@ -988,6 +1000,15 @@ class XElement extends HTMLElement {
 		// However, <x-classname> would fail if we gave it children in the constructor instead of in connectedCallbac()
 		if (document.currentScript)
 			initHtml(this);
+
+		let xname = getXName(this.constructor);
+		let self = this;
+		if (customElements.get(xname))
+			initHtml(self);
+		else
+			customElements.whenDefined(xname).then( () => {
+				initHtml(self);
+			} );
 	}
 
 	connectedCallback() {
@@ -997,6 +1018,9 @@ class XElement extends HTMLElement {
 		// If this doesn't work, see https://github.com/WebReflection/html-parsed-element/blob/master/index.js
 		// for a possible alternative.
 		// Would it be faster to use setTimeout(function() {...} ?
+		// Should I be using customElements.whenDefined() instead?  stackoverflow.com/a/54617059
+
+		/*
 		var self = this;
 		var c = 'DOMContentLoaded';
 		var init = () => {
@@ -1004,6 +1028,8 @@ class XElement extends HTMLElement {
 			document.removeEventListener(c, init);
 		};
 		document.addEventListener(c, init);
+
+		*/
 	}
 }
 
@@ -1022,7 +1048,7 @@ var dataAttr = {
 	attr: (self, code, el, attr) => {
 
 		let setAttr = function(/*action, path, value*/) {
-			var result = eval(code);
+			var result = safeEval.call(self, code);
 			if (result === false || result === null || result === undefined)
 				el.removeAttribute(attr);
 			else
@@ -1056,14 +1082,14 @@ var dataAttr = {
 			let updateProp = function(action, path, value) {
 				//console.log(action, path, value);
 				//watchlessSet(el, [prop], eval(expr));
-				let result = eval(expr);
+				let result = safeEval.call(self, expr);
 				//console.log(el === self);
 				el[prop] = result;
 			}.bind(self);
 
 			// Create properties and watch for changes.
 			for (let path of parseVars(expr)) {
-				traversePath(self, path, true); // Create properties.
+				//traversePath(self, path, true); // Create properties.
 				//if (el !== self) // only bind on the element that includes this xelement.
 					watch(self, path, updateProp);
 			}
@@ -1085,7 +1111,7 @@ var dataAttr = {
 
 			// This code is called on every update.
 			let updateClass = function() {
-				let result = eval(classExpr);
+				let result = safeEval.call(self, classExpr);
 				if (result)
 					el.classList.add(cls[0]);
 				else {
@@ -1097,7 +1123,7 @@ var dataAttr = {
 
 			// Create properties and watch for changes.
 			for (let path of parseVars(classExpr)) {
-				traversePath(self, path, true); // Create properties.
+				//traversePath(self, path, true); // Create properties.
 				watch(self, path, updateClass);
 			}
 
@@ -1108,7 +1134,7 @@ var dataAttr = {
 
 	text: (self, code, el) => {
 		let setText = function setText(action, path, value) {
-			el.textContent = eval(code);
+			el.textContent = safeEval.call(self, code);
 		}.bind(self);
 		for (let path of parseVars(code)) {
 			watch(self, path, setText);
@@ -1121,7 +1147,7 @@ var dataAttr = {
 
 	html: (self, code, el) => {
 		let setHtml = function setHtml(action, path, value) {
-			el.innerHTML = eval(code);
+			el.innerHTML = safeEval.call(self, code);
 		}.bind(self);
 
 		for (let path of parseVars(code)) {
@@ -1205,14 +1231,24 @@ var dataAttr = {
 				}
 
 				// Recreate all children.
-				if (html.length)
-					for (let i in eval(code)) {
+				if (html.length) {
+					try {
+						var result = safeEval.call(self, code);
+					}
+					catch (e) { // Don't fail for null values.
+						if (!(e instanceof TypeError))
+							throw e;
+					}
+
+
+					for (let i in result) {
 						let child = createEl(html);
 						el.appendChild(child);
 
 						bind(self, child);
 						bindEvents(self, child);
 					}
+				}
 			}
 		}
 
@@ -1223,9 +1259,8 @@ var dataAttr = {
 
 		for (let path of paths) {
 
-			// Create properties.
-			traversePath(self, path, true);
-
+			// Ensure all variables referenced in the code exist.
+			//traversePath(self, path, true);
 
 			// Rebuild children when watched item changes.
 			watch(self, path, rebuildChildren);
@@ -1253,12 +1288,13 @@ var dataAttr = {
 			});
 
 		let setVal = function(action, path, value) {
+			let result = safeEval.call(self, code);
 
 			if (el.getAttribute('type') === 'checkbox')
 				// noinspection EqualityComparisonWithCoercionJS
-				el.checked = eval(code) == true;
+				el.checked = result == true;
 			else
-				el.value = eval(code);
+				el.value = result;
 		}.bind(self);
 
 		// Update input value when object property changes.
@@ -1277,7 +1313,7 @@ var dataAttr = {
 			displayNormal = '';
 
 		let setVisible = function(/*action, path, value*/) {
-			el.style.display = eval(code) ? displayNormal : 'none';
+			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
 		}.bind(self);
 		for (let path of parseVars(code)) {
 			watch(self, path, setVisible);
@@ -1296,6 +1332,23 @@ var dataAttr = {
 	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
 };
+
+function getXName(cls) {
+	if (!cls.xname) {
+		let lname = cls.name.toLowerCase();
+		if (lname.startsWith('x'))
+			lname = lname.slice(1);
+
+		let name = 'x-' + lname;
+
+		// If name exists, add an incrementing integer to the end.
+		for (let i = 2; customElements.get(name); i++)
+			name = 'x-' + lname + i;
+
+		cls.xname = name;
+	}
+	return cls.xname;
+}
 
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
@@ -1327,17 +1380,11 @@ Object.defineProperty(XElement, 'html', {
 		// 	}
 		// }
 
-		let lname = self.name.toLowerCase();
-		if (lname.startsWith('x'))
-			lname = lname.slice(1);
+		// Could the customElements.whenDefined() callback be helpful?
 
-		let name = 'x-' + lname;
+		let name = getXName(self);
 
-		// If name exists, add an incrementing integer to the end.
-		for (let i = 2; customElements.get(name); i++)
-			name = 'x-' + lname + i;
-
-		// New way where we pass attributes to teh constructor:
+		// New way where we pass attributes to the constructor:
 		// customElements.define(name, Embedded);
 		// customElements.define(name+'-internal', this);
 
