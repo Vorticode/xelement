@@ -149,7 +149,15 @@ var bind = (self, el, context) => {
 
 
 				// If we have a dataAttr function to handle this specific data- attribute name.
-				if (dataAttr[attrName])
+				if (attrName === 'bind') {
+
+					if (self !== el && el instanceof XElement)
+						dataAttr[attrName].call(self, self, code, el);
+
+				}
+
+
+				else if (dataAttr[attrName])
 					dataAttr[attrName].call(self, self, code, el);
 
 				// Otherwise just use the dataAttr.attr function.
@@ -446,6 +454,39 @@ var dataAttr = {
 		setAttr();
 	},
 
+
+	bind: (self, code, el) => {
+		//if (el === self)
+			//return;
+			//throw new Error("Cannot bind to own property!");
+
+		let assignments = code/*.replace(/^{|}$/g, '')*/.split(/;/g).map((x) => x.trim().split(/\s*:/g));
+
+		for (let assignment of assignments) {
+			let expr = addThis(assignment[1]);
+			let prop = assignment[0];
+
+			// This code is called on every update.
+			let updateProp = function(action, path, value) {
+				//console.log(action, path, value);
+				//watchlessSet(el, [prop], eval(expr));
+				let result = eval(expr);
+				//console.log(el === self);
+				el[prop] = result;
+			}.bind(self);
+
+			// Create properties and watch for changes.
+			for (let path of parseVars(expr)) {
+				traversePath(self, path, true); // Create properties.
+				//if (el !== self) // only bind on the element that includes this xelement.
+					watch(self, path, updateProp);
+			}
+
+			// Set initial values.
+			updateProp();
+		}
+	},
+
 	classes: (self, code, el) => {
 		// remove leading and trailing {}.
 		// Split on ;
@@ -480,7 +521,7 @@ var dataAttr = {
 	},
 
 	text: (self, code, el) => {
-		let setText = function(/*action, path, value*/) {
+		let setText = function setText(action, path, value) {
 			el.textContent = eval(code);
 		}.bind(self);
 		for (let path of parseVars(code)) {
@@ -493,7 +534,7 @@ var dataAttr = {
 	},
 
 	html: (self, code, el) => {
-		let setHtml = function(/*action, path, value*/) {
+		let setHtml = function setHtml(action, path, value) {
 			el.innerHTML = eval(code);
 		}.bind(self);
 
@@ -533,6 +574,7 @@ var dataAttr = {
 		};
 
 		function rebuildChildren(action, path, value) {
+
 			// TODO: Keep all elements the same and only update bound values?
 			// Then we only need to add and remove items from the end of the children.
 			// But this would break unbound inputs when removing from the middle of the list.
@@ -544,6 +586,11 @@ var dataAttr = {
 			if (path && index >= 0) {
 				let existingChild = el.children[index];
 
+				// Unbind needs to happen before existing child changes its index.
+				if (existingChild) // action==='delete' or removing item replaced by set.
+					unbind(self, existingChild);
+
+
 				if (action === 'set') { // add or replace item.
 					let newChild = createEl(html);
 					el.insertBefore(newChild, existingChild); // if existingChild is null, will be inserted at end.
@@ -552,7 +599,7 @@ var dataAttr = {
 				}
 
 				if (existingChild) { // action==='delete' or removing item replaced by set.
-					unbind(self, existingChild);
+					// TODO: unbindEvents()?
 					el.removeChild(existingChild);
 				}
 			}
@@ -588,14 +635,19 @@ var dataAttr = {
 		while (el.lastChild)
 			el.removeChild(el.lastChild);
 
-		// Set initial children
-		rebuildChildren.call(self);
-
-		// Rebuild children when watched item changes.
 		for (let path of paths) {
+
+			// Create properties.
+			traversePath(self, path, true);
+
+
+			// Rebuild children when watched item changes.
 			watch(self, path, rebuildChildren);
 			addWatchedEl(el, rebuildChildren);
 		}
+
+		// Set initial children
+		rebuildChildren.call(self);
 	},
 
 	// Special 2-way binding
@@ -614,9 +666,10 @@ var dataAttr = {
 				watchlessSet(self, vars[0], value);
 			});
 
-		let setVal = function(/*action, path, value*/) {
+		let setVal = function(action, path, value) {
+
 			if (el.getAttribute('type') === 'checkbox')
-			// noinspection EqualityComparisonWithCoercionJS
+				// noinspection EqualityComparisonWithCoercionJS
 				el.checked = eval(code) == true;
 			else
 				el.value = eval(code);
@@ -665,7 +718,7 @@ Object.defineProperty(XElement, 'html', {
 		return this.html_;
 	},
 	set: function (html) {
-		var self = this;
+		const self = this;
 
 		// TODO: We want to be able to do:
 		// <x-item arg1="1", arg2="2">
@@ -688,8 +741,11 @@ Object.defineProperty(XElement, 'html', {
 		// 	}
 		// }
 
-		var lname = self.name.toLowerCase();
-		var name = 'x-' + lname;
+		let lname = self.name.toLowerCase();
+		if (lname.startsWith('x'))
+			lname = lname.slice(1);
+
+		let name = 'x-' + lname;
 
 		// If name exists, add an incrementing integer to the end.
 		for (let i = 2; customElements.get(name); i++)

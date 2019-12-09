@@ -370,6 +370,52 @@ var test_XElement = {
 		})();
 	},
 
+	classes: function() {
+
+		(function() {
+			class C1 extends XElement {}
+			C1.html = `
+				<div>
+					<span id="span" data-classes="a: firstClass; b: object.secondClass"></span>
+				</div>`;
+
+			var c = new C1();
+			assert(!c.span.getAttribute('class'));
+
+			c.firstClass = true;
+			assertEq(c.span.getAttribute('class'), 'a');
+
+			c.object.secondClass = true;
+			assertEq(c.span.getAttribute('class'), 'a b');
+
+			c.firstClass = 0;
+			assertEq(c.span.getAttribute('class'), 'b');
+
+			// Test delete, make sure class attribute is removed.
+			delete c.object.secondClass;
+			assert(!c.span.hasAttribute('class'));
+		})();
+
+
+		// Test with existing class, evaluated code.
+		(function() {
+			class C1 extends XElement {}
+			C1.html = `
+				<div>
+					<span id="span" data-classes="a: this.num1 + this.num2 === 12" class="b"></span>
+				</div>`;
+
+			var c = new C1();
+			assertEq(c.span.getAttribute('class'), 'b');
+
+			c.num1 = c.num2 = 6;
+			assertEq(c.span.getAttribute('class'), 'b a');
+
+			c.num1 = c.num2 = 5;
+			assertEq(c.span.getAttribute('class'), 'b');
+		})();
+	},
+
 	bindLoop: function() {
 		// Simple loop
 		(function () {
@@ -569,53 +615,33 @@ var test_XElement = {
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="i">0</span><span data-text="i">1</span>');
 		})();
 
+
+		// Make sure loop items property unsubscribe as they're removed.  This used to fail.
+		(function () {
+			class BL1 extends XElement {}
+			BL1.html =
+				'<div data-loop="items:item">' +
+				'<span data-text="item.name"></span>' +
+				'</div>';
+
+			var b = new BL1();
+			window.b = b;
+			b.items = [{name: 1}, {name: 2}];
+
+			b.items.splice(0, 1);
+			var subs = Object.keys(watched.get(b).subs_);
+			assertEq(subs[0], '"items"');
+			assertEq(subs[1], '"items","0","name"');
+			assertEq(subs.length, 2);
+
+
+			b.items.splice(0, 1);
+			subs = Object.keys(watched.get(b).subs_);
+			assertEq(subs[0], '"items"');
+			assertEq(subs.length, 1);
+		})();
+
 		// TODO: Test loop over non-simple var.
-	},
-
-	classes: function() {
-
-		(function() {
-			class C1 extends XElement {}
-			C1.html = `
-				<div>
-					<span id="span" data-classes="a: firstClass; b: object.secondClass"></span>
-				</div>`;
-
-			var c = new C1();
-			assert(!c.span.getAttribute('class'));
-
-			c.firstClass = true;
-			assertEq(c.span.getAttribute('class'), 'a');
-
-			c.object.secondClass = true;
-			assertEq(c.span.getAttribute('class'), 'a b');
-
-			c.firstClass = 0;
-			assertEq(c.span.getAttribute('class'), 'b');
-
-			// Test delete, make sure class attribute is removed.
-			delete c.object.secondClass;
-			assert(!c.span.hasAttribute('class'));
-		})();
-
-
-		// Test with existing class, evaluated code.
-		(function() {
-			class C1 extends XElement {}
-			C1.html = `
-				<div>
-					<span id="span" data-classes="a: this.num1 + this.num2 === 12" class="b"></span>
-				</div>`;
-
-			var c = new C1();
-			assertEq(c.span.getAttribute('class'), 'b');
-
-			c.num1 = c.num2 = 6;
-			assertEq(c.span.getAttribute('class'), 'b a');
-
-			c.num1 = c.num2 = 5;
-			assertEq(c.span.getAttribute('class'), 'b');
-		})();
 	},
 
 	bindNestedLoop: function() {
@@ -759,8 +785,6 @@ var test_XElement = {
 		})();
 	},
 
-
-
 	events:  function() {
 		(function () {
 			class EV1 extends XElement {
@@ -820,5 +844,9 @@ var test_XElement = {
 			b.shadowRoot.children[0].dispatchEvent(new Event('click'));
 			assertEq(b.result, '0A');
 		})();
+	},
+
+
+	temp: function() {
 	}
 };

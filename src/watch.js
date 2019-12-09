@@ -85,6 +85,9 @@ var watchObj = (root, callback) => {
  * @param visited {WeakSet=} Used internally.
  * @returns {*} */
 var removeProxies = (obj, visited) => {
+	if (obj === null || obj === undefined)
+		return obj;
+
 	if (obj.isProxy)
 		obj = obj.removeProxy;
 

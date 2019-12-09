@@ -6,27 +6,24 @@
 
 XElement  is a lightweight JavaScript library making it easy to create HTML user interface components:
 
-```html
-<template id="Inventory">4
-    <button onclick="addItem()">Add Item</button>
-    <div data-loop="items:item">
-        <div>
-            <input data-val="item.name">
-            <input data-val="item.qty">
-        </div>
-    </div>
-</template>
-
-<script>
+```javascript
 class Inventory extends XElement {
     addItem() {
         this.items.push({name: '', qty: 0});
-    }
+    }   
 }
-Inventory.html = '#Inventory';
-</script>
+Inventory.html = `
+    <template id="Inventory">4
+        <button onclick="addItem()">Add Item</button>
+        <div data-loop="items:item">
+            <div>
+                <input data-val="item.name">
+                <input data-val="item.qty">
+            </div>
+        </div>
+    </template>`;
 
-<x-inventory></x-inventory>
+var inv = new Inventory();
 ```
 
 Features:
