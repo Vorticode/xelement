@@ -175,7 +175,7 @@ class WatchProperties {
 		}
 
 		// Create the full path if it doesn't exist.
-		traversePath(this.fields_, path, 1);
+		traversePath(this.fields_, path, 1); // TODO: Do we have to create it?
 
 		// Add to subscriptions
 		let cpath = csv(path);

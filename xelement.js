@@ -219,6 +219,7 @@ var parseVars = (code, includeThis, allowCall) => {
 };
 
 /**
+ * TODO: this function should leave alone anything after a :
  * @param code {string}
  * @param replacements {object<string, string>}
  * @returns {string} */
@@ -232,6 +233,28 @@ var replaceVars = (code, replacements) => {
 		}
 
 	return code;
+};
+
+/**
+ * This will fail if code has ";" inside strings.
+ * each key is in the format name: expr
+ * @param code
+ * @returns {object<string, string>} */
+var parseObj = (code) => {
+	let result = {};
+	let pieces = code.split(/\s*;\s*/g);
+	for (let piece of pieces) {
+		let [key, value] = piece.split(/\s*:\s*/);
+		result[key] = value;
+	}
+	return result;
+};
+
+var joinObj = (obj) => {
+	var result = [];
+	for (let name in obj)
+		result.push (name + ':' + obj[name]);
+	return result.join(';');
 };
 
 /**
@@ -465,7 +488,7 @@ class WatchProperties {
 		}
 
 		// Create the full path if it doesn't exist.
-		traversePath(this.fields_, path, 1);
+		traversePath(this.fields_, path, 1); // TODO: Do we have to create it?
 
 		// Add to subscriptions
 		let cpath = csv(path);
@@ -729,6 +752,16 @@ var bind = (self, el, context) => {
 					else
 						code = foreach + ':' + item;
 				}
+
+				// TODO: data-attr
+				else if (['data-bind', 'data-classes'].includes(attr.name)) {
+					var obj = parseObj(code);
+					for (let name in obj)
+						obj[name] = addThis(replaceVars(obj[name], context), context);
+
+					code = joinObj(obj);
+				}
+
 				else {
 					code = replaceVars(code, context);
 					code = addThis(code, context);
@@ -943,7 +976,7 @@ function safeEval(expr) {
 		return eval(expr);
 	}
 	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError))
+		if (!(e instanceof TypeError) || !e.message.match('undefined'))
 			throw e;
 	}
 	return undefined;
@@ -1006,9 +1039,9 @@ class XElement extends HTMLElement {
 		if (customElements.get(xname))
 			initHtml(self);
 		else
-			customElements.whenDefined(xname).then( () => {
+			customElements.whenDefined(xname).then(() => {
 				initHtml(self);
-			} );
+			});
 	}
 
 	connectedCallback() {

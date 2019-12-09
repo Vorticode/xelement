@@ -143,6 +143,16 @@ var bind = (self, el, context) => {
 					else
 						code = foreach + ':' + item;
 				}
+
+				// TODO: data-attr
+				else if (['data-bind', 'data-classes'].includes(attr.name)) {
+					var obj = parseObj(code);
+					for (let name in obj)
+						obj[name] = addThis(replaceVars(obj[name], context), context);
+
+					code = joinObj(obj);
+				}
+
 				else {
 					code = replaceVars(code, context);
 					code = addThis(code, context);
@@ -357,7 +367,7 @@ function safeEval(expr) {
 		return eval(expr);
 	}
 	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError))
+		if (!(e instanceof TypeError) || !e.message.match('undefined'))
 			throw e;
 	}
 	return undefined;

@@ -100,6 +100,7 @@ var parseVars = (code, includeThis, allowCall) => {
 };
 
 /**
+ * TODO: this function should leave alone anything after a :
  * @param code {string}
  * @param replacements {object<string, string>}
  * @returns {string} */
@@ -113,6 +114,28 @@ var replaceVars = (code, replacements) => {
 		}
 
 	return code;
+};
+
+/**
+ * This will fail if code has ";" inside strings.
+ * each key is in the format name: expr
+ * @param code
+ * @returns {object<string, string>} */
+var parseObj = (code) => {
+	let result = {};
+	let pieces = code.split(/\s*;\s*/g);
+	for (let piece of pieces) {
+		let [key, value] = piece.split(/\s*:\s*/);
+		result[key] = value;
+	}
+	return result;
+};
+
+var joinObj = (obj) => {
+	var result = [];
+	for (let name in obj)
+		result.push (name + ':' + obj[name]);
+	return result.join(';');
 };
 
 /**

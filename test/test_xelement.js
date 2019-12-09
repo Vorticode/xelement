@@ -859,8 +859,34 @@ var test_XElement = {
 		})();
 	},
 
+	bindData: function() {
 
-	temp2: function() {
+		(function() {
+
+			// Make sure only the right side of data-bind has replaceVars/addThis applied.
+			class Bd1Wheel extends XElement {}
+			Bd1Wheel.html = `				
+			<div>
+			    <b data-text="wheel"></b>
+			</div>`;
+
+			class Bd1Car extends XElement {}
+			Bd1Car.html = `				
+			<div data-loop="wheels: wheel">
+			    <x-bd1wheel data-bind="wheel: wheel"></x-bd1wheel>
+			</div>`;
+
+			var c = new Bd1Car();
+			c.wheels = [];
+			c.wheels.push(1);
+
+			assertEq(c.shadowRoot.children[0].shadowRoot.children[0].textContent, '1');
+
+		})();
+	}
+
+
+	temp: function() {
 
 
 		class Wheel extends XElement {}
@@ -886,5 +912,5 @@ var test_XElement = {
 
 		}, 10);
 
-	}
+	},
 };
