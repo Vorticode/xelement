@@ -141,19 +141,47 @@ var test_XElement = {
 		// TODO: Test duplicate id's.
 	},
 
+	atemp: function() {
+		class A2 extends XElement {
+			inner() {
+				this.clicked = true;
+			}
+		}
+		A2.html = `<div onclick="this.inner()"></div>`;
+
+		class A3 extends XElement {
+			outer() {
+				this.clicked = true;
+			}
+		}
+		A3.html = '<div><x-a2 id="a2" onclick="this.outer()"></x-a2></div>';
+
+		var a = new A3();
+
+
+		a.a2.dispatchEvent(new Event('click'));
+
+		assert(a.clicked);
+		assert(a.a2.clicked);
+	},
+
 	attributes: function() {
-		class A extends XElement {}
-		A.html = '<div title="val1"></div>';
+		(function() {
+			class A extends XElement {}
+			A.html = '<div title="val1"></div>';
 
-		// Make sure attribute is set from html.
-		var a = new A();
-		assertEq(a.getAttribute('title'), 'val1');
+			// Make sure attribute is set from html.
+			var a = new A();
+			assertEq(a.getAttribute('title'), 'val1');
 
-		// Overriding attribute.
-		var div = document.createElement('div');
-		div.innerHTML = '<x-a title="val2">';
-		//document.body.appendChild(div);
-		assertEq(div.children[0].getAttribute('title'), 'val2');
+			// Overriding attribute.
+			var div = document.createElement('div');
+			div.innerHTML = '<x-a title="val2">';
+			//document.body.appendChild(div);
+			assertEq(div.children[0].getAttribute('title'), 'val2');
+		})();
+
+
 
 
 		/*
@@ -857,6 +885,31 @@ var test_XElement = {
 			b.shadowRoot.children[0].dispatchEvent(new Event('click'));
 			assertEq(b.result, '0A');
 		})();
+
+		// Event attribute on definition and instantiation:
+		(function() {
+			class A2 extends XElement {
+				inner() {
+					this.clicked = true;
+				}
+			}
+			A2.html = `<div onclick="this.inner()"></div>`;
+
+			class A3 extends XElement {
+				outer() {
+					this.clicked = true;
+				}
+			}
+			A3.html = '<div><x-a2 id="a2" onclick="this.outer()"></x-a2></div>';
+
+			var a = new A3();
+
+
+			a.a2.dispatchEvent(new Event('click'));
+
+			assert(a.clicked);
+			assert(a.a2.clicked);
+		})();
 	},
 
 	bindData: function() {
@@ -883,7 +936,7 @@ var test_XElement = {
 			assertEq(c.shadowRoot.children[0].shadowRoot.children[0].textContent, '1');
 
 		})();
-	}
+	},
 
 
 	temp: function() {

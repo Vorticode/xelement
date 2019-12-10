@@ -41,6 +41,10 @@ var isObj = (obj) => {
 var isValidAttribute = (el, name) => {
 	if (name.startsWith('data-') || el.hasAttribute(name))
 		return true;
+	if (name.startsWith('on') && events.includes(name.slice(2)))
+		return true;
+
+
 	if (name in el)
 		return false;
 
@@ -236,11 +240,17 @@ var replaceVars = (code, replacements) => {
 };
 
 /**
- * This will fail if code has ";" inside strings.
+ * TODO: Could this be replaced with:
+ * result = eval('{' + code + '}');
+ * No, because sometimes the value needs this. prepended.  Or the properties are undefined.
+ *
+ * TODO: This will fail if code has ";" inside strings.
  * each key is in the format name: expr
  * @param code
  * @returns {object<string, string>} */
 var parseObj = (code) => {
+	//return eval('{' + code + '}');
+
 	let result = {};
 	let pieces = code.split(/\s*;\s*/g);
 	for (let piece of pieces) {
@@ -610,9 +620,12 @@ var watchlessSet = (obj, path, val) => {
 /*
 Inherit from XElement to create custom HTML Components.
 
+
 TODO
 Make data- prefix optional.  Move attributes to data-attr="..." like data-classes.
 Fix failing Edge tests.
+Make shadowdom optional.
+
 bind to drag/drop events, allow sortable?
 implement other binding functions.
 allow loop over more than one html tag.
@@ -848,35 +861,64 @@ var bindEvents = (self, root) => {
 
 	var els = [...root.querySelectorAll('*')];
 	if (root.attributes)
-		els.unshift(root); // Add root if it's not a DocumentFragment.
+		els.unshift(root); // Add root if it's not a DocumentFragment from shadowDOM
 
+	// Traverse through every child element.
+	// TODO: Don't descend into other xelements once we make shadowdom optional.
 	for (let el of els) {
-		for (let event_ of events) {
+		bindEvents2(self, el);
+	}
+};
 
-			let code = el.getAttribute('on' + event_);
-			if (code) {
+var bindEvents2 = (self, el) => {
 
-				let context = getContext(el);
-				code = replaceVars(code, context);
+	for (let event_ of events) {
 
-				// If it's a simple function that exists in the parent class,
-				// add the "this" prefix.
-				let path = parseVars(code, 0, 1)[0];
-				if (path && traversePath(self, path) instanceof Function)
-					code = addThis(code, context, isStandaloneCall);
+		let code = el.getAttribute('on' + event_);
+		if (code) {
 
-				// The code in the attribute can reference:
-				// 1. event, assigned to the current event.
-				// 2. this, assigned to the class instance.
-				el.addEventListener(event_, function (event) {
-					eval(code);
-				}.bind(self));
+			let context = getContext(el);
+			code = replaceVars(code, context);
 
-				// Remove the original version so it doesn't also fire.
-				el.removeAttribute('on' + event_);
-			}
+			// If it's a simple function that exists in the class,
+			// add the "this" prefix.
+			let path = parseVars(code, 0, 1)[0];
+			if (path && traversePath(self, path) instanceof Function)
+				code = addThis(code, context, isStandaloneCall);
+
+			// The code in the attribute can reference:
+			// 1. event, assigned to the current event.
+			// 2. this, assigned to the class instance.
+			el.addEventListener(event_, function (event) {
+				eval(code);
+			}.bind(self));
+
+			// Remove the original version so it doesn't also fire.
+			el.removeAttribute('on' + event_);
 		}
 	}
+};
+
+var setAttribute = (self, name, value) => {
+
+	// Copy to class properties.
+	// This doesn't work because the properties aren't created until after initHtml() is called.
+	if (!isValidAttribute(self, name)) {
+
+		// As javascript code to be evaluated.
+		if (value && value.length > 2 && value.slice(0, 1) === '{' && value.slice(-1) === '}') {
+			(() => { // Guard scope before calling eval.
+				value = eval('(' + value.slice(1, -1) + ')'); // code to eval
+			}).call(self); // Import "self" as "this" variable to eval'd code.  This lets us pass attribute="${this}" in html initialization.
+		}
+		else
+			self[name] = value;
+	}
+
+	// Copy attribute as an attribute.
+	else
+		self.setAttribute(name, value);
+
 };
 
 var initHtml = (self) => {
@@ -890,39 +932,21 @@ var initHtml = (self) => {
 
 	// Merge attributes on definition (Item.html='<div attr="value"') and instantiation (<x-item attr="value">).
 	var attributes = {};
-	for (let attr of div.attributes)
-		attributes[attr.name] = attr.value;
-	for (let attr of self.attributes)
+	for (let attr of self.attributes) // From instantiation.
 		attributes[attr.name] = attr.value;
 
-	// Copy attributes from htmlDiv to this class as either properties (if they exist) or html attributes.
-	// It'd be nice to be able to pass them as constructor args, but haven't figured out a way yet.
-	for (let name in attributes) {
-
-		// Copy to class properties.
-		// This doesn't work because the properties aren't created until after initHtml() is called.
-		let value = attributes[name];
-		if (!isValidAttribute(self, name)) {
-			let arg = value;
-
-			// As javascript code to be evaluated.
-			if (arg && arg.length > 2 && arg.slice(0, 1) === '{' && arg.slice(-1) === '}') {
-				(() => { // Guard scope before calling eval.
-					arg = eval('(' + arg.slice(1, -1) + ')'); // code to eval
-				}).call(self); // Import "self" as "this" variable to eval'd code.  This lets us pass attribute="${this}" in html initialization.
-			}
-			else
-				self[name] = arg;
-		}
-
-		// Copy attribute as an attribute.
-		else if (name !== undefined)
-			self.setAttribute(name, attributes[name]);
+	for (let attr of div.attributes) { // From definition
+		if (attr.name !== undefined)
+			setAttribute(self, attr.name, attr.value);
 	}
 
+	// Bind events on the defintion to functions on its own element and not its container.
+	bindEvents2(self, self);
 
+	for (let name in attributes) // From instantiation
+		setAttribute(self, name, attributes[name]);
 
-	// Shadow DOM:
+	// Create Shadow DOM
 	self.attachShadow({mode: 'open'});
 	while (div.firstChild)
 		self.shadowRoot.appendChild(div.firstChild);

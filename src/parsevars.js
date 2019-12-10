@@ -117,11 +117,17 @@ var replaceVars = (code, replacements) => {
 };
 
 /**
- * This will fail if code has ";" inside strings.
+ * TODO: Could this be replaced with:
+ * result = eval('{' + code + '}');
+ * No, because sometimes the value needs this. prepended.  Or the properties are undefined.
+ *
+ * TODO: This will fail if code has ";" inside strings.
  * each key is in the format name: expr
  * @param code
  * @returns {object<string, string>} */
 var parseObj = (code) => {
+	//return eval('{' + code + '}');
+
 	let result = {};
 	let pieces = code.split(/\s*;\s*/g);
 	for (let piece of pieces) {

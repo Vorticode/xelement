@@ -38,6 +38,10 @@ var isObj = (obj) => {
 var isValidAttribute = (el, name) => {
 	if (name.startsWith('data-') || el.hasAttribute(name))
 		return true;
+	if (name.startsWith('on') && events.includes(name.slice(2)))
+		return true;
+
+
 	if (name in el)
 		return false;
 
