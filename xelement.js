@@ -914,11 +914,12 @@ var bindEvents = (self, root) => {
 	}
 };
 
-var bindEvents2 = (self, el) => {
+var bindEvents2 = (self, el, getAttributesFrom) => {
+	getAttributesFrom = getAttributesFrom || el;
 
 	for (let event_ of events) {
 
-		let code = el.getAttribute('on' + event_);
+		let code = getAttributesFrom.getAttribute('on' + event_);
 		if (code) {
 
 			let context = getContext(el);
@@ -985,7 +986,7 @@ var initHtml = (self) => {
 	}
 
 	// Bind events on the defintion to functions on its own element and not its container.
-	bindEvents2(self, self);
+	bindEvents2(self, self, div);
 
 	for (let name in attributes) // From instantiation
 		setAttribute(self, name, attributes[name]);

@@ -902,13 +902,13 @@ var test_XElement = {
 
 		// Make sure events can access the loop context.
 		(function() {
-			class BL9 extends XElement {}
-			BL9.html = `
+			class EV2 extends XElement {}
+			EV2.html = `
 				<div data-loop="items: i, item">
 					<span onclick="this.result = i + item"></span>
 				</div>`;
 
-			var b = new BL9();
+			var b = new EV2();
 			b.items = ['A', 'B'];
 
 			b.shadowRoot.children[0].dispatchEvent(new Event('click'));
@@ -917,28 +917,46 @@ var test_XElement = {
 
 		// Event attribute on definition and instantiation:
 		(function() {
-			class A2 extends XElement {
+			class EV3Inner extends XElement {
 				inner() {
 					this.clicked = true;
 				}
 			}
-			A2.html = `<div onclick="this.inner()"></div>`;
+			EV3Inner.html = `<div onclick="this.inner()"></div>`;
 
-			class A3 extends XElement {
+			class EV3Outer extends XElement {
 				outer() {
 					this.clicked = true;
 				}
 			}
-			A3.html = '<div><x-a2 id="a2" onclick="this.outer()"></x-a2></div>';
+			EV3Outer.html = '<div><x-ev3inner id="inner" onclick="this.outer()"></x-ev3inner></div>';
 
-			var a = new A3();
+			var outer = new EV3Outer();
 
+			outer.inner.dispatchEvent(new Event('click'));
 
-			a.a2.dispatchEvent(new Event('click'));
-
-			assert(a.clicked);
-			assert(a.a2.clicked);
+			assert(outer.clicked);
+			assert(outer.inner.clicked);
 		})();
+
+		// Make sure we don't try to call the function on the inner element.
+		(function() {
+			class EV4Inner extends XElement {}
+			EV4Inner.html = `<div>hi</div>`;
+
+			class EV4Outer extends XElement {
+				outer() {
+					this.clicked = true;
+				}
+			}
+			EV4Outer.html = '<div><x-ev4inner id="inner" onclick="this.outer()"></x-ev4inner></div>';
+
+			var outer = new EV4Outer();
+
+			outer.inner.dispatchEvent(new Event('click'));
+			assert(outer.clicked);
+		})();
+
 	},
 
 	bindData: function() {
@@ -984,6 +1002,10 @@ var test_XElement = {
 			c.name = 'Toyota';
 			c.car = c; // self assignment.  This used to stack overflow.
 		})();
+	},
+
+	temp2: function() {
+
 	},
 
 
