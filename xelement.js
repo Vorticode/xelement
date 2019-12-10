@@ -74,6 +74,22 @@ var parentIndex = (el) => {
 
 
 /**
+ * Evaluate expr, but allow undefined variables.
+ * @param expr {string}
+ * @returns {*} */
+function safeEval(expr) {
+	try {
+		return eval(expr);
+	}
+	catch (e) { // Don't fail for null values.
+		if (!(e instanceof TypeError) || !e.message.match('undefined'))
+			throw e;
+	}
+	return undefined;
+}
+
+
+/**
  * @param obj {object}
  * @param path {string[]}
  * @param create {boolean=false} Create the path if it doesn't exist.
@@ -315,7 +331,7 @@ var addThis = (code, context, isSimple) => {
 	// If it starts with this or an item in context, do nothing.
 	code = code.trim();
 	for (let prefix of ['this', ...Object.keys(context || {})])
-		if (code.match(new RegExp('^' + prefix + '\s*[\.[]'))) // starts with "prefix." or "prefix["
+		if (code.match(new RegExp('^' + prefix + '(\s*[\.[]|$)'))) // starts with "prefix." or "prefix["
 			return code;
 
 	return 'this.' + code;
@@ -411,19 +427,25 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	if (obj.isProxy)
+	if (obj.isProxy) // should never be more than 1 level deep of proxies.
 		obj = obj.removeProxy;
+
+	if (obj.isProxy)
+		throw new Error("Double wrapped proxy found.");
 
 	if (isObj(obj)) {
 		if (!visited)
-			visited = new WeakSet([obj]);
+			visited = new WeakSet();
 		else if (visited.has(obj))
 			return obj;
-		else
-			visited.add(obj);
+		visited.add(obj);
 
 		for (let name in obj)
-			obj[name] = removeProxies(obj[name], visited);
+			if (obj.hasOwnProperty(name)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
+				let t = obj[name];
+				let v = removeProxies(t, visited);
+				watchlessSet(obj, [name],  v);
+			}
 	}
 	return obj;
 };
@@ -603,8 +625,10 @@ var watchlessSet = (obj, path, val) => {
 	// Or just use removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
+	var wp = watched.get(obj);
 
-	let node =  watched.get(obj).fields_;
+
+	let node = wp ? wp.fields_ : obj;
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
@@ -624,21 +648,21 @@ Inherit from XElement to create custom HTML Components.
 TODO
 Make data- prefix optional.  Move attributes to data-attr="..." like data-classes.
 Fix failing Edge tests.
+Separate "this" binding for data attr on definition vs instantiation.
 Make shadowdom optional.
 
 bind to drag/drop events, allow sortable?
 implement other binding functions.
+allow loop over slots if data-loop is on teh instantiation.
 allow loop over more than one html tag.
 cache results of parseVars() and other parse functions?
 cache the context of loop vars.
 functions to enable/disable updates.
 function to trigger updates?
 
-Make data- prefix optional.  But then how to bind to raw attributes?
-   attributes="title: val" vs data-title="val"
 create from <template> tag
 When a change occurs, create a Set of functions to call, then later call them all.
-	That way we remove duplicate updates.
+	That way we remove some duplicate updates.
 Auto bind to this in complex expressions if the class property already exists and the var is otherwise undefined?
 improve minifcation.
 speed up data-loop by only modifying changed elements for non-simple vars.
@@ -652,8 +676,7 @@ Named slot support? - https://developer.mozilla.org/en-US/docs/Web/Web_Component
 Separate out a lite version that doesn't do binding?
 	This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
 TODO:
-What if an xelment is embeded in another, and the inner element has a data-binding.  Which one does it apply to?
-If specified on its definition?  If the data-binding is on its embed?
+
 
 
 We could even add enableUpdates() / disableUpdates() / clearUpdates() functions.
@@ -670,6 +693,27 @@ var addWatchedEl = (el, callback) => {
 		watchedEls.set(el, [callback]);
 	else
 		watchedEls.get(el).push(callback);
+};
+
+
+/**
+ * @param cls {Function}
+ * @returns {string} */
+var getXName = (cls) => {
+	if (!cls.xname) {
+		let lname = cls.name.toLowerCase();
+		if (lname.startsWith('x'))
+			lname = lname.slice(1);
+
+		let name = 'x-' + lname;
+
+		// If name exists, add an incrementing integer to the end.
+		for (let i = 2; customElements.get(name); i++)
+			name = 'x-' + lname + i;
+
+		cls.xname = name;
+	}
+	return cls.xname;
 };
 
 /**
@@ -991,20 +1035,10 @@ var initHtml = (self) => {
 	}
 
 	// 3. Bind all data- and event attributes
+	// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
 	bind(self, self);
 	bindEvents(self, root);
 };
-
-function safeEval(expr) {
-	try {
-		return eval(expr);
-	}
-	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError) || !e.message.match('undefined'))
-			throw e;
-	}
-	return undefined;
-}
 
 /**
  * Inherit from this class to make a custom HTML element.
@@ -1125,9 +1159,6 @@ var dataAttr = {
 
 
 	bind: (self, code, el) => {
-		//if (el === self)
-			//return;
-			//throw new Error("Cannot bind to own property!");
 
 		let assignments = code/*.replace(/^{|}$/g, '')*/.split(/;/g).map((x) => x.trim().split(/\s*:/g));
 
@@ -1137,19 +1168,14 @@ var dataAttr = {
 
 			// This code is called on every update.
 			let updateProp = function(action, path, value) {
-				//console.log(action, path, value);
-				//watchlessSet(el, [prop], eval(expr));
+
 				let result = safeEval.call(self, expr);
-				//console.log(el === self);
 				el[prop] = result;
 			}.bind(self);
 
 			// Create properties and watch for changes.
-			for (let path of parseVars(expr)) {
-				//traversePath(self, path, true); // Create properties.
-				//if (el !== self) // only bind on the element that includes this xelement.
-					watch(self, path, updateProp);
-			}
+			for (let path of parseVars(expr))
+				watch(self, path, updateProp);
 
 			// Set initial values.
 			updateProp();
@@ -1192,7 +1218,7 @@ var dataAttr = {
 	text: (self, code, el) => {
 		let setText = function setText(action, path, value) {
 			el.textContent = safeEval.call(self, code);
-		}.bind(self);
+		};
 		for (let path of parseVars(code)) {
 			watch(self, path, setText);
 			addWatchedEl(el, setText);
@@ -1205,7 +1231,7 @@ var dataAttr = {
 	html: (self, code, el) => {
 		let setHtml = function setHtml(action, path, value) {
 			el.innerHTML = safeEval.call(self, code);
-		}.bind(self);
+		};
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setHtml);
@@ -1389,23 +1415,6 @@ var dataAttr = {
 	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
 };
-
-function getXName(cls) {
-	if (!cls.xname) {
-		let lname = cls.name.toLowerCase();
-		if (lname.startsWith('x'))
-			lname = lname.slice(1);
-
-		let name = 'x-' + lname;
-
-		// If name exists, add an incrementing integer to the end.
-		for (let i = 2; customElements.get(name); i++)
-			name = 'x-' + lname + i;
-
-		cls.xname = name;
-	}
-	return cls.xname;
-}
 
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/

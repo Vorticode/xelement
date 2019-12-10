@@ -19,6 +19,11 @@ var test_ParseVar = {
 		// Test replacing multiple vars of different lengths:
 		result = replaceVars(" cat + item", {"item": "this.items[0]", "cat": "this.cats[0]"});
 		assertEq(result, " this.cats[0] + this.items[0]");
+	},
+
+	addThis: function() {
+		var result = addThis('this');
+		assertEq(result, 'this'); // don't add it twice!
 	}
 };
 
@@ -671,14 +676,38 @@ var test_XElement = {
 		// Loop over var that doesn't initially exist.
 		(function () {
 
-			class Wheel extends XElement {}
-			Wheel.html = `				
+			class BL11 extends XElement {}
+			BL11.html = `				
 				<div data-loop="parts.wheels: wheel">
 				    <span></span>
 				</div>`;
 
-			var p = new Wheel();
+			var p = new BL11();
 			p.parts = null; // TypeError is caught.  Can't evaluate code of loop.
+		})();
+
+		// Async
+		(function() {
+			class Wheel12 extends XElement {}
+			Wheel12.html = `				
+			<div>
+			    <b>Wheel</b>
+			</div>`;
+
+			class Car12 extends XElement {}
+			Car12.html = `				
+			<div data-loop="wheels: wheel">
+			    <x-wheel12 data-title="wheel"></x-wheel12>
+			</div>`;
+			var c = new Car12();
+			c.wheels = [];
+			c.wheels.push(1);
+			setTimeout(function() {
+				c.wheels.push(1);
+
+				// This used to fail when done asynchronously, back when we used connectedCallback()
+				assert(c.shadowRoot.children[1].shadowRoot);
+			}, 10);
 		})();
 
 
@@ -936,34 +965,50 @@ var test_XElement = {
 			assertEq(c.shadowRoot.children[0].shadowRoot.children[0].textContent, '1');
 
 		})();
+
+		// Watched self-assignment
+		(function() {
+			class Bd2Wheel extends XElement {}
+			Bd2Wheel.html = `				
+			<div>
+			    <b data-text="car.name"></b>
+			</div>`;
+
+			class Bd2Car extends XElement {}
+			Bd2Car.html = `				
+			<div>
+			    <x-bd2wheel id="wheel" data-bind="car: car"></x-bd2wheel>
+			</div>`;
+
+			var c = new Bd2Car();
+			c.name = 'Toyota';
+			c.car = c; // self assignment.  This used to stack overflow.
+		})();
 	},
 
 
 	temp: function() {
 
+		// Fails
 
-		class Wheel extends XElement {}
-		Wheel.html = `				
+		class Bd1Wheel extends XElement {}
+		Bd1Wheel.html = `				
 			<div>
-			    <b>Wheel</b>
+			    <b data-text="car.name"></b>
 			</div>`;
 
-		class Car extends XElement {}
-		Car.html = `				
-			<div data-loop="wheels: wheel">
-			    <x-wheel data-title="wheel"></x-wheel>
+		class Bd1Car extends XElement {}
+		Bd1Car.html = `				
+			<div>
+			    <x-bd1wheel id="wheel" data-bind="car: this"></x-bd1wheel>
 			</div>`;
-		var c = new Car();
-		c.wheels = [];
-		c.wheels.push(1);
-		setTimeout(function() {
-			c.wheels.push(1);
 
-			// This used to fail when done asynchronously, back when we used connectedCallback()
-			assert(c.shadowRoot.children[1].shadowRoot);
+		var c = new Bd1Car();
+		c.name = 'Toyota'; // Fails because 'name' isn't a watched property on c.
 
+		console.log(c.wheel.car.name);
+		console.log(c.wheel.shadowRoot.children[0].firstChild);
 
-		}, 10);
 
 	},
 };

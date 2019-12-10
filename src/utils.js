@@ -71,6 +71,22 @@ var parentIndex = (el) => {
 
 
 /**
+ * Evaluate expr, but allow undefined variables.
+ * @param expr {string}
+ * @returns {*} */
+function safeEval(expr) {
+	try {
+		return eval(expr);
+	}
+	catch (e) { // Don't fail for null values.
+		if (!(e instanceof TypeError) || !e.message.match('undefined'))
+			throw e;
+	}
+	return undefined;
+}
+
+
+/**
  * @param obj {object}
  * @param path {string[]}
  * @param create {boolean=false} Create the path if it doesn't exist.

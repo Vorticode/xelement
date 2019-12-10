@@ -192,7 +192,7 @@ var addThis = (code, context, isSimple) => {
 	// If it starts with this or an item in context, do nothing.
 	code = code.trim();
 	for (let prefix of ['this', ...Object.keys(context || {})])
-		if (code.match(new RegExp('^' + prefix + '\s*[\.[]'))) // starts with "prefix." or "prefix["
+		if (code.match(new RegExp('^' + prefix + '(\s*[\.[]|$)'))) // starts with "prefix." or "prefix["
 			return code;
 
 	return 'this.' + code;

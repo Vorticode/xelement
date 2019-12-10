@@ -88,19 +88,25 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	if (obj.isProxy)
+	if (obj.isProxy) // should never be more than 1 level deep of proxies.
 		obj = obj.removeProxy;
+
+	if (obj.isProxy)
+		throw new Error("Double wrapped proxy found.");
 
 	if (isObj(obj)) {
 		if (!visited)
-			visited = new WeakSet([obj]);
+			visited = new WeakSet();
 		else if (visited.has(obj))
 			return obj;
-		else
-			visited.add(obj);
+		visited.add(obj);
 
 		for (let name in obj)
-			obj[name] = removeProxies(obj[name], visited);
+			if (obj.hasOwnProperty(name)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
+				let t = obj[name];
+				let v = removeProxies(t, visited);
+				watchlessSet(obj, [name],  v);
+			}
 	}
 	return obj;
 };
@@ -280,8 +286,10 @@ var watchlessSet = (obj, path, val) => {
 	// Or just use removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
+	var wp = watched.get(obj);
 
-	let node =  watched.get(obj).fields_;
+
+	let node = wp ? wp.fields_ : obj;
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
