@@ -25,17 +25,20 @@ var watchObj = (root, callback) => {
 			if (field==='removeProxy')
 				return obj;
 
-			var result = obj[field];
-			if (isObj(result)) {
+			let result = obj[field];
 
-				// Keep track of paths.
-				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-				if (!paths.has(result))
-					paths.set(result, [...paths.get(obj), field]);
+			if (isObj(result)) {
 
 				// Create a new Proxy instead of wrapping the original obj in two proxies.
 				if (result.isProxy)
 					result = result.removeProxy;
+
+				// Keep track of paths.
+				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
+				if (!paths.has(result)) {
+					let p = paths.get(obj);
+					paths.set(result, [...p, field]);
+				}
 
 				// If setting the value to an object or array, also create a proxy around that one.
 				return new Proxy(result, handler);
@@ -55,9 +58,10 @@ var watchObj = (root, callback) => {
 			// Don't allow setting proxies on underlying obj.
 			// We need to remove them recursivly in case of something like newVal=[Proxy(obj)].
 
-			var path = [...paths.get(obj), field];
+			let path = [...paths.get(obj), field];
+			obj[field] = removeProxies(newVal);
 			if (field !== 'length')
-				callback('set', path, obj[field] = removeProxies(newVal));
+				callback('set', path, obj[field]);
 			return 1; // Proxy requires us to return true.
 		},
 
@@ -168,6 +172,7 @@ class WatchProperties {
 
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
+			delete self.obj_[field];
 			Object.defineProperty(self.obj_, field, {
 				enumerable: 1,
 				configurable: 1,

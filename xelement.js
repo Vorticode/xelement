@@ -82,7 +82,7 @@ function safeEval(expr) {
 		return eval(expr);
 	}
 	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError) || !e.message.match('undefined'))
+		if (!(e instanceof TypeError) || (!e.message.match('undefined') && !e.message.match('null')))
 			throw e;
 	}
 	return undefined;
@@ -364,17 +364,20 @@ var watchObj = (root, callback) => {
 			if (field==='removeProxy')
 				return obj;
 
-			var result = obj[field];
-			if (isObj(result)) {
+			let result = obj[field];
 
-				// Keep track of paths.
-				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-				if (!paths.has(result))
-					paths.set(result, [...paths.get(obj), field]);
+			if (isObj(result)) {
 
 				// Create a new Proxy instead of wrapping the original obj in two proxies.
 				if (result.isProxy)
 					result = result.removeProxy;
+
+				// Keep track of paths.
+				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
+				if (!paths.has(result)) {
+					let p = paths.get(obj);
+					paths.set(result, [...p, field]);
+				}
 
 				// If setting the value to an object or array, also create a proxy around that one.
 				return new Proxy(result, handler);
@@ -394,9 +397,10 @@ var watchObj = (root, callback) => {
 			// Don't allow setting proxies on underlying obj.
 			// We need to remove them recursivly in case of something like newVal=[Proxy(obj)].
 
-			var path = [...paths.get(obj), field];
+			let path = [...paths.get(obj), field];
+			obj[field] = removeProxies(newVal);
 			if (field !== 'length')
-				callback('set', path, obj[field] = removeProxies(newVal));
+				callback('set', path, obj[field]);
 			return 1; // Proxy requires us to return true.
 		},
 
@@ -507,6 +511,7 @@ class WatchProperties {
 
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
+			delete self.obj_[field];
 			Object.defineProperty(self.obj_, field, {
 				enumerable: 1,
 				configurable: 1,
@@ -650,6 +655,7 @@ Make data- prefix optional.  Move attributes to data-attr="..." like data-classe
 Fix failing Edge tests.
 Separate "this" binding for data attr on definition vs instantiation.
 Make shadowdom optional.
+indexOf and includes() on arrays fail because they compare proxied objects.
 
 bind to drag/drop events, allow sortable?
 implement other binding functions.
@@ -1024,9 +1030,19 @@ var initHtml = (self) => {
 	var nodes = root.querySelectorAll('[id]');
 	for (let i = 0, node; node = nodes[i]; i++) {
 		let id = node.getAttribute('id');
-		Object.defineProperty(self, id, { // Make it readonly.
-			value: node,
-			writable: 0
+		Object.defineProperty(self, id, {
+			// Make it readonly.
+			// Using writeable: false caused errors if the getter returns a proxy instead of the proper type.
+			// But how does it know it's the wrong type?
+
+			enumerable: 1,
+			configurable: 1,
+			get: function() {
+				return node;
+			},
+			set: function() {
+				throw new Error('Property not writable');
+			}
 		});
 
 		// Only leave the id attributes if we have a shadow root.
@@ -1316,15 +1332,8 @@ var dataAttr = {
 
 				// Recreate all children.
 				if (html.length) {
-					try {
-						var result = safeEval.call(self, code);
-					}
-					catch (e) { // Don't fail for null values.
-						if (!(e instanceof TypeError))
-							throw e;
-					}
-
-
+					let result = safeEval.call(self, code);
+					
 					for (let i in result) {
 						let child = createEl(html);
 						el.appendChild(child);

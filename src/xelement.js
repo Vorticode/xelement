@@ -7,6 +7,7 @@ Make data- prefix optional.  Move attributes to data-attr="..." like data-classe
 Fix failing Edge tests.
 Separate "this" binding for data attr on definition vs instantiation.
 Make shadowdom optional.
+indexOf and includes() on arrays fail because they compare proxied objects.
 
 bind to drag/drop events, allow sortable?
 implement other binding functions.
@@ -381,9 +382,19 @@ var initHtml = (self) => {
 	var nodes = root.querySelectorAll('[id]');
 	for (let i = 0, node; node = nodes[i]; i++) {
 		let id = node.getAttribute('id');
-		Object.defineProperty(self, id, { // Make it readonly.
-			value: node,
-			writable: 0
+		Object.defineProperty(self, id, {
+			// Make it readonly.
+			// Using writeable: false caused errors if the getter returns a proxy instead of the proper type.
+			// But how does it know it's the wrong type?
+
+			enumerable: 1,
+			configurable: 1,
+			get: function() {
+				return node;
+			},
+			set: function() {
+				throw new Error('Property not writable');
+			}
 		});
 
 		// Only leave the id attributes if we have a shadow root.
@@ -673,15 +684,8 @@ var dataAttr = {
 
 				// Recreate all children.
 				if (html.length) {
-					try {
-						var result = safeEval.call(self, code);
-					}
-					catch (e) { // Don't fail for null values.
-						if (!(e instanceof TypeError))
-							throw e;
-					}
-
-
+					let result = safeEval.call(self, code);
+					
 					for (let i in result) {
 						let child = createEl(html);
 						el.appendChild(child);

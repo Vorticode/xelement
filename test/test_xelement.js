@@ -1002,35 +1002,98 @@ var test_XElement = {
 			c.name = 'Toyota';
 			c.car = c; // self assignment.  This used to stack overflow.
 		})();
+
+		// Make sure we can share a list between two XElements.  This used to fail.
+		(function() {
+			class T2 extends XElement {}
+			T2.html =
+				`<div>
+				<div id="loop"  data-loop="items: item">					
+					<div></div>
+				</div>
+			</div>`;
+
+
+			class T extends XElement {}
+			T.html = `
+			<div>
+				<div id="loop" data-loop="t2.items: item">
+					<div></div>
+				</div>
+				<x-t2 id="t2"></x-t2>
+			</div>`;
+
+			var t = new T();
+			t.t2.items = [{name: '1'}];
+
+			assertEq(t.t2.items[0].name, '1');
+			assertEq(t.loop.children.length, 1);
+			assertEq(t.t2.loop.children.length, 1);
+
+		})();
 	},
 
-	temp2: function() {
 
-	},
 
 
 	temp: function() {
+		class T2 extends XElement {}
+		T2.html =
+			'<div data-loop="t1.items: item">' +
+			'<div data-text="item.name"></div>' +
+			'</div>';
+
+
+		class T extends XElement {
+			getItems() {
+				return this.t2.items;
+			}
+		}
+		T.html = `
+			<div>
+				<x-t2 id="t2" data-bind="t1: this"></x-t2>
+				<div data-loop="items: item">
+					<div data-text="item.name"></div>
+				</div>
+			</div>`;
+
+		var t = new T();
+		t.items = [{name: '1'}];
+
+		var item = t.getItems()[0].name;
+		console.log(item);
+	},
+
+
+
+	failures: function() {
 
 		// Fails
+		(function() {
+			class Bd1Wheel extends XElement {}
+			Bd1Wheel.html = `				
+				<div>
+				    <b data-text="car.name"></b>
+				</div>`;
 
-		class Bd1Wheel extends XElement {}
-		Bd1Wheel.html = `				
-			<div>
-			    <b data-text="car.name"></b>
-			</div>`;
+			class Bd1Car extends XElement {}
+			Bd1Car.html = `				
+				<div>
+				    <x-bd1wheel id="wheel" data-bind="car: this"></x-bd1wheel>
+				</div>`;
 
-		class Bd1Car extends XElement {}
-		Bd1Car.html = `				
-			<div>
-			    <x-bd1wheel id="wheel" data-bind="car: this"></x-bd1wheel>
-			</div>`;
+			var c = new Bd1Car();
+			c.name = 'Toyota'; // Fails because 'name' isn't a watched property on c.
 
-		var c = new Bd1Car();
-		c.name = 'Toyota'; // Fails because 'name' isn't a watched property on c.
+			console.log(c.wheel.car.name);
+			console.log(c.wheel.shadowRoot.children[0].firstChild);
+		})();
 
-		console.log(c.wheel.car.name);
-		console.log(c.wheel.shadowRoot.children[0].firstChild);
+		// Property not writable.  Didn't test to see what's up.
+		(function() {
 
+
+		})();
 
 	},
 };
