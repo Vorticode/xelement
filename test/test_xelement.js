@@ -1006,8 +1006,8 @@ var test_XElement = {
 		// Make sure we can share a list between two XElements.  This used to fail.
 		(function() {
 			class T2 extends XElement {}
-			T2.html =
-				`<div>
+			T2.html = `
+			<div>
 				<div id="loop"  data-loop="items: item">					
 					<div></div>
 				</div>
@@ -1029,7 +1029,27 @@ var test_XElement = {
 			assertEq(t.t2.items[0].name, '1');
 			assertEq(t.loop.children.length, 1);
 			assertEq(t.t2.loop.children.length, 1);
+		})();
 
+		// At one point, instantiating T() would cause watchlessSet() to try to overwrite sub,
+		// giving a property not writable error.
+		(function() {
+			class T2 extends XElement {}
+			T2.html = `
+			<div>
+				<div id="loop" data-loop="t1.items: item">					
+					<div></div>
+				</div>
+			</div>`;
+
+
+			class T extends XElement {}
+			T.html = `
+			<div>
+				<x-t2 id="sub" data-bind="t1: this"></x-t2>
+			</div>`;
+
+			var t = new T();
 		})();
 	},
 
@@ -1038,30 +1058,28 @@ var test_XElement = {
 
 	temp: function() {
 		class T2 extends XElement {}
-		T2.html =
-			'<div data-loop="t1.items: item">' +
-			'<div data-text="item.name"></div>' +
-			'</div>';
-
-
-		class T extends XElement {
-			getItems() {
-				return this.t2.items;
-			}
-		}
-		T.html = `
+		T2.html = `
 			<div>
-				<x-t2 id="t2" data-bind="t1: this"></x-t2>
-				<div data-loop="items: item">
+				<div id="loop" data-loop="t1.items: item">					
 					<div data-text="item.name"></div>
 				</div>
+			</div>`;
+
+
+		class T extends XElement {}
+		T.html = `
+			<div>
+				<div id="loop" data-loop="items: item">
+					<div></div>
+				</div>
+				<x-t2 id="t2" data-bind="t1: this"></x-t2>
 			</div>`;
 
 		var t = new T();
 		t.items = [{name: '1'}];
 
-		var item = t.getItems()[0].name;
-		console.log(item);
+		console.log(t.loop.children);
+		console.log(t.t2.loop.children);
 	},
 
 
@@ -1089,10 +1107,32 @@ var test_XElement = {
 			console.log(c.wheel.shadowRoot.children[0].firstChild);
 		})();
 
-		// Property not writable.  Didn't test to see what's up.
+
+		// Missing children
 		(function() {
+			class T2 extends XElement {}
+			T2.html = `
+			<div>
+				<div id="loop" data-loop="t1.items: item">					
+					<div data-text="item.name"></div>
+				</div>
+			</div>`;
 
 
+			class T extends XElement {}
+			T.html = `
+			<div>
+				<div id="loop" data-loop="items: item">
+					<div></div>
+				</div>
+				<x-t2 id="t2" data-bind="t1: this"></x-t2>
+			</div>`;
+
+			var t = new T();
+			t.items = [{name: '1'}];
+
+			console.log(t.loop.children);
+			console.log(t.t2.loop.children);
 		})();
 
 	},

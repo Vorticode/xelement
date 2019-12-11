@@ -84,7 +84,7 @@ var watchObj = (root, callback) => {
 };
 
 /**
- *
+ * Operates recursively to remove all proxies.  But should it?
  * @param obj {*}
  * @param visited {WeakSet=} Used internally.
  * @returns {*} */
@@ -109,7 +109,8 @@ var removeProxies = (obj, visited) => {
 			if (obj.hasOwnProperty(name)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
 				let t = obj[name];
 				let v = removeProxies(t, visited);
-				watchlessSet(obj, [name],  v);
+				if (v !== t)
+					watchlessSet(obj, [name],  v);
 			}
 	}
 	return obj;

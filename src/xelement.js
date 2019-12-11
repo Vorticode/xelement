@@ -393,7 +393,7 @@ var initHtml = (self) => {
 				return node;
 			},
 			set: function() {
-				throw new Error('Property not writable');
+				throw new Error('Property ' + id + ' not writable');
 			}
 		});
 
