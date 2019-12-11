@@ -1061,32 +1061,7 @@ var initHtml = (self) => {
 /**
  * Inherit from this class to make a custom HTML element.
  * If you extend from XElement, you can't instantiate your class unless you first set the html property.
- * This is because XElement extends from HTMLElement, and setting the .html property calls customElements.define().
- *
- * 1.  Embedding:
- *
- * 1.  Html:  Any html assigned to this class's html property will be created
- *
- * 2.  Attributes
- *
- * 3.  id's.  read-only.
- *
- * 4.  <slot> anonymous and named.
- *
- * 5.  data-bind
- *     simple variables and automatic this.
- *
- * 6.  Events.  "this" and "event" var rewiring, event.target.
- *
- *
- *
- * 1.  Any of the element's attributes will be assigned to the instance's properties.
- *     If an attribute is JavaScript code surrounded within "{" and "}", then that code
- *     will be evaluated and assigned to the property rather than a string.
- * 3.  If innerHtml is set, this innerHtml will be given to the element.
- *     Otherwise it will take on the child nodes where it's embedded.
- * 4.  If the innerHtml has elements with id's, these elements will be assigned
- *     to properties of the class with the same name. */
+ * This is because XElement extends from HTMLElement, and setting the .html property calls customElements.define(). */
 class XElement extends HTMLElement {
 
 	constructor() {
@@ -1119,33 +1094,10 @@ class XElement extends HTMLElement {
 				initHtml(self);
 			});
 	}
-
-	connectedCallback() {
-		// If we don't wait for DomContentLoaded,
-		// initHtml() will be called before the browser adds <x-classitem>'s children,
-		// and it won't be able to properly reparent those children to within a slot.
-		// If this doesn't work, see https://github.com/WebReflection/html-parsed-element/blob/master/index.js
-		// for a possible alternative.
-		// Would it be faster to use setTimeout(function() {...} ?
-		// Should I be using customElements.whenDefined() instead?  stackoverflow.com/a/54617059
-
-		/*
-		var self = this;
-		var c = 'DOMContentLoaded';
-		var init = () => {
-			initHtml(self);
-			document.removeEventListener(c, init);
-		};
-		document.addEventListener(c, init);
-
-		*/
-	}
 }
 
 // TODO: write a function to replace common code among these.
 var dataAttr = {
-
-
 
 	/**
 	 * When self.field changes, update the value of <el attr>.
@@ -1185,19 +1137,27 @@ var dataAttr = {
 			let prop = assignment[0];
 
 			// This code is called on every update.
-			let updateProp = function(action, path, value) {
+			let updateProp = function updateProp(action, path, value) {
 
 				let result = safeEval.call(self, expr);
 				el[prop] = result;
+
 			}.bind(self);
 
 			// Create properties and watch for changes.
+			// if expr is "this", we won't watch anything since we can only watch props not objects.
 			for (let path of parseVars(expr))
 				watch(self, path, updateProp);
 
 			// Set initial values.
 			updateProp();
 		}
+
+		// These were called once when we were instantiated.
+		// But with a new variable bound we have to redo them.
+		// TODO: Modify initHtml to not bind if the data-bind attribute is present on the instantiation.
+		unbind(el, el);
+		bind(el, el);
 	},
 
 	classes: (self, code, el) => {
@@ -1274,7 +1234,9 @@ var dataAttr = {
 		var isSimple = isStandaloneVar(code);
 
 		// The code we'll loop over.
-		var html = el.innerHTML.trim();
+		// We store it here because innerHTML is lost if we unbind and rebind.
+		if (!el.loopHtml)
+			el.loopHtml = el.innerHTML.trim();
 
 
 		var getModifiedIndex = (path) => {
@@ -1305,7 +1267,7 @@ var dataAttr = {
 
 
 				if (action === 'set') { // add or replace item.
-					let newChild = createEl(html);
+					let newChild = createEl(el.loopHtml);
 					el.insertBefore(newChild, existingChild); // if existingChild is null, will be inserted at end.
 					bind(self, newChild);
 					bindEvents(self, newChild);
@@ -1332,11 +1294,11 @@ var dataAttr = {
 				}
 
 				// Recreate all children.
-				if (html.length) {
+				if (el.loopHtml.length) {
 					let result = safeEval.call(self, code);
-					
+
 					for (let i in result) {
-						let child = createEl(html);
+						let child = createEl(el.loopHtml);
 						el.appendChild(child);
 
 						bind(self, child);
@@ -1352,12 +1314,8 @@ var dataAttr = {
 			el.removeChild(el.lastChild);
 
 		for (let path of paths) {
+			watchXElement(self, path, rebuildChildren);
 
-			// Ensure all variables referenced in the code exist.
-			//traversePath(self, path, true);
-
-			// Rebuild children when watched item changes.
-			watch(self, path, rebuildChildren);
 			addWatchedEl(el, rebuildChildren);
 		}
 
@@ -1419,13 +1377,29 @@ var dataAttr = {
 	},
 
 	/*
-	'cls': function(self, field, el) {}, // data-cls="{house: 'big'}" // Adds or removes the big class when the house property is true.
 	'style': function(self, field, el) {}, // Can point to an object to use for the style.
 	'if': function(self, field, el) {}, // Element is created or destroyed when data-if="code" evaluates to true or false.
-	'visible':
 	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
 };
+
+
+/**
+ * Traverse starting from path and working downward,
+ * looking for an existing XElement to watch.
+ * This allows the corret object to be watched when data-bind is used.
+ * @param obj
+ * @param path
+ * @param callback */
+function watchXElement(obj, path, callback) {
+	for (let i=path.length; i>=0; i--) {
+		let item = traversePath(obj, path.slice(0, i));
+		if (item instanceof XElement) {
+			watch(item, path.slice(i), callback);
+			break;
+		}
+	}
+}
 
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/

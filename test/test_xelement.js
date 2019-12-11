@@ -1069,18 +1069,43 @@ var test_XElement = {
 		class T extends XElement {}
 		T.html = `
 			<div>
-				<div id="loop" data-loop="items: item">
-					<div></div>
-				</div>
 				<x-t2 id="t2" data-bind="t1: this"></x-t2>
 			</div>`;
 
 		var t = new T();
+		window.debug = true;
+
+		//debugger;
+
+		// This won't trigger T2 to update.
 		t.items = [{name: '1'}];
 
-		console.log(t.loop.children);
+		// But this will.
+		//t.t2.t1 = t;
+
 		console.log(t.t2.loop.children);
+
+		/*
+		1. T2 data-loop
+		2. data-bind sets value of t1.
+		3. set items on t1.
+		4. t1 updates its subscribers, but t2 isn't subscribed. b/c at step 1 data-loop doesn't know that t1.items will need to watch the t1 object instead of itself.
+
+
+		 */
 	},
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
