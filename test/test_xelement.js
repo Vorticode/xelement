@@ -1005,8 +1005,8 @@ var test_XElement = {
 
 		// Make sure we can share a list between two XElements.  This used to fail.
 		(function() {
-			class T2 extends XElement {}
-			T2.html = `
+			class BD3Inner extends XElement {}
+			BD3Inner.html = `
 			<div>
 				<div id="loop"  data-loop="items: item">					
 					<div></div>
@@ -1014,16 +1014,16 @@ var test_XElement = {
 			</div>`;
 
 
-			class T extends XElement {}
-			T.html = `
+			class BD3Outer extends XElement {}
+			BD3Outer.html = `
 			<div>
 				<div id="loop" data-loop="t2.items: item">
 					<div></div>
 				</div>
-				<x-t2 id="t2"></x-t2>
+				<x-bd3inner id="t2"></x-bd3inner>
 			</div>`;
 
-			var t = new T();
+			var t = new BD3Outer();
 			t.t2.items = [{name: '1'}];
 
 			assertEq(t.t2.items[0].name, '1');
@@ -1034,8 +1034,8 @@ var test_XElement = {
 		// At one point, instantiating T() would cause watchlessSet() to try to overwrite sub,
 		// giving a property not writable error.
 		(function() {
-			class T2 extends XElement {}
-			T2.html = `
+			class BD4Inner extends XElement {}
+			BD4Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
 					<div></div>
@@ -1043,13 +1043,63 @@ var test_XElement = {
 			</div>`;
 
 
-			class T extends XElement {}
-			T.html = `
+			class BD4Outer extends XElement {}
+			BD4Outer.html = `
 			<div>
-				<x-t2 id="sub" data-bind="t1: this"></x-t2>
+				<x-bd4inner id="sub" data-bind="t1: this"></x-bd4inner>
 			</div>`;
 
-			var t = new T();
+			var t = new BD4Outer();
+		})();
+
+		// Bind directly to "this"
+		(function() {
+			class BD5Inner extends XElement {}
+			BD5Inner.html = `
+				<div>
+					<div id="loop" data-loop="t1.items: item">					
+						<div data-text="item.name"></div>
+					</div>
+				</div>`;
+
+			class BD5Outer extends XElement {}
+			BD5Outer.html = `
+				<div>
+					<x-bd5inner id="t2" data-bind="t1: this"></x-bd5inner>
+				</div>`;
+
+			var t = new BD5Outer();
+			t.items = [{name: '1'}];
+			assertEq(t.t2.loop.children.length, 1);
+		})();
+
+		// Same as above, but loop is used twice.
+		// This used to fail because the proxy instead of the original object was being watched the second time.
+		(function() {
+			class BD6Inner extends XElement {}
+			BD6Inner.html = `
+			<div>
+				<div id="loop" data-loop="t1.items: item">					
+					<div data-text="item.name"></div>
+				</div>
+			</div>`;
+
+			class BD6Outer extends XElement {}
+			BD6Outer.html = `
+			<div>
+				<div id="loop" data-loop="items: item">					
+					<div data-text="item.name"></div>
+				</div>
+				<x-bd6inner id="t2" data-bind="t1: this"></x-bd6inner>
+			</div>`;
+
+			var t = new BD6Outer();
+			window.debug = true;
+
+			t.items = [{name: '1'}];
+
+			assertEq(t.t2.loop.children.length, 1);
+			assertEq(t.loop.children.length, 1);
 		})();
 	},
 
@@ -1065,34 +1115,22 @@ var test_XElement = {
 				</div>
 			</div>`;
 
-
 		class T extends XElement {}
 		T.html = `
 			<div>
+				<div id="loop" data-loop="items: item">					
+					<div data-text="item.name"></div>
+				</div>
 				<x-t2 id="t2" data-bind="t1: this"></x-t2>
 			</div>`;
 
 		var t = new T();
 		window.debug = true;
 
-		//debugger;
-
-		// This won't trigger T2 to update.
 		t.items = [{name: '1'}];
 
-		// But this will.
-		//t.t2.t1 = t;
-
-		console.log(t.t2.loop.children);
-
-		/*
-		1. T2 data-loop
-		2. data-bind sets value of t1.
-		3. set items on t1.
-		4. t1 updates its subscribers, but t2 isn't subscribed. b/c at step 1 data-loop doesn't know that t1.items will need to watch the t1 object instead of itself.
-
-
-		 */
+		assertEq(t.t2.loop.children.length, 1);
+		assertEq(t.loop.children.length, 1);
 	},
 
 

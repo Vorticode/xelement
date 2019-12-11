@@ -240,6 +240,9 @@ var watched = new WeakMap();
  * @param path {string|string[]}
  * @param callback {function(action:string, path:string[], value:string?)} */
 var watch = (obj, path, callback) => {
+	if (obj.isProxy)
+		obj = obj.removeProxy;
+
 	var wp;
 	if (!watched.has(obj)) {
 		wp = new WatchProperties(obj);
