@@ -1101,36 +1101,48 @@ var test_XElement = {
 			assertEq(t.t2.loop.children.length, 1);
 			assertEq(t.loop.children.length, 1);
 		})();
+
+		// Make sure multiple subsribers are updated when an input changes.
+		(function() {
+			class BD7Inner extends XElement {}
+			BD7Inner.html = `
+			<div>
+				<div id="loop" data-loop="t1.items: item">					
+					<input data-val="item.name">
+				</div>
+			</div>`;
+
+			class BD7Outer extends XElement {}
+			BD7Outer.html = `
+			<div>
+				<div id="loop" data-loop="items: item">					
+					<div data-text="item.name"></div>
+				</div>
+				<x-bd7inner id="t2" data-bind="t1: this"></x-bd7inner>
+			</div>`;
+
+			var t = new BD7Outer();
+			window.debug = true;
+
+			t.items = [{name: '1'}];
+
+
+			t.t2.loop.children[0].value = '2';
+			var c =t.t2.loop.children[0];
+			c.dispatchEvent(new Event('input'));
+
+			assertEq(t.items[0].name, '2');
+			assertEq(t.loop.children[0].textContent, '2');
+
+		})();
 	},
 
 
 
 
 	temp: function() {
-		class T2 extends XElement {}
-		T2.html = `
-			<div>
-				<div id="loop" data-loop="t1.items: item">					
-					<div data-text="item.name"></div>
-				</div>
-			</div>`;
 
-		class T extends XElement {}
-		T.html = `
-			<div>
-				<div id="loop" data-loop="items: item">					
-					<div data-text="item.name"></div>
-				</div>
-				<x-t2 id="t2" data-bind="t1: this"></x-t2>
-			</div>`;
 
-		var t = new T();
-		window.debug = true;
-
-		t.items = [{name: '1'}];
-
-		assertEq(t.t2.loop.children.length, 1);
-		assertEq(t.loop.children.length, 1);
 	},
 
 
@@ -1171,31 +1183,37 @@ var test_XElement = {
 		})();
 
 
-		// Missing children
+		// Setting input value rebuilds all children!
 		(function() {
 			class T2 extends XElement {}
 			T2.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
-					<div data-text="item.name"></div>
+					<input data-val="item.name">
 				</div>
 			</div>`;
-
 
 			class T extends XElement {}
 			T.html = `
 			<div>
-				<div id="loop" data-loop="items: item">
-					<div></div>
+				<div id="loop" data-loop="items: item">					
+					<div data-text="item.name"></div>
 				</div>
 				<x-t2 id="t2" data-bind="t1: this"></x-t2>
 			</div>`;
 
 			var t = new T();
+			window.debug = true;
+
 			t.items = [{name: '1'}];
 
-			console.log(t.loop.children);
-			console.log(t.t2.loop.children);
+
+			debugger;
+			t.t2.loop.children[0].value = '2';
+			t.t2.loop.children[0].dispatchEvent(new Event('input'));
+
+			console.log(t.items[0].name);
+			console.log(t.loop.children[0].textContent);
 		})();
 
 	},

@@ -101,10 +101,9 @@ var traversePath = (obj, path, create, value) => {
 			// If the next index is an integer or integer string.
 			if (create) {
 
-				// If last item in path
-				if (i === path.length-1) {
-					if (value !== undefined)
-						obj[srcProp] = value;
+				if (i === path.length-1)
+				{
+
 				}
 
 				// If next level path is a number, create as an array
@@ -117,9 +116,17 @@ var traversePath = (obj, path, create, value) => {
 				return undefined; // can't traverse
 		}
 
+		// If last item in path
+		if (i === path.length-1) {
+			if (value !== undefined)
+				obj[srcProp] = value;
+		}
+
 		// Traverse deeper along destination object.
 		obj = obj[srcProp];
 	}
+
+
 
 	return obj;
 };

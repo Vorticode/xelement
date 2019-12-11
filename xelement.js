@@ -104,10 +104,9 @@ var traversePath = (obj, path, create, value) => {
 			// If the next index is an integer or integer string.
 			if (create) {
 
-				// If last item in path
-				if (i === path.length-1) {
-					if (value !== undefined)
-						obj[srcProp] = value;
+				if (i === path.length-1)
+				{
+
 				}
 
 				// If next level path is a number, create as an array
@@ -120,9 +119,17 @@ var traversePath = (obj, path, create, value) => {
 				return undefined; // can't traverse
 		}
 
+		// If last item in path
+		if (i === path.length-1) {
+			if (value !== undefined)
+				obj[srcProp] = value;
+		}
+
 		// Traverse deeper along destination object.
 		obj = obj[srcProp];
 	}
+
+
 
 	return obj;
 };
@@ -364,20 +371,31 @@ var watchObj = (root, callback) => {
 			if (field==='removeProxy')
 				return obj;
 
+			if (obj.isProxy)
+				throw new XElementError("Double wrapped proxy found.");
+
 			let result = obj[field];
 
 			if (isObj(result)) {
 
 				// Create a new Proxy instead of wrapping the original obj in two proxies.
-				if (result.isProxy)
-					result = result.removeProxy;
+				// We don't actually want to do this because one prop that has multiple watchers may need to be passed around.
+				var innerResult = result;
+				if (innerResult.isProxy)
+					innerResult = innerResult.removeProxy;
+
+				if (innerResult.isProxy)
+					throw new XElementError("Double wrapped proxy found.");
 
 				// Keep track of paths.
 				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-				if (!paths.has(result)) {
-					let p = paths.get(obj);
-					paths.set(result, [...p, field]);
+				if (!paths.has(innerResult)) {
+					let path = paths.get(obj);
+					paths.set(innerResult, [...path, field]);
 				}
+
+				if (result.isProxy)
+					return result;
 
 				// If setting the value to an object or array, also create a proxy around that one.
 				return new Proxy(result, handler);
@@ -431,7 +449,7 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	if (obj.isProxy) // should never be more than 1 level deep of proxies.
+	while (obj.isProxy) // should never be more than 1 level deep of proxies.
 		obj = obj.removeProxy;
 
 	if (obj.isProxy)
@@ -642,9 +660,13 @@ var watchlessSet = (obj, path, val) => {
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
 		//#IFDEV
-		if (node.isProxy) // optional sanity check
-			throw new XElementError('Variable is already a proxy.');
+		// This can happen if one XElement subscribes within the path of another XElement via data-bind?
+		//if (node.isProxy) // optional sanity check
+		//	throw new XElementError('Variable ' + p + ' is already a proxy.');
 		//#ENDIF
+
+		if (node.isProxy)
+			node = node.removeProxy;
 	}
 
 	return node[prop] = val;
@@ -1123,7 +1145,7 @@ var dataAttr = {
 		// If the variables in code, change, execute the code.
 		// Then set the attribute to the value returned by the code.
 		for (let path of parseVars(code)) {
-			watch(self, path, setAttr);
+			watchXElement(self, path, setAttr);
 			addWatchedEl(el, setAttr);
 		}
 
@@ -1201,7 +1223,7 @@ var dataAttr = {
 			el.textContent = safeEval.call(self, code);
 		};
 		for (let path of parseVars(code)) {
-			watch(self, path, setText);
+			watchXElement(self, path, setText);
 			addWatchedEl(el, setText);
 		}
 
@@ -1257,8 +1279,14 @@ var dataAttr = {
 			// Then we only need to add and remove items from the end of the children.
 			// But this would break unbound inputs when removing from the middle of the list.
 
-			if (path)
+			if (path) {
+				// We're modifying something inside an element, don't rebuild the whole array.
+				// Data binding within the element will handle these changes.
+				if (path.length > paths[0].length + 1)
+					return;
+
 				var index = getModifiedIndex(path);
+			}
 
 			// If code is a simple var and path modifies only one item:
 			if (path && index >= 0) {
@@ -1330,8 +1358,8 @@ var dataAttr = {
 	val: (self, code, el) => {
 
 		// Update object property when input value changes, only if a simple var.
-		var vars = parseVars(code);
-		if (vars.length === 1 && isStandaloneVar(code))
+		var paths = parseVars(code);
+		if (paths.length === 1 && isStandaloneVar(code))
 			el.addEventListener('input', () => {
 				let value;
 				if (el.getAttribute('type') === 'checkbox')
@@ -1339,7 +1367,11 @@ var dataAttr = {
 				else
 					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
 
-				watchlessSet(self, vars[0], value);
+				//watchlessSet(self, paths[0], value);
+				//debugger;
+
+				// We don't use watchlessSet in case other things are subscribed.
+				traversePath(self, paths[0], true, value);
 			});
 
 		let setVal = function(action, path, value) {
@@ -1353,8 +1385,8 @@ var dataAttr = {
 		}.bind(self);
 
 		// Update input value when object property changes.
-		for (let path of vars) {
-			watch(self, path, setVal);
+		for (let path of paths) {
+			watchXElement(self, path, setVal);
 			addWatchedEl(el, setVal);
 		}
 

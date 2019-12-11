@@ -25,20 +25,31 @@ var watchObj = (root, callback) => {
 			if (field==='removeProxy')
 				return obj;
 
+			if (obj.isProxy)
+				throw new XElementError("Double wrapped proxy found.");
+
 			let result = obj[field];
 
 			if (isObj(result)) {
 
 				// Create a new Proxy instead of wrapping the original obj in two proxies.
-				if (result.isProxy)
-					result = result.removeProxy;
+				// We don't actually want to do this because one prop that has multiple watchers may need to be passed around.
+				var innerResult = result;
+				if (innerResult.isProxy)
+					innerResult = innerResult.removeProxy;
+
+				if (innerResult.isProxy)
+					throw new XElementError("Double wrapped proxy found.");
 
 				// Keep track of paths.
 				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-				if (!paths.has(result)) {
-					let p = paths.get(obj);
-					paths.set(result, [...p, field]);
+				if (!paths.has(innerResult)) {
+					let path = paths.get(obj);
+					paths.set(innerResult, [...path, field]);
 				}
+
+				if (result.isProxy)
+					return result;
 
 				// If setting the value to an object or array, also create a proxy around that one.
 				return new Proxy(result, handler);
@@ -92,7 +103,7 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	if (obj.isProxy) // should never be more than 1 level deep of proxies.
+	while (obj.isProxy) // should never be more than 1 level deep of proxies.
 		obj = obj.removeProxy;
 
 	if (obj.isProxy)
@@ -303,9 +314,13 @@ var watchlessSet = (obj, path, val) => {
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
 		//#IFDEV
-		if (node.isProxy) // optional sanity check
-			throw new XElementError('Variable is already a proxy.');
+		// This can happen if one XElement subscribes within the path of another XElement via data-bind?
+		//if (node.isProxy) // optional sanity check
+		//	throw new XElementError('Variable ' + p + ' is already a proxy.');
 		//#ENDIF
+
+		if (node.isProxy)
+			node = node.removeProxy;
 	}
 
 	return node[prop] = val;
