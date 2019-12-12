@@ -25,6 +25,31 @@ function assertNeq(val1, val2) {
 		throw new AssertError(val1 + ' === ' + val2);
 }
 
+
+var Mock = {
+
+	// doesn't work at all.
+	iframe: function(callback) {
+
+		var iframe = document.createElement('iframe');
+		iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+		iframe.setAttribute('src', 'about:blank');
+		var html = '<body></body>';
+		iframe.src = 'data:text/html;charset=utf-8,' + encodeURI(html);
+		document.body.appendChild(iframe);
+		setTimeout(function() {
+
+			var result = callback();
+			iframe.contentWindow.parent.postMessage(result);
+			//console.log('iframe.contentWindow =', iframe.contentWindow);
+
+		}, 300);
+
+	}
+
+};
+
+
 /**
  * A set of functions for running tests. */
 var Tests = {

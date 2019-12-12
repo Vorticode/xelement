@@ -371,8 +371,10 @@ var watchObj = (root, callback) => {
 			if (field==='removeProxy')
 				return obj;
 
+			//#IFDEV
 			if (obj.isProxy)
 				throw new XElementError("Double wrapped proxy found.");
+			//#ENDIF
 
 			let result = obj[field];
 
@@ -384,8 +386,10 @@ var watchObj = (root, callback) => {
 				if (innerResult.isProxy)
 					innerResult = innerResult.removeProxy;
 
+				//#IFDEV
 				if (innerResult.isProxy)
 					throw new XElementError("Double wrapped proxy found.");
+				//#ENDIF
 
 				// Keep track of paths.
 				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
@@ -452,8 +456,10 @@ var removeProxies = (obj, visited) => {
 	while (obj.isProxy) // should never be more than 1 level deep of proxies.
 		obj = obj.removeProxy;
 
+	//#IFDEV
 	if (obj.isProxy)
-		throw new Error("Double wrapped proxy found.");
+		throw new XElementError("Double wrapped proxy found.");
+	//#ENDIF
 
 	if (isObj(obj)) {
 		if (!visited)
@@ -1067,7 +1073,9 @@ var initHtml = (self) => {
 				return node;
 			},
 			set: function() {
+				//#IFDEV
 				throw new Error('Property ' + id + ' not writable');
+				//#ENDIF
 			}
 		});
 

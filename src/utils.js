@@ -103,7 +103,7 @@ var traversePath = (obj, path, create, value) => {
 
 				if (i === path.length-1)
 				{
-
+					// deliberately empty.  but need to refactor loop logic.
 				}
 
 				// If next level path is a number, create as an array

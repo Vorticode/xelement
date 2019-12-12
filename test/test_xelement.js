@@ -146,30 +146,6 @@ var test_XElement = {
 		// TODO: Test duplicate id's.
 	},
 
-	atemp: function() {
-		class A2 extends XElement {
-			inner() {
-				this.clicked = true;
-			}
-		}
-		A2.html = `<div onclick="this.inner()"></div>`;
-
-		class A3 extends XElement {
-			outer() {
-				this.clicked = true;
-			}
-		}
-		A3.html = '<div><x-a2 id="a2" onclick="this.outer()"></x-a2></div>';
-
-		var a = new A3();
-
-
-		a.a2.dispatchEvent(new Event('click'));
-
-		assert(a.clicked);
-		assert(a.a2.clicked);
-	},
-
 	attributes: function() {
 		(function() {
 			class A extends XElement {}
@@ -1142,11 +1118,81 @@ var test_XElement = {
 
 	temp: function() {
 
+		class C extends XElement {}
+		C.html = `				
+			<div>
+			    <span id="names" data-loop="c.names: name">
+			        <div data-text="name"></div>
+				</span>
+			</div>`;
+
+		class B extends XElement {}
+		B.html = `				
+			<div>
+			    <x-c id="xc" data-bind="c: this.b.c"></x-c>
+			</div>`;
+
+		class A extends XElement {}
+		A.html = `				
+			<div>
+			    <x-b id="xb" data-bind="b: this.a.b"></x-b>
+			</div>`;
+
+		var xa = new A();
+		xa.a = {b: {c: {names: [1, 2, 3]}}};
+
+		console.log(xa.a);
+		console.log(xa.xb.b);
+		console.log(xa.xb.xc.c);
+		console.log(xa.xb.xc.names.children[0].textContent);
 
 	},
 
 
+	temp2: function() {
 
+
+		class B extends XElement {}
+		B.html = `				
+			<div>
+			    <span id="item2" data-text="item.name"></span>
+			</div>`;
+
+		class A extends XElement {}
+		A.html = `				
+			<div>
+			    <span id="loop" data-loop="a.items: item">
+			        <x-b data-bind="item: item"></x-b>
+				</span>
+			</div>`;
+
+		var xa = new A();
+		xa.a = {items: [{name: 1}, {name: 2}]};
+
+		console.log(xa.a);
+		console.log(xa.loop.children[0].item2);
+
+	},
+
+	temp3: function() {
+		class B extends XElement {}
+		B.html = `
+				<div>			
+					<div id="name" data-text="$parent.name"></div>
+				</div>`;
+
+		class A extends XElement {}
+		A.html = `
+				<div>
+					<x-b id="b" data-bind="$parent: this"></x-b>
+				</div>`;
+
+		var a = new A();
+
+		a.name = 'test';
+		console.log(a.b.name.textContent);
+		console.log(a.b.$parent);
+	},
 
 
 
