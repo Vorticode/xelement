@@ -108,6 +108,8 @@ var getXParent = (el) => {
 
 /**
  * Traverse through all parents to build the loop context.
+ * This will return an incorrect result if called on a nested loop element.
+ * Because the outer loop must be processed and build before we know the index for the inner element.
  * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
  * @param el
  * @return {object<string, string|int>} */
@@ -156,13 +158,6 @@ var getContext = (el) => {
 	return context;
 };
 
-/**
- * This new version could calculate the context dynamically,
- * and should work even if nodes are moved around.
- * @param el
- */
-var getContext2 = function(el) {};
-
 
 /**
  * Process all the data- attributes in el and its descendants.
@@ -193,10 +188,6 @@ var bind = (self, el, context) => {
 				// We do this here instead of in the bind function so we can build the context as we descend.
 				if (attr.name === 'data-loop') { // only the foreach part of a data-loop="..."
 
-					// Don't do data-loop binding for nested XElements.  They will do their own binding.
-					if (el !== self && el.dataAttr)
-						continue;
-
 					// Replace vars only in the part of the foreach loop before the ":"
 					// This is necessary for inner nested loops.
 					[foreach, item, indexVar] = parseLoop(code);
@@ -208,33 +199,12 @@ var bind = (self, el, context) => {
 						code = foreach + ':' + item;
 				}
 
-				// TODO: data-attr
-				// TODO: This should be done in the binding function.
-				else if (['data-bind', 'data-classes'].includes(attr.name)) {
-
-				}
-
-				else {
-					code = replaceVars(code, context);
-					code = addThis(code, context);
-				}
-
-
-				// If we have a dataAttr function to handle this specific data- attribute name.
-				if (attrName === 'bind') {
-
-					if (self !== el && el instanceof XElement)
-						dataAttr[attrName].call(self, self, code, el);
-
-				}
-
-
-				else if (dataAttr[attrName])
-					dataAttr[attrName].call(self, self, code, el);
+				if (dataAttr[attrName])
+					dataAttr[attrName](self, code, el, context);
 
 				// Otherwise just use the dataAttr.attr function.
 				else
-					dataAttr.attr.call(self, self, code, el, attrName);
+					dataAttr.attr(self, code, el, attrName, context);
 			}
 		}
 
@@ -544,7 +514,8 @@ var dataAttr = {
 	 * @param code {string}
 	 * @param el {HTMLElement}
 	 * @param attr {string} Name of the attribute on el that's being bound.  Doesn't include 'data-' prefix. */
-	attr: (self, code, el, attr) => {
+	attr: (self, code, el, attr, context) => {
+		code = addThis(replaceVars(code, context), context);
 
 		let setAttr = function(/*action, path, value*/) {
 			var result = safeEval.call(self, code);
@@ -566,19 +537,14 @@ var dataAttr = {
 	},
 
 
-	bind: (self, code, el) => {
+	bind: (self, code, el, context) => {
+		if (!(self !== el && el instanceof XElement))
+			return;
+
 		// Temporary.  Put this in its own function or something.
 		var obj = parseObj(code);
-		var context = getContext(el);
-		for (let name in obj)
-			obj[name] = addThis(replaceVars(obj[name], context), context);
-		code = joinObj(obj);
-
-		let assignments = code/*.replace(/^{|}$/g, '')*/.split(/;/g).map((x) => x.trim().split(/\s*:/g));
-
-		for (let assignment of assignments) {
-			let expr = addThis(assignment[1]);
-			let prop = assignment[0];
+		for (let prop in obj) {
+			let expr = addThis(replaceVars(obj[prop], context), context);
 
 			// This code is called on every update.
 			let updateProp = function updateProp(action, path, value) {
@@ -603,38 +569,25 @@ var dataAttr = {
 		bind(el, el);
 	},
 
-	classes: (self, code, el) => {
+	classes: (self, code, el, context) => {
 
 		// Temporary.  Put this in its own function or something.
 		var obj = parseObj(code);
-		var context = getContext(el);
-		for (let name in obj)
-			obj[name] = addThis(replaceVars(obj[name], context), context);
-
-		code = joinObj(obj);
-
-		// remove leading and trailing {}.
-		// Split on ;
-		// Split on :
-		// No need for \s* after : because parseVars can handle it.
-		let assignments = code/*.replace(/^{|}$/g, '')*/.split(/;/g).map((x) => x.trim().split(/\s*:/g));
-
-
-
-		for (let cls of assignments) {
-			let classExpr = addThis(cls[1]);
+		for (let name in obj) {
+			let classExpr = addThis(replaceVars(obj[name], context), context);
 
 			// This code is called on every update.
-			let updateClass = function() {
+			let updateClass = function () {
 				let result = safeEval.call(self, classExpr);
 				if (result)
-					el.classList.add(cls[0]);
+					el.classList.add(name);
 				else {
-					el.classList.remove(cls[0]);
+					el.classList.remove(name);
 					if (!el.classList.length) // remove attribute after last class removed.
 						el.removeAttribute('class');
 				}
 			}.bind(self);
+
 
 			// Create properties and watch for changes.
 			for (let path of parseVars(classExpr)) {
@@ -645,9 +598,12 @@ var dataAttr = {
 			// Set initial values.
 			updateClass();
 		}
+
+
 	},
 
-	text: (self, code, el) => {
+	text: (self, code, el, context) => {
+		code = addThis(replaceVars(code, context), context);
 		let setText = function setText(action, path, value) {
 
 			el.textContent = safeEval.call(self, code);
@@ -661,7 +617,8 @@ var dataAttr = {
 		setText();
 	},
 
-	html: (self, code, el) => {
+	html: (self, code, el, context) => {
+		code = addThis(replaceVars(code, context), context);
 		let setHtml = function setHtml(action, path, value) {
 			el.innerHTML = safeEval.call(self, code);
 		};
@@ -677,7 +634,7 @@ var dataAttr = {
 
 
 
-	loop: (self, code, el) => {
+	loop: (self, code, el, context) => {
 
 		if (el.shadowRoot)
 			el = el.shadowRoot;
@@ -787,7 +744,8 @@ var dataAttr = {
 	},
 
 	// Special 2-way binding
-	val: (self, code, el) => {
+	val: (self, code, el, context) => {
+		code = addThis(replaceVars(code, context), context);
 
 		// Update object property when input value changes, only if a simple var.
 		var paths = parseVars(code);
@@ -823,7 +781,8 @@ var dataAttr = {
 		setVal();
 	},
 
-	visible: (self, code, el) => {
+	visible: (self, code, el, context) => {
+		code = addThis(replaceVars(code, context), context);
 		var displayNormal = el.style.display;
 		if (displayNormal === 'none')
 			displayNormal = '';
