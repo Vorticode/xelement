@@ -152,7 +152,7 @@ var Tests = {
 			var checked = enabled.includes(testName) ? 'checked' : '';
 			html.push(
 				'<tr>' +
-					'<td><label>' +
+					'<td><label style="user-select: none">' +
 						'<input name="' + testName + '" type="checkbox" value="1" ' + checked + '>' +
 						testName +
 					'</label></td>' +

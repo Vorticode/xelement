@@ -687,6 +687,28 @@ var test_XElement = {
 		})();
 
 
+
+		// Splice to rearrange loop with identical items
+		(function () {class BL1 extends XElement {}
+
+			class BL13 extends XElement {}
+			BL13.html = `				
+				<div data-loop="wheels: wheel">
+				    <span data-text="wheel"></span>
+				</div>`;
+			var c = new BL13();
+
+			c.wheels = [1, 1, 1];
+
+			var span2 = c.shadowRoot.children[1];
+
+			c.wheels.splice(0, 1);
+
+			assertEq(c.shadowRoot.children.length, 2);
+			assertEq(span2.parentNode, c.shadowRoot); // Make sure we didn't delete and recreate it.
+		})();
+
+
 		// TODO: Test loop over non-simple var.
 	},
 
@@ -940,17 +962,13 @@ var test_XElement = {
 		(function () {
 
 			// Make sure only the right side of data-bind has replaceVars/addThis applied.
-			class Bd1Wheel extends XElement {
-			}
-
+			class Bd1Wheel extends XElement {}
 			Bd1Wheel.html = `				
 			<div>
 			    <b data-text="wheel"></b>
 			</div>`;
 
-			class Bd1Car extends XElement {
-			}
-
+			class Bd1Car extends XElement {}
 			Bd1Car.html = `				
 			<div data-loop="wheels: wheel">
 			    <x-bd1wheel data-bind="wheel: wheel"></x-bd1wheel>
@@ -966,17 +984,13 @@ var test_XElement = {
 
 		// Watched self-assignment
 		(function () {
-			class Bd2Wheel extends XElement {
-			}
-
+			class Bd2Wheel extends XElement {}
 			Bd2Wheel.html = `				
 			<div>
 			    <b data-text="car.name"></b>
 			</div>`;
 
-			class Bd2Car extends XElement {
-			}
-
+			class Bd2Car extends XElement {}
 			Bd2Car.html = `				
 			<div>
 			    <x-bd2wheel id="wheel" data-bind="car: car"></x-bd2wheel>
@@ -1095,8 +1109,6 @@ var test_XElement = {
 			</div>`;
 
 			var t = new BD6Outer();
-			window.debug = true;
-
 			t.items = [{name: '1'}];
 
 			assertEq(t.t2.loop.children.length, 1);
@@ -1127,7 +1139,6 @@ var test_XElement = {
 			</div>`;
 
 			var t = new BD7Outer();
-			window.debug = true;
 
 			t.items = [{name: '1'}];
 
@@ -1221,7 +1232,9 @@ var test_XElement = {
 
 
 
+	temp: function() {
 
+	},
 
 
 

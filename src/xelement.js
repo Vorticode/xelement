@@ -5,28 +5,27 @@ Inherit from XElement to create custom HTML Components.
 TODO
 Make data- prefix optional.
 Fix failing Edge tests.
-Separate "this" binding for data attr on definition vs instantiation.
+Separate "this" binding for data attr on definition vs instantiation
 Make shadowdom optional.
 indexOf and includes() on arrays fail because they compare proxied objects.
 
 allow sortable?
 implement other binding functions.
-allow loop over slots if data-loop is on teh instantiation.
+allow loop over slots if data-loop is on the instantiation.
 allow loop over more than one html tag.
 cache results of parseVars() and other parse functions?
 cache the context of loop vars.
 functions to enable/disable updates.
-function to trigger updates?
+function to trigger updates?  Or a callback to apply all updates before DOM is updated.
 
 create from <template> tag
 When a change occurs, create a Set of functions to call, then later call them all.
 	That way we remove some duplicate updates.
 Auto bind to this in complex expressions if the class property already exists and the var is otherwise undefined?
 improve minifcation.
-speed up data-loop by only modifying changed elements for non-simple vars.
 Expose bindings prop in minified version.
 non-ascii variable names.
-throttle, debounce?
+throttle, debounce? data-val only trigger on change.
 Auto two-way bind for simple variables?
 bind to <input type="file">
 bind to clipboard events
@@ -50,6 +49,7 @@ Requires key="" attributes everywhere to make identical elements unique.
 Vue.js doesn't watch array indices or object property add/remove!
    You have to call Vue.set(array...)
 data: {} items shared between each component instance, unless it's wrapped in a function.
+No id's to class properties.
 
 Advantages of Vue.js
 Fast and debugged.
@@ -427,7 +427,6 @@ var initHtml = (self) => {
 
 	// 8. Bind all data- and event attributes
 	// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
-	//if (!self.hasAttribute('data-bind'))
 	bindEl(self, self);
 	bindEvents(self, root);
 
@@ -618,110 +617,99 @@ var bindings = {
 
 	loop: (self, code, el, context) => {
 
+		function rebuildChildren(action, path, value) {
+			if (window.debug)
+				debugger;
+
+			var newItems = safeEval.call(self, foreach) || [];
+			var oldItems = el.items || [];
+
+			if (arrayEq(oldItems, newItems))
+				return;
+
+			var newSet = new Set(newItems);
+
+			// Create a map from the old items to the elements that represent them.
+			var oldMap = new Map();
+			for (let i=oldItems.length-1; i>=0; i--) {
+				let oldItem = oldItems[i];
+				let child = el.children[i];
+
+				// And remove any elements that are no longer present.
+				if (!newSet.has(oldItem)) {
+					unbindEl(child);
+					el.removeChild(child);
+				}
+
+				// Create a list of items we want to keep, indexed by their value.
+				// If there are duplicates, we add them to the array.
+				// This prevents us from destroying and recreating the same elements,
+				// Which is slower and makes form elements lose focus while typing.
+				else if (oldMap.has(oldItem))
+					oldMap.get(oldItem).push(child);
+				else
+					oldMap.set(oldItem, [child]);
+			}
+
+			// Loop through newItems, creating and moving children as needed.
+			for (let i=0; i<newItems.length; i++) {
+				let newItem = newItems[i];
+				let oldChild = el.children[i];
+				let newChild = (oldMap.get(newItem) || []).pop(); // last on, first off b/c above we iterate in reverse.
+				let isNew = !newChild;
+
+				// If the existing child doesn't match the new item.
+				if (!oldChild || oldChild !== newChild) {
+
+					// Create a new one if needed.
+					if (isNew)
+						newChild = createEl(el.loopHtml);
+
+					// This can either insert the new one or move an old one to this position.
+					el.insertBefore(newChild, oldChild);
+
+					// Add binding for any new elements.
+					if (isNew) {
+						bindEl(self, newChild); // should I pass a clone of context?
+						bindEvents(self, newChild);
+					}
+				}
+			}
+
+			// If there are identical items in the array, some extras can be left at the end.
+			for (let i=oldItems.length-1; i>=newItems.length; i--) {
+				let child = el.children[i];
+				if (child) {
+					unbindEl(child);
+					el.removeChild(child);
+				}
+			}
+
+			el.items = newItems.slice(); // copy
+		}
+
+
+
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
-
-
 		// Parse code into foreach parts
 		var [foreach] = parseLoop(code);
-
-
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
-		var paths = parseVars(foreach);
-		var isSimple = isStandaloneVar(foreach);
 
 		// The code we'll loop over.
 		// We store it here because innerHTML is lost if we unbind and rebind.
 		if (!el.loopHtml)
 			el.loopHtml = el.innerHTML.trim();
 
-
-		var getModifiedIndex = (path) => {
-			// Can't calc for non-simple var.
-			// Can't calc if path doesn't match simple var path.
-			if (!isSimple || !arrayEq(path.slice(0, -1), paths[0]))
-				return -1;
-
-			return parseInt(path[path.length-1]);
-		};
-
-		function rebuildChildren(action, path, value) {
-
-			// TODO: Keep all elements the same and only update bound values?
-			// Then we only need to add and remove items from the end of the children.
-			// But this would break unbound inputs when removing from the middle of the list.
-
-			if (path) {
-				// We're modifying something inside an element, don't rebuild the whole array.
-				// Data binding within the element will handle these changes.
-				if (path.length > paths[0].length + 1)
-					return;
-
-				var index = getModifiedIndex(path);
-			}
-
-			// If code is a simple var and path modifies only one item:
-			if (path && index >= 0) {
-				let existingChild = el.children[index];
-
-				// Unbind needs to happen before existing child changes its index.
-				if (existingChild) // action==='delete' or removing item replaced by set.
-					unbindEl(existingChild);
-
-
-				if (action === 'set') { // add or replace item.
-					let newChild = createEl(el.loopHtml);
-					el.insertBefore(newChild, existingChild); // if existingChild is null, will be inserted at end.
-					bindEl(self, newChild);
-					bindEvents(self, newChild);
-				}
-
-				if (existingChild) { // action==='delete' or removing item replaced by set.
-					// Calling unbindEl() makes unit tests fail, not sure why.
-					//unbindEl(existingChild);
-					el.removeChild(existingChild);
-				}
-			}
-
-			// Otherwise we have to rebuild all children.
-			else {
-
-				// Remove all children.
-				while (el.lastChild) {
-					if (el.lastChild.nodeType === 1)
-					// If we don't unbind, changing the array will still updated these detached elements.
-					// This will cause errors because these detached elements can't traverse upward to find their array contexts.
-					// TODO: unbindEvents()?
-						unbindEl(el.lastChild);
-
-					el.removeChild(el.lastChild);
-				}
-
-				// Recreate all children.
-				if (el.loopHtml.length) {
-					let result = safeEval.call(self, foreach);
-
-					for (let i in result) {
-						let child = createEl(el.loopHtml);
-						el.appendChild(child);
-
-						bindEl(self, child);
-						bindEvents(self, child);
-					}
-				}
-			}
-		}
-
 		// Remove children before calling rebuildChildren()
 		// That way we don't unbind elements that were never bound.
 		while (el.lastChild)
 			el.removeChild(el.lastChild);
 
-		for (let path of paths) {
+		for (let path of parseVars(foreach)) {
 			watchXElement(self, path, rebuildChildren);
-
 			addWatchedEl(el, rebuildChildren);
 		}
 
@@ -738,7 +726,7 @@ var bindings = {
 		if (paths.length === 1 && isStandaloneVar(code))
 			el.addEventListener('input', () => {
 				let value;
-				if (el.getAttribute('type') === 'checkbox')
+				if (el.type === 'checkbox')
 					value = el.checked;
 				else
 					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
@@ -750,7 +738,7 @@ var bindings = {
 		let setVal = function(action, path, value) {
 			let result = safeEval.call(self, code);
 
-			if (el.getAttribute('type') === 'checkbox')
+			if (el.type === 'checkbox')
 				// noinspection EqualityComparisonWithCoercionJS
 				el.checked = result == true;
 			else
@@ -794,7 +782,8 @@ var bindings = {
 
 
 /**
- * Traverse starting from path and working downward,
+ * TODO: This function may be unnecessary.  I should try replacing it with watch().
+ * Traverse starting from path and working upward,
  * looking for an existing XElement to watch.
  * This allows the corret object to be watched when data-bind is used.
  * @param obj

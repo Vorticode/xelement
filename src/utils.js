@@ -6,9 +6,32 @@ class XElementError extends Error {
 }
 //#ENDIF
 
+/**
+ * Return true if the two arrays have the same items in the same order.
+ * @param array1 {*[]}
+ * @param array2 {*[]}
+ * @returns {boolean} */
 var arrayEq = (array1, array2) => {
-	return array1.length === array2.length && array1.every((value, index) => value === array2[index])
+	if (array1.length !== array2.length)
+		return false;
+
+	if (array1.isProxy)
+		array1 = array1.removeProxy;
+	if (array2.isProxy)
+		array2 = array2.removeProxy;
+	return array1.every((value, index) => eq(value, array2[index]))
 };
+
+var eq = (item1, item2) => {
+
+	if (item1.isProxy)
+		item1 = item1.removeProxy;
+	if (item2.isProxy)
+		item2 = item2.removeProxy;
+	return item1 === item2;
+}
+
+
 
 var createEl = (html) => {
 	var div = document.createElement('div');
