@@ -217,7 +217,7 @@ class WatchProperties {
 
 		// Make sure path is an array.
 		if (typeof path === 'string')
-			path = parseVars(path)[0];
+			path = JSON.parse('[' + path + ']');
 
 		// Remove the callback from this path and all parent paths.
 		let cpath = csv(path);

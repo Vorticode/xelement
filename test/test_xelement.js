@@ -1190,6 +1190,7 @@ var test_XElement = {
 		var a = new A();
 
 		a.name = 'test';
+		a.b.$parent = a; // this triggers it to change.
 		console.log(a.b.name.textContent);
 		console.log(a.b.$parent);
 	},

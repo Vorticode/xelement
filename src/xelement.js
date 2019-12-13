@@ -160,7 +160,7 @@ var getContext = (el) => {
 
 
 /**
- * Process all the data- attributes in el and its descendants.
+ * Recursively process all the data- attributes in el and its descendants.
  * @param self {XElement}
  * @param el {HTMLElement}
  * @param context {object<string, string>=} A map of loop variable names to their absolute reference.
@@ -177,6 +177,7 @@ var bind = (self, el, context) => {
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
 			if (attr.name.slice(0, 5) === 'data-') {
+
 				let attrName = attr.name.slice(5); // remove data- prefix.
 				let code = attr.value;
 
@@ -186,7 +187,7 @@ var bind = (self, el, context) => {
 
 				// Replace loopVars
 				// We do this here instead of in the bind function so we can build the context as we descend.
-				if (attr.name === 'data-loop') { // only the foreach part of a data-loop="..."
+				if (attrName === 'loop') { // only the foreach part of a data-loop="..."
 
 					// Replace vars only in the part of the foreach loop before the ":"
 					// This is necessary for inner nested loops.
@@ -214,7 +215,7 @@ var bind = (self, el, context) => {
 	if (el===self && el.shadowRoot)
 		root = el.shadowRoot;
 
-	for (let i = 0; i < root.children.length; i++) {
+	for (let i=0; i < root.children.length; i++) {
 
 		// Add to context as we descend.
 		if (foreach) {
@@ -230,6 +231,43 @@ var bind = (self, el, context) => {
 	if (item)
 		delete context[item];
 };
+
+/*
+var bindAttr = (self, el, attrName, code, context) => {
+
+	var foreach, item, indexVar;
+
+	// Get context only if needed.
+	if (!context)
+		context = getContext(el);
+
+	// Replace loopVars
+	// We do this here instead of in the bind function so we can build the context as we descend.
+	if (attrName === 'loop') { // only the foreach part of a data-loop="..."
+
+		// Replace vars only in the part of the foreach loop before the ":"
+		// This is necessary for inner nested loops.
+		[foreach, item, indexVar] = parseLoop(code);
+		foreach = replaceVars(foreach, context);
+		foreach = addThis(foreach, context);
+		if (indexVar)
+			code = foreach + ':' + indexVar + ',' + item;
+		else
+			code = foreach + ':' + item;
+	}
+
+	if (dataAttr[attrName])
+		dataAttr[attrName](self, code, el, context);
+
+	// Otherwise just use the dataAttr.attr function.
+	else
+		dataAttr.attr(self, code, el, attrName, context);
+
+	return [foreach, item, indexVar];
+};
+*/
+
+
 
 /**
  * @param self {XElement}
@@ -353,19 +391,6 @@ var setAttribute = (self, name, value) => {
 };
 
 
-var setAttribute2 = function (el, name, value) {
-
-	if (name.startsWith('data-')) {
-
-
-	}
-	if (events.includes(name))
-		bindEvent3(el, name.slice(2), value);
-	else
-		el.setAttribute(name, value);
-
-};
-
 var initHtml = (self) => {
 	if (self.init_)
 		return;
@@ -385,14 +410,14 @@ var initHtml = (self) => {
 			setAttribute(self, attr.name, attr.value);
 	}
 
-	// Bind events on the defintion to functions on its own element and not its container.
+	// 4. Bind events on the defintion to functions on its own element and not its container.
 	bindEvents2(self, self, div);
 
 	// 5.  Add attributes from instantiation.
 	for (let name in attributes) // From instantiation
 		setAttribute(self, name, attributes[name]);
 
-	// Create Shadow DOM
+	// 6. Create Shadow DOM
 	self.attachShadow({mode: 'open'});
 	while (div.firstChild)
 		self.shadowRoot.appendChild(div.firstChild);
@@ -422,7 +447,7 @@ var initHtml = (self) => {
 
 
 
-	// 2. Create class properties that reference any html element with an id tag.
+	// 7. Create class properties that reference any html element with an id tag.
 	var nodes = root.querySelectorAll('[id]');
 	for (let i = 0, node; node = nodes[i]; i++) {
 		let id = node.getAttribute('id');
@@ -449,20 +474,14 @@ var initHtml = (self) => {
 			node.removeAttribute('id');
 	}
 
-	// 3. Bind all data- and event attributes
+
+
+
+	// 8. Bind all data- and event attributes
 	// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
 	//if (!self.hasAttribute('data-bind'))
 	bind(self, self);
 	bindEvents(self, root);
-
-	/*
-	nodes = root.querySelectorAll('[id]');
-	for (let i = 0, node; node = nodes[i]; i++)
-
-		if (node instanceof XElement) {
-			node.$parent = getXParent(node);
-		}
-	*/
 
 };
 
@@ -484,14 +503,6 @@ class XElement extends HTMLElement {
 			throw error;
 		}
 		//#ENDIF
-
-		// Only initHtml on construction if not instantiated wit
-		// If it's instantiated with new ClassName() instead of via <x-classname>,
-		// then bind the html right away.  That way we can reference the html in JavaScript before we add
-		// it to the DOM.
-		// However, <x-classname> would fail if we gave it children in the constructor instead of in connectedCallbac()
-		if (document.currentScript)
-			initHtml(this);
 
 		let xname = getXName(this.constructor);
 		let self = this;
@@ -541,8 +552,11 @@ var dataAttr = {
 		if (!(self !== el && el instanceof XElement))
 			return;
 
+
 		// Temporary.  Put this in its own function or something.
 		var obj = parseObj(code);
+
+		/*
 		for (let prop in obj) {
 			let expr = addThis(replaceVars(obj[prop], context), context);
 
@@ -555,18 +569,49 @@ var dataAttr = {
 
 			// Create properties and watch for changes.
 			// if expr is "this", we won't watch anything since we can only watch props not objects.
+
 			for (let path of parseVars(expr))
-				watch(self, path, updateProp);
+				watchXElement(self, path, updateProp);
 
 			// Set initial values.
 			updateProp();
 		}
+		*/
 
-		// These were called once when we were instantiated.
-		// But with a new variable bound we have to redo them.
-		// TODO: Modify initHtml to not bind if the data-bind attribute is present on the instantiation.
-		unbind(el, el);
-		bind(el, el);
+
+		for (let prop in obj) {
+
+			// Assign the referenced object to a variable on el.
+			let expr = addThis(replaceVars(obj[prop], context), context);
+			let result = safeEval.call(self, expr);
+			el[prop] = result;
+
+			// new!
+
+			// If binding to the parent, "this", we need to take extra steps,
+			// because normally we can only bind to object properties and not the object itself.
+			if (expr === 'this') {
+
+				// 1. We get the subscriptions that watch the property on el.
+				let subs = watched.get(el).subs_;
+
+				for (let sub in subs) {
+					if (sub.startsWith('"' + prop + '"')) {
+						let subPath = JSON.parse('[' + sub + ']');
+
+						// 2. For each function, we move the watch from the child object to the parent object.
+						for (let callback of subs[sub]) {
+							unwatch(el, subPath, callback);
+							watch(self, subPath.slice(1), function (action, path, value) {
+								// 3. And intercept its call to make sure we pass the original path.
+								callback.call(el, action, subPath, value);
+							});
+						}
+					}
+				}
+			}
+		}
+
 	},
 
 	classes: (self, code, el, context) => {
@@ -605,7 +650,7 @@ var dataAttr = {
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setText = function setText(action, path, value) {
-
+			//debugger;
 			el.textContent = safeEval.call(self, code);
 		};
 		for (let path of parseVars(code)) {
