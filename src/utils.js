@@ -79,7 +79,7 @@ function safeEval(expr) {
 		return eval(expr);
 	}
 	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError) || (!e.message.match('undefined') && !e.message.match('null')))
+		if (!(e instanceof TypeError) || (!e.message.match('undefined')))
 			throw e;
 	}
 	return undefined;

@@ -556,37 +556,18 @@ var dataAttr = {
 		// Temporary.  Put this in its own function or something.
 		var obj = parseObj(code);
 
-		/*
-		for (let prop in obj) {
-			let expr = addThis(replaceVars(obj[prop], context), context);
-
-			// This code is called on every update.
-			let updateProp = function updateProp(action, path, value) {
-				let result = safeEval.call(self, expr);
-				el[prop] = result;
-
-			}.bind(self);
-
-			// Create properties and watch for changes.
-			// if expr is "this", we won't watch anything since we can only watch props not objects.
-
-			for (let path of parseVars(expr))
-				watchXElement(self, path, updateProp);
-
-			// Set initial values.
-			updateProp();
-		}
-		*/
-
-
 		for (let prop in obj) {
 
 			// Assign the referenced object to a variable on el.
 			let expr = addThis(replaceVars(obj[prop], context), context);
-			let result = safeEval.call(self, expr);
-			el[prop] = result;
 
-			// new!
+			let updateProp = function updateProp(action, path, value) {
+				el[prop] = safeEval.call(self, expr);
+			}.bind(self);
+
+
+			// Set initial values.
+			updateProp();
 
 			// If binding to the parent, "this", we need to take extra steps,
 			// because normally we can only bind to object properties and not the object itself.
@@ -609,6 +590,13 @@ var dataAttr = {
 						}
 					}
 				}
+			}
+
+			// Add a regular watch.
+			else {
+				for (let path of parseVars(expr))
+					watchXElement(self, path, updateProp);
+
 			}
 		}
 
