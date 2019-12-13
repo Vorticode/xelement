@@ -238,7 +238,7 @@ var test_XElement = {
 		// Regular attribute
 		(function () {
 			class B1 extends XElement {}
-			B1.html = '<div><span id="span" data-title="titleProp">Text</span></div>';
+			B1.html = '<div><span id="span" data-attribs="title: titleProp">Text</span></div>';
 			var b = new B1();
 
 			b.titleProp = 'val1';
@@ -248,7 +248,7 @@ var test_XElement = {
 		// Bind to sub-property
 		(function () {
 			class B1 extends XElement {}
-			B1.html = '<div><span data-title="span[0].titleProp">Text</span></div>';
+			B1.html = '<div><span data-attribs="title: span[0].titleProp">Text</span></div>';
 			var b = new B1();
 
 			// Ensure the span was created as an array.
@@ -303,7 +303,7 @@ var test_XElement = {
 			b.item = {name: 1};
 
 			assert(b.item.isProxy);
-			unbind(b, b.shadowRoot.children[1]);
+			unbindEl(b, b.shadowRoot.children[1]);
 			assert(b.item.isProxy);
 		})();
 	},
@@ -659,7 +659,7 @@ var test_XElement = {
 				</div>`;
 
 			var p = new BL11();
-			p.parts = null; // TypeError is caught.  Can't evaluate code of loop.
+			p.parts = undefined; // TypeError is caught.  Can't evaluate code of loop.
 		})();
 
 		// Async
@@ -673,7 +673,7 @@ var test_XElement = {
 			class Car12 extends XElement {}
 			Car12.html = `				
 			<div data-loop="wheels: wheel">
-			    <x-wheel12 data-title="wheel"></x-wheel12>
+			    <x-wheel12 data-attribs="title: wheel"></x-wheel12>
 			</div>`;
 			var c = new Car12();
 			c.wheels = [];

@@ -280,7 +280,11 @@ var unwatch = (obj, path, callback) => {
 	var wp = watched.get(obj);
 
 	if (wp) {
-		wp.unsubscribe(path, callback);
+		if (path)
+			wp.unsubscribe(path, callback);
+		else
+			for (let sub in wp.subs_)
+				wp.unsubscribe(sub);
 
 		// Remove from watched objects if we're no longer watching
 		if (!Object.keys(wp.subs_).length)

@@ -3,13 +3,13 @@ Inherit from XElement to create custom HTML Components.
 
 
 TODO
-Make data- prefix optional.  Move attributes to data-attr="..." like data-classes.
+Make data- prefix optional.
 Fix failing Edge tests.
 Separate "this" binding for data attr on definition vs instantiation.
 Make shadowdom optional.
 indexOf and includes() on arrays fail because they compare proxied objects.
 
-bind to drag/drop events, allow sortable?
+allow sortable?
 implement other binding functions.
 allow loop over slots if data-loop is on teh instantiation.
 allow loop over more than one html tag.
@@ -24,7 +24,7 @@ When a change occurs, create a Set of functions to call, then later call them al
 Auto bind to this in complex expressions if the class property already exists and the var is otherwise undefined?
 improve minifcation.
 speed up data-loop by only modifying changed elements for non-simple vars.
-Expose dataAttr in minified version.
+Expose bindings prop in minified version.
 non-ascii variable names.
 throttle, debounce?
 Auto two-way bind for simple variables?
@@ -131,6 +131,7 @@ var getContext = (el) => {
 			// Check for an inner loop having the same variable name
 			let [foreach, itemVar, indexVar] = parseLoop(code);
 			foreach = addThis(foreach);
+
 			//#IFDEV
 			if (itemVar in context)
 				throw new XElementError('Loop variable "' + itemVar + '" already used in a parent loop.');
@@ -152,7 +153,7 @@ var getContext = (el) => {
 			lastEl = parent;
 
 		// Stop once we reach an XElement.
-		if (parent.dataAttr)
+		if (parent.bindings)
 			break;
 	}
 	return context;
@@ -169,7 +170,7 @@ var getContext = (el) => {
  *         <div data-val="item.name">
  *  The looped item becomes:
  *         <div data-val="this.items[0].name"> */
-var bind = (self, el, context) => {
+var bindEl = (self, el, context) => {
 	var foreach, item, indexVar;
 
 
@@ -194,18 +195,15 @@ var bind = (self, el, context) => {
 					[foreach, item, indexVar] = parseLoop(code);
 					foreach = replaceVars(foreach, context);
 					foreach = addThis(foreach, context);
-					if (indexVar)
-						code = foreach + ':' + indexVar + ',' + item;
-					else
-						code = foreach + ':' + item;
 				}
 
-				if (dataAttr[attrName])
-					dataAttr[attrName](self, code, el, context);
+				if (bindings[attrName])
+					bindings[attrName](self, code, el, context);
 
-				// Otherwise just use the dataAttr.attr function.
+				//#IFDEV
 				else
-					dataAttr.attr(self, code, el, attrName, context);
+					throw new Error (attrName);
+				//#ENDIF
 			}
 		}
 
@@ -218,13 +216,14 @@ var bind = (self, el, context) => {
 	for (let i=0; i < root.children.length; i++) {
 
 		// Add to context as we descend.
+		// This seems only needed to soupport nested loops?
 		if (foreach) {
 			context[item] = foreach + '[' + i + ']';
 			if (indexVar !== undefined)
 				context[indexVar] = i;
 		}
 
-		bind(self, root.children[i], context);
+		bindEl(self, root.children[i], context);
 	}
 
 	// Remove the loop context after we traverse outside of it.
@@ -232,47 +231,12 @@ var bind = (self, el, context) => {
 		delete context[item];
 };
 
-/*
-var bindAttr = (self, el, attrName, code, context) => {
-
-	var foreach, item, indexVar;
-
-	// Get context only if needed.
-	if (!context)
-		context = getContext(el);
-
-	// Replace loopVars
-	// We do this here instead of in the bind function so we can build the context as we descend.
-	if (attrName === 'loop') { // only the foreach part of a data-loop="..."
-
-		// Replace vars only in the part of the foreach loop before the ":"
-		// This is necessary for inner nested loops.
-		[foreach, item, indexVar] = parseLoop(code);
-		foreach = replaceVars(foreach, context);
-		foreach = addThis(foreach, context);
-		if (indexVar)
-			code = foreach + ':' + indexVar + ',' + item;
-		else
-			code = foreach + ':' + item;
-	}
-
-	if (dataAttr[attrName])
-		dataAttr[attrName](self, code, el, context);
-
-	// Otherwise just use the dataAttr.attr function.
-	else
-		dataAttr.attr(self, code, el, attrName, context);
-
-	return [foreach, item, indexVar];
-};
-*/
-
 
 
 /**
- * @param self {XElement}
- * @param root {HTMLElement} */
-var unbind = (self, root) => {
+ * @param root {HTMLElement} Remove all bindings within root and children.*/
+var unbindEl = (root) => {
+
 	var els = [...root.querySelectorAll('*')];
 	if (root.attributes)
 		els.unshift(root);
@@ -281,20 +245,24 @@ var unbind = (self, root) => {
 
 		for (let attr of el.attributes) {
 			if (attr.name.slice(0, 5) === 'data-') {
-				let code = attr.value;
-				if (!context)
-					var context = getContext(el);
+				let callbacks = watchedEls.get(el) || [];
+				if (callbacks.length) {
+					let code = attr.value;
+					var context = context || getContext(el);
 
-				if (attr.name === 'data-loop') // get vars from only the foreach part of a data-loop="..."
-					code = parseLoop(code)[0];
+					if (attr.name === 'data-loop') // get vars from only the foreach part of a data-loop="..."
+						code = parseLoop(code)[0];
 
-				code = replaceVars(code, context);
-				let paths = parseVars(code);
+					code = replaceVars(code, context);
+					let paths = parseVars(code); // TODO this will not property parse classes, attribs, and data-bind.
 
-				for (let path of paths)
-					// watchedEls.get() returns callbacks from all paths, but unwatch only unsubscribes those of path.
-					for (let callback of watchedEls.get(el) || [])
-						unwatch(self, path, callback);
+					for (let path of paths)
+						// watchedEls.get() returns callbacks from all paths, but unwatch only unsubscribes those of path.
+						for (let callback of callbacks || []) {
+							var self = self || getXParent(root);
+							unwatch(self, path, callback);
+						}
+				}
 			}
 		}
 	}
@@ -314,11 +282,11 @@ var bindEvents = (self, root) => {
 	// Traverse through every child element.
 	// TODO: Don't descend into other xelements once we make shadowdom optional.
 	for (let el of els) {
-		bindEvents2(self, el);
+		bindElEvents(self, el);
 	}
 };
 
-var bindEvents2 = (self, el, getAttributesFrom) => {
+var bindElEvents = (self, el, getAttributesFrom) => {
 	getAttributesFrom = getAttributesFrom || el;
 
 	for (let event_ of events) {
@@ -348,26 +316,6 @@ var bindEvents2 = (self, el, getAttributesFrom) => {
 	}
 };
 
-var bindEvent3 = function(el, eventName, code) {
-	let context = getContext(el);
-	code = replaceVars(code, context);
-
-	// If it's a simple function that exists in the class,
-	// add the "this" prefix.
-	let path = parseVars(code, 0, 1)[0];
-	if (path && traversePath(self, path) instanceof Function)
-		code = addThis(code, context, isStandaloneCall);
-
-	// The code in the attribute can reference:
-	// 1. event, assigned to the current event.
-	// 2. this, assigned to the class instance.
-	el.addEventListener(eventName, function (event) {
-		eval(code);
-	}.bind(self));
-
-	// Remove the original version so it doesn't also fire.
-	el.removeAttribute('on' + eventName);
-};
 
 var setAttribute = (self, name, value) => {
 
@@ -411,7 +359,7 @@ var initHtml = (self) => {
 	}
 
 	// 4. Bind events on the defintion to functions on its own element and not its container.
-	bindEvents2(self, self, div);
+	bindElEvents(self, self, div);
 
 	// 5.  Add attributes from instantiation.
 	for (let name in attributes) // From instantiation
@@ -480,7 +428,7 @@ var initHtml = (self) => {
 	// 8. Bind all data- and event attributes
 	// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
 	//if (!self.hasAttribute('data-bind'))
-	bind(self, self);
+	bindEl(self, self);
 	bindEvents(self, root);
 
 };
@@ -516,7 +464,7 @@ class XElement extends HTMLElement {
 }
 
 // TODO: write a function to replace common code among these.
-var dataAttr = {
+var bindings = {
 
 	/**
 	 * When self.field changes, update the value of <el attr>.
@@ -524,27 +472,30 @@ var dataAttr = {
 	 * @param self {XElement}
 	 * @param code {string}
 	 * @param el {HTMLElement}
-	 * @param attr {string} Name of the attribute on el that's being bound.  Doesn't include 'data-' prefix. */
-	attr: (self, code, el, attr, context) => {
-		code = addThis(replaceVars(code, context), context);
+	 * @param context {object<string, string>} */
+	attribs: (self, code, el, context) => {
+		var obj = parseObj(code);
+		for (let name in obj) {
+			let attrExpr = addThis(replaceVars(obj[name], context), context);
 
-		let setAttr = function(/*action, path, value*/) {
-			var result = safeEval.call(self, code);
-			if (result === false || result === null || result === undefined)
-				el.removeAttribute(attr);
-			else
-				el.setAttribute(attr, result + '');
+			let setAttr = function (/*action, path, value*/) {
+				var result = safeEval.call(self, attrExpr);
+				if (result === false || result === null || result === undefined)
+					el.removeAttribute(name);
+				else
+					el.setAttribute(name, result + '');
 
-		}.bind(self);
+			}.bind(self);
 
-		// If the variables in code, change, execute the code.
-		// Then set the attribute to the value returned by the code.
-		for (let path of parseVars(code)) {
-			watchXElement(self, path, setAttr);
-			addWatchedEl(el, setAttr);
+			// If the variables in code, change, execute the code.
+			// Then set the attribute to the value returned by the code.
+			for (let path of parseVars(attrExpr)) {
+				watchXElement(self, path, setAttr);
+				addWatchedEl(el, setAttr);
+			}
+
+			setAttr();
 		}
-
-		setAttr();
 	},
 
 
@@ -593,11 +544,9 @@ var dataAttr = {
 			}
 
 			// Add a regular watch.
-			else {
+			else
 				for (let path of parseVars(expr))
 					watchXElement(self, path, updateProp);
-
-			}
 		}
 
 	},
@@ -669,16 +618,19 @@ var dataAttr = {
 
 	loop: (self, code, el, context) => {
 
-		if (el.shadowRoot)
-			el = el.shadowRoot;
+		// Allow loop attrib to be applied above shadowroot.
+		el = el.shadowRoot || el;
 
 
 
-		// Parse code into foreach parts.
-		var loopVar;
-		[code, loopVar] = parseLoop(code);
-		var paths = parseVars(code);
-		var isSimple = isStandaloneVar(code);
+		// Parse code into foreach parts
+		var [foreach] = parseLoop(code);
+
+
+		foreach = replaceVars(foreach, context);
+		foreach = addThis(foreach, context);
+		var paths = parseVars(foreach);
+		var isSimple = isStandaloneVar(foreach);
 
 		// The code we'll loop over.
 		// We store it here because innerHTML is lost if we unbind and rebind.
@@ -716,18 +668,19 @@ var dataAttr = {
 
 				// Unbind needs to happen before existing child changes its index.
 				if (existingChild) // action==='delete' or removing item replaced by set.
-					unbind(self, existingChild);
+					unbindEl(existingChild);
 
 
 				if (action === 'set') { // add or replace item.
 					let newChild = createEl(el.loopHtml);
 					el.insertBefore(newChild, existingChild); // if existingChild is null, will be inserted at end.
-					bind(self, newChild);
+					bindEl(self, newChild);
 					bindEvents(self, newChild);
 				}
 
 				if (existingChild) { // action==='delete' or removing item replaced by set.
-					// TODO: unbindEvents()?
+					// Calling unbindEl() makes unit tests fail, not sure why.
+					//unbindEl(existingChild);
 					el.removeChild(existingChild);
 				}
 			}
@@ -741,20 +694,20 @@ var dataAttr = {
 					// If we don't unbind, changing the array will still updated these detached elements.
 					// This will cause errors because these detached elements can't traverse upward to find their array contexts.
 					// TODO: unbindEvents()?
-						unbind(self, el.lastChild);
+						unbindEl(el.lastChild);
 
 					el.removeChild(el.lastChild);
 				}
 
 				// Recreate all children.
 				if (el.loopHtml.length) {
-					let result = safeEval.call(self, code);
+					let result = safeEval.call(self, foreach);
 
 					for (let i in result) {
 						let child = createEl(el.loopHtml);
 						el.appendChild(child);
 
-						bind(self, child);
+						bindEl(self, child);
 						bindEvents(self, child);
 					}
 				}
@@ -903,5 +856,5 @@ Object.defineProperty(XElement, 'html', {
 });
 
 // Exports
-XElement.dataAttr = dataAttr;
+XElement.bindings = bindings;
 window.XElement = XElement;
