@@ -140,16 +140,22 @@ class ProxyObject {
 
 	/**
 	 * @param obj {object}
-	 * @param roots {object[]=}
+	 * @param roots {object[]=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
 	static get(obj, roots) {
 		if (obj.isProxy)
 			obj = obj.removeProxy;
 
-		if (!proxyObjects.has(obj))
-			proxyObjects.set(obj, new ProxyObject(obj, roots));
+		var result = proxyObjects.get(obj);
+		if (!result) {
+			result = new ProxyObject(obj, roots);
+			proxyObjects.set(obj, result);
+		}
+		// Merge in new roots
+		else if (roots)
+			result.roots = new Set([...result.roots, ...roots]);
 
-		return proxyObjects.get(obj);
+		return result;
 	}
 }
 
@@ -192,11 +198,11 @@ class ProxyRoot {
 
 /**
  * @type {WeakMap<object, ProxyRoot>} */
-var proxyRoots = new WeakMap();
+var proxyRoots = new Map();
 
 /**
  * @type {WeakMap<object, ProxyObject>} */
-var proxyObjects = new WeakMap();  // Map from objects back to their roots.
+var proxyObjects = new Map();  // Map from objects back to their roots.
 
 
 

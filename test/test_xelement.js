@@ -1246,7 +1246,7 @@ var test_XElement = {
 
 
 
-
+	// TODO: Make these into tests.
 	failures: function() {
 
 		// Watches with roots on both an object and it's sub-property.
@@ -1281,5 +1281,36 @@ var test_XElement = {
 
 	},
 
+	failures2: function() {
 
+		// Simpler version of failure above:
+		(function() {
+
+			var a = {
+				b1: {parent: undefined},
+				b2: [1, 2]
+			};
+			a.b1.parent = a;
+
+			var aW = watchObj(a, (action, path, value) => {
+				console.log('aW', path);
+			});
+
+			var bW = watchObj(a.b1, (action, path, value) => {
+				console.log('bW', path);
+			});
+
+			// Trigger proxies to be created via get, just in case that's needed.
+			var v = aW.b1.parent.b2[0];
+			v = bW.parent;
+			v = v.b2[0];
+
+			//aW.b2[0] = 5;
+			var b2 = bW.parent.b2;
+			b2[0] = 5; // prints bW only if aW doesn't exist.
+
+
+		})();
+
+	},
 };
