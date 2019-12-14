@@ -30,6 +30,7 @@ var removeProxies = (obj, visited) => {
 				let v = removeProxies(t, visited);
 				if (v !== t)
 					watchlessSet(obj, [name],  v);
+					// obj.removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
 			}
 	}
 	return obj;
@@ -81,7 +82,7 @@ class WatchProperties {
 	 * @param callback {function((action:string, path:string[], value:string?)} */
 	subscribe(path, callback) {
 		if (typeof path === 'string')
-			path = parseVars(path)[0]; // TODO subscribe to all vars?
+			path = [path];
 
 		// Create property at top level path, even if we're only watching something much deeper.
 		// This way we don't have to worry about overriding properties created at deeper levels.
@@ -162,6 +163,8 @@ var watch = (obj, path, callback) => {
 	if (obj.isProxy)
 		obj = obj.removeProxy;
 
+
+	// Keep only one WatchProperties per watched object.
 	var wp;
 	if (!watched.has(obj)) {
 		wp = new WatchProperties(obj);

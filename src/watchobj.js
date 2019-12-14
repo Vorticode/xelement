@@ -19,6 +19,9 @@ var handler = {
 
 
 		let result = obj[field];
+
+		// We only wrap objects and arrays in proxies.
+		// Primitives and functions we leave alone.
 		if (isObj(result)) {
 
 			// Remove any proxies.

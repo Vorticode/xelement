@@ -1371,7 +1371,7 @@ var bindings = {
 
 					// Create a new one if needed.
 					if (isNew)
-						newChild = createEl(el.loopHtml);
+						newChild = createEl(el.$loopHtml);
 
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
@@ -1408,8 +1408,8 @@ var bindings = {
 
 		// The code we'll loop over.
 		// We store it here because innerHTML is lost if we unbind and rebind.
-		if (!el.loopHtml)
-			el.loopHtml = el.innerHTML.trim();
+		if (!el.$loopHtml)
+			el.$loopHtml = el.innerHTML.trim();
 
 		// Remove children before calling rebuildChildren()
 		// That way we don't unbind elements that were never bound.

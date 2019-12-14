@@ -71,11 +71,23 @@ lazy modifier for input binding, to only trigger update after change.
 // This way when we remove an element we know what to unbind.
 var watchedEls = new WeakMap();
 
-var addWatchedEl = (el, callback) => {
+class ElSubscriptions {
+	constructor() {
+		this.subscriptions = [];
+	}
+
+	add(path, callback) {
+		this.subscriptions.push({
+			path: path,
+			callback: callback
+		});
+	}
+}
+
+var addWatchedEl = (el, path, callback) => {
 	if (!watchedEls.has(el))
-		watchedEls.set(el, [callback]);
-	else
-		watchedEls.get(el).push(callback);
+		watchedEls.set(el, new ElSubscriptions());
+	watchedEls.get(el).add(path, callback);
 };
 
 
@@ -171,13 +183,13 @@ var getContext = (el) => {
  *  The looped item becomes:
  *         <div data-val="this.items[0].name"> */
 var bindEl = (self, el, context) => {
-	var foreach, item, indexVar;
+	//var foreach, item, indexVar;
 
 
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
-			if (attr.name.slice(0, 5) === 'data-') {
+			if (attr.name.startsWith('data-')) {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
 				let code = attr.value;
@@ -185,6 +197,7 @@ var bindEl = (self, el, context) => {
 				// Get context only if needed.
 				if (!context)
 					context = getContext(el);
+				/*
 
 				// Replace loopVars
 				// We do this here instead of in the bind function so we can build the context as we descend.
@@ -196,6 +209,7 @@ var bindEl = (self, el, context) => {
 					foreach = replaceVars(foreach, context);
 					foreach = addThis(foreach, context);
 				}
+				*/
 
 				if (bindings[attrName])
 					bindings[attrName](self, code, el, context);
@@ -213,22 +227,25 @@ var bindEl = (self, el, context) => {
 	if (el===self && el.shadowRoot)
 		root = el.shadowRoot;
 
-	for (let i=0; i < root.children.length; i++) {
+	// Data loop already binds its own children when first applied.
+	if (!el.hasAttribute('data-loop'))
+		for (let i=0; i < root.children.length; i++) {
 
-		// Add to context as we descend.
-		// This seems only needed to soupport nested loops?
-		if (foreach) {
-			context[item] = foreach + '[' + i + ']';
-			if (indexVar !== undefined)
-				context[indexVar] = i;
+			// Add to context as we descend.
+			// This seems only needed to soupport nested loops?
+			/*
+			if (foreach) {
+				context[item] = foreach + '[' + i + ']';
+				if (indexVar !== undefined)
+					context[indexVar] = i;
+			}*/
+
+			bindEl(self, root.children[i], context);
 		}
 
-		bindEl(self, root.children[i], context);
-	}
-
 	// Remove the loop context after we traverse outside of it.
-	if (item)
-		delete context[item];
+	//if (item)
+	//	delete context[item];
 };
 
 
@@ -244,24 +261,28 @@ var unbindEl = (root) => {
 	for (let el of els) {
 
 		for (let attr of el.attributes) {
-			if (attr.name.slice(0, 5) === 'data-') {
-				let callbacks = watchedEls.get(el) || [];
-				if (callbacks.length) {
+			if (attr.name.startsWith('data-')) {
+				let subs = watchedEls.get(el);
+				if (subs) {
 					let code = attr.value;
 					var context = context || getContext(el);
 
 					if (attr.name === 'data-loop') // get vars from only the foreach part of a data-loop="..."
 						code = parseLoop(code)[0];
 
+					if (attr.name === 'data-loop') {
+						el.innerHTML = el.$loopHtml;
+						delete el.$loopHtml;
+						delete el.items;
+					}
+
 					code = replaceVars(code, context);
 					let paths = parseVars(code); // TODO this will not property parse classes, attribs, and data-bind.
 
-					for (let path of paths)
-						// watchedEls.get() returns callbacks from all paths, but unwatch only unsubscribes those of path.
-						for (let callback of callbacks || []) {
-							var self = self || getXParent(root);
-							unwatch(self, path, callback);
-						}
+					for (let sub of subs.subscriptions) {
+						var p = p || getXParent(root);
+						unwatch(p, sub.path, sub.callback);
+					}
 				}
 			}
 		}
@@ -462,6 +483,8 @@ class XElement extends HTMLElement {
 	}
 }
 
+
+
 // TODO: write a function to replace common code among these.
 var bindings = {
 
@@ -490,7 +513,7 @@ var bindings = {
 			// Then set the attribute to the value returned by the code.
 			for (let path of parseVars(attrExpr)) {
 				watchXElement(self, path, setAttr);
-				addWatchedEl(el, setAttr);
+				addWatchedEl(el, path, setAttr);
 			}
 
 			setAttr();
@@ -591,7 +614,7 @@ var bindings = {
 		};
 		for (let path of parseVars(code)) {
 			watchXElement(self, path, setText);
-			addWatchedEl(el, setText);
+			addWatchedEl(el, path, setText);
 		}
 
 		// Set initial value.
@@ -606,7 +629,7 @@ var bindings = {
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setHtml);
-			addWatchedEl(el, setHtml);
+			addWatchedEl(el, path, setHtml);
 		}
 
 		// Set initial value.
@@ -614,20 +637,27 @@ var bindings = {
 	},
 
 
-
+	// TODO: Removing an item from the beginning of the array copy the first to the 0th,
+	// then createEl a new 1st item before deleting it when rebuildChildren is called again with the delete operation.
+	// Batching updates into a set should fix this.
 	loop: (self, code, el, context) => {
+
+		context = {...context}; // copy
 
 		function rebuildChildren(action, path, value) {
 			if (window.debug)
 				debugger;
 
-			var newItems = safeEval.call(self, foreach) || [];
-			var oldItems = el.items || [];
+			var newItems = removeProxies(safeEval.call(self, foreach) || []);
+			var oldItems = removeProxies(el.items || []);
 
 			if (arrayEq(oldItems, newItems))
 				return;
 
 			var newSet = new Set(newItems);
+
+			for (let i in Array.from(el.children))
+				el.children[i].index = i;
 
 			// Create a map from the old items to the elements that represent them.
 			var oldMap = new Map();
@@ -662,14 +692,27 @@ var bindings = {
 
 					// Create a new one if needed.
 					if (isNew)
-						newChild = createEl(el.loopHtml);
+						newChild = createEl(el.$loopHtml);
 
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
 
 					// Add binding for any new elements.
 					if (isNew) {
-						bindEl(self, newChild); // should I pass a clone of context?
+						let i = Array.from(el.children).indexOf(newChild);
+
+						//if (loopVar in context)
+						//	throw new XElementError();
+
+						context[loopVar] = foreach + '[' + i + ']';
+						if (indexVar !== undefined) {
+
+							//if (indexVar in context)
+							//	throw new XElementError();
+							context[indexVar] = i;
+						}
+
+						//bindEl(self, newChild, context); // should I pass a clone of context?
 						bindEvents(self, newChild);
 					}
 				}
@@ -684,6 +727,26 @@ var bindings = {
 				}
 			}
 
+
+
+			// this breaks nested loops.
+			// Perhaps because we rebind the parent after the children.
+			for (let i in Array.from(el.children)) {
+				let child = el.children[i];
+				if (child.index !== i) {
+
+
+					unbindEl(child);
+
+					context[loopVar] = foreach + '[' + i + ']';
+					if (indexVar !== undefined)
+						context[indexVar] = i;
+					bindEl(self, child, context);
+				}
+				delete child.index;
+			}
+
+
 			el.items = newItems.slice(); // copy
 		}
 
@@ -693,14 +756,14 @@ var bindings = {
 		el = el.shadowRoot || el;
 
 		// Parse code into foreach parts
-		var [foreach] = parseLoop(code);
+		var [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
 
 		// The code we'll loop over.
 		// We store it here because innerHTML is lost if we unbind and rebind.
-		if (!el.loopHtml)
-			el.loopHtml = el.innerHTML.trim();
+		if (!el.$loopHtml)
+			el.$loopHtml = el.innerHTML.trim();
 
 		// Remove children before calling rebuildChildren()
 		// That way we don't unbind elements that were never bound.
@@ -709,8 +772,11 @@ var bindings = {
 
 		for (let path of parseVars(foreach)) {
 			watchXElement(self, path, rebuildChildren);
-			addWatchedEl(el, rebuildChildren);
+			addWatchedEl(el, path, rebuildChildren);
 		}
+
+		// if (window.debug && el.getAttribute('data-loop') === 'cats:cat')
+		// 	debugger;
 
 		// Set initial children
 		rebuildChildren.call(self);
@@ -747,7 +813,7 @@ var bindings = {
 		// Update input value when object property changes.
 		for (let path of paths) {
 			watchXElement(self, path, setVal);
-			addWatchedEl(el, setVal);
+			addWatchedEl(el, path, setVal);
 		}
 
 		// Set initial value.
@@ -765,7 +831,7 @@ var bindings = {
 		}.bind(self);
 		for (let path of parseVars(code)) {
 			watch(self, path, setVisible);
-			addWatchedEl(el, setVisible);
+			addWatchedEl(el, path, setVisible);
 		}
 
 		// Set initial value.
@@ -781,7 +847,7 @@ var bindings = {
 
 
 /**
- * TODO: This function may be unnecessary.  I should try replacing it with watch().
+ * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
  * Traverse starting from path and working upward,
  * looking for an existing XElement to watch.
  * This allows the corret object to be watched when data-bind is used.

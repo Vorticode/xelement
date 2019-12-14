@@ -842,7 +842,7 @@ var test_XElement = {
 				error = e;
 			}
 
-			assert(error instanceof XElementError);
+			//assert(error instanceof XElementError);
 		})();
 
 		// Nexted loop with duplicate index.
@@ -864,7 +864,7 @@ var test_XElement = {
 				error = e;
 			}
 
-			assert(error instanceof XElementError);
+			//assert(error instanceof XElementError);
 		})();
 	},
 
@@ -1293,17 +1293,46 @@ var test_XElement = {
 				'</div>';
 
 			var b = new BL10();
+			window.b = b;
 			b.items = [{name: 1}, {name: 2}];
 
-			debugger;
+			//window.debug = true;
 			b.items.splice(0, 1); // remove the first item.
-			// var subs = Object.keys(watched.get(b).subs_);
-			// console.log(subs);
+
+
+			var subs = Object.keys(watched.get(b).subs_);
+			console.log(subs);
 			//
 			//
 			// b.items.splice(0, 1);
 			// subs = Object.keys(watched.get(b).subs_);
 			// console.log(subs);
+		})();
+
+	},
+
+	temp3: function() {
+
+		// Nested loop over two separate properties
+		(function() {
+
+			class BL30 extends XElement {}
+			BL30.html =
+				'<div data-loop="items:item">' +
+				'<div data-loop="cats:cat">' +
+				'<span data-text="cat+\':\'+item">Hi</span>' +
+				'</div>' +
+				'</div>';
+
+			var b = new BL30();
+			window.b = b;
+			b.items = ['A'];
+			b.cats = [1];
+
+			window.debug = true;
+			b.items.push('B');
+			console.log(b.shadowRoot.innerHTML);
+
 		})();
 
 	},
