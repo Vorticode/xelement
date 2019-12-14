@@ -1295,14 +1295,15 @@ var test_XElement = {
 			var b = new BL10();
 			b.items = [{name: 1}, {name: 2}];
 
+			debugger;
 			b.items.splice(0, 1); // remove the first item.
-			var subs = Object.keys(watched.get(b).subs_);
-			console.log(subs);
-
-
-			b.items.splice(0, 1);
-			subs = Object.keys(watched.get(b).subs_);
-			console.log(subs);
+			// var subs = Object.keys(watched.get(b).subs_);
+			// console.log(subs);
+			//
+			//
+			// b.items.splice(0, 1);
+			// subs = Object.keys(watched.get(b).subs_);
+			// console.log(subs);
 		})();
 
 	},

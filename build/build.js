@@ -11,6 +11,7 @@ var Terser = require("./terser.min.js");
 var code = [
 	fs.readFileSync('../src/utils.js', 'utf8'),
 	fs.readFileSync('../src/parseVars.js', 'utf8'),
+	fs.readFileSync('../src/watchobj.js', 'utf8'),
 	fs.readFileSync('../src/watch.js', 'utf8'),
 	fs.readFileSync('../src/xelement.js', 'utf8')
 ];
