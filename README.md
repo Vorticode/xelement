@@ -224,7 +224,11 @@ car.wheels = [
 
 TODO
 
+## WAtch
 
+### Proxies
+
+TODO: isProxy, removeProxy
 
 ## Missing / Future Features
 

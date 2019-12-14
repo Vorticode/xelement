@@ -1,3 +1,223 @@
+var handler = {
+	/**
+	 * Overridden to wrap returned values in a Proxy, so we can see when they're changed.
+	 * And to keep track of the path as we traverse deeper into an object.
+	 * @param obj {Array|object}
+	 * @param field {string} An object key or array index.
+	 * @returns {*} */
+	get(obj, field) {
+
+		// Special properties
+		if (field==='isProxy')
+			return true;
+		if (field==='removeProxy')
+			return obj;
+		if (field==='$roots')
+			return ProxyObject.get(obj).roots;
+
+
+		let result = obj[field];
+		if (isObj(result)) {
+
+			// Remove any proxies.
+			if (result.isProxy)
+				result = result.removeProxy;
+			//#IFDEV
+			if (result.isProxy)
+				throw new XElementError("Double wrapped proxy found.");
+			//#ENDIF
+
+			// Get (or create) the single unique instances of obj shared among all roots.
+			// Keeping a shared copy lets us have multiple watchers on the same object,
+			// and notify one when another changes the value.
+			var proxyObj = ProxyObject.get(obj);
+			var proxyResult = ProxyObject.get(result, proxyObj.roots);
+
+			// Keep track of paths.
+			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
+			for (let root of proxyObj.roots) {
+				let path = proxyResult.paths.get(root);
+
+				// Set path for the first time.
+				if (!path) {
+					let parentPath = proxyObj.getPath(root);
+					path = [...parentPath, field];
+					proxyResult.paths.set(root, path);
+				}
+			}
+
+			// If setting the value to an object or array, also create a proxy around that one.
+			return proxyResult.proxy;
+		}
+		return result;
+	},
+
+	/**
+	 * Trap called whenever anything in an array or object is set.
+	 * Changing and shifting array values will also call this function.
+	 * @param obj {Array|object} root or an object within root that we're setting a property on.
+	 * @param field {string} An object key or array index.
+	 * @param newVal {*}
+	 * @returns {boolean} */
+	set(obj, field, newVal) {
+
+		// Don't allow setting proxies on underlying obj.
+		// We need to remove them recursivly in case of something like newVal=[Proxy(obj)].
+
+		var proxyObj = ProxyObject.get(obj);
+		for (let root of proxyObj.roots) {
+			if (field === 'length')
+				continue;
+
+			let path = [...proxyObj.getPath(root), field];
+
+			obj[field] = removeProxies(newVal);
+			root.callCallbacks('set', path, obj[field]);
+		}
+
+		return 1; // Proxy requires us to return true.
+	},
+
+	/**
+	 * Trap called whenever anything in an array or object is deleted.
+	 * @param obj {Array|object} root or an object within root that we're deleting a property on.
+	 * @param field {int|string} An object key or array index.
+	 * @returns {boolean} */
+	deleteProperty(obj, field) {
+		if (Array.isArray(obj))
+			obj.splice(field, 1);
+		else
+			delete obj[field];
+
+		var proxyObj = ProxyObject.get(obj);
+		for (let root of proxyObj.roots) {
+			let path = [...proxyObj.getPath(root), field];
+			root.callCallbacks('delete', path);
+		}
+
+		return 1; // Proxy requires us to return true.
+	}
+};
+
+
+// One of these will exist for each object, regardless of how many roots it's in.
+class ProxyObject {
+	constructor(obj, roots) {
+
+		/**
+		 * One shared proxy
+		 * @type object */
+		this.object = obj;
+
+		/**
+		 * One shared proxy.
+		 * @type Proxy */
+		this.proxy = new Proxy(obj, handler);
+
+		/**
+		 * Can have multiple paths, one per root.
+		 * @type {WeakMap<ProxyRoot, string[]>} */
+		this.paths = new WeakMap();
+
+		/**
+		 *  One object can belong to multiple roots.
+		 * @type {Set<ProxyRoot>} */
+		this.roots = new Set(roots || []);
+	}
+
+	/**
+	 * @param root {object}
+	 * @returns {string[]} */
+	getPath(root) {
+		if (!this.paths.has(root))
+			this.paths.set(root, []);
+		return this.paths.get(root);
+	}
+}
+
+class ProxyRoot {
+	constructor(root) {
+
+		/**
+		 * Root element we're watching.
+		 * @type object */
+		this.root = root;
+
+		/**
+		 * Child objects
+		 * @type {WeakMap<object, ProxyObject>} */
+		this.objects = new WeakMap(); // map from obj to ProxyObj
+
+		/**
+		 * Functions to call when an object changes.
+		 * @type {function[]} */
+		this.callbacks = [];
+
+
+		// Will this be used, or only the ProxyObject.proxy?
+		//this.proxy = new Proxy(root, handler);
+
+		// Add root to the ProxyObjects.
+		this.getProxyObject(root);
+	}
+
+	callCallbacks(action, path, value) {
+		for (let callback of this.callbacks)
+			callback.apply(this.root, arguments);
+	}
+
+	/**
+	 * Get or create.
+	 * @param obj {object}
+	 * @returns {ProxyObject} */
+	getProxyObject(obj) {
+		if (!this.objects.has(obj)) {
+			var po = ProxyObject.get(obj);
+			po.roots.add(this);
+			this.objects.set(obj, po);
+		}
+		return this.objects.get(obj);
+	};
+}
+
+
+/**
+ * @type {WeakMap<object, ProxyRoot>} */
+var proxyRoots = new WeakMap();
+
+/**
+ * @type {WeakMap<object, ProxyObject>} */
+var proxyObjects = new WeakMap();  // Map from objects back to their roots.
+
+
+/**
+ * @param root {object}
+ * @returns {ProxyRoot} */
+ProxyRoot.get = function(root) {
+
+	if (root.isProxy)
+		root = root.removeProxy;
+
+	if (!proxyRoots.has(root))
+		proxyRoots.set(root, new ProxyRoot(root));
+	return proxyRoots.get(root);
+};
+
+/**
+ * @param obj {object}
+ * @returns {ProxyObject} */
+ProxyObject.get = function(obj, roots) {
+	if (obj.isProxy)
+		obj = obj.removeProxy;
+
+	if (!proxyObjects.has(obj)) {
+		proxyObjects.set(obj, new ProxyObject(obj, roots));
+
+	}
+	return proxyObjects.get(obj);
+};
+
+
 /**
  * Create a copy of root, where callback() is called whenever anything within object is added, removed, or modified.
  * Monitors all deeply nested properties including array operations.
@@ -7,96 +227,18 @@
  * @returns {Proxy} */
 var watchObj = (root, callback) => {
 
-	// A map between objects and their string[] path.
-	// This is passed to callback whenever a prop changes so we know what changed.
-	var paths = new WeakMap();
-	paths.set(root, []);
+	var proxyRoot = ProxyRoot.get(root);
+	proxyRoot.callbacks.push(callback);
+	return proxyObjects.get(root).proxy;
 
-	var handler = {
-		/**
-		 * Overridden to wrap returned values in a Proxy, so we can see when they're changed.
-		 * And to keep track of the path as we traverse deeper into an object.
-		 * @param obj {Array|object}
-		 * @param field {string} An object key or array index.
-		 * @returns {*} */
-		get(obj, field) {
-			if (field==='isProxy')
-				return true;
-			if (field==='removeProxy')
-				return obj;
-
-			//#IFDEV
-			if (obj.isProxy)
-				throw new XElementError("Double wrapped proxy found.");
-			//#ENDIF
-
-			let result = obj[field];
-
-			if (isObj(result)) {
-
-				// Create a new Proxy instead of wrapping the original obj in two proxies.
-				// We don't actually want to do this because one prop that has multiple watchers may need to be passed around.
-				var innerResult = result;
-				if (innerResult.isProxy)
-					innerResult = innerResult.removeProxy;
-
-				//#IFDEV
-				if (innerResult.isProxy)
-					throw new XElementError("Double wrapped proxy found.");
-				//#ENDIF
-
-				// Keep track of paths.
-				// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-				if (!paths.has(innerResult)) {
-					let path = paths.get(obj);
-					paths.set(innerResult, [...path, field]);
-				}
-
-				if (result.isProxy)
-					return result;
-
-				// If setting the value to an object or array, also create a proxy around that one.
-				return new Proxy(result, handler);
-			}
-			return result;
-		},
-
-		/**
-		 * Trap called whenever anything in an array or object is set.
-		 * Changing and shifting array values will also call this function.
-		 * @param obj {Array|object} root or an object within root that we're setting a property on.
-		 * @param field {string} An object key or array index.
-		 * @param newVal {*}
-		 * @returns {boolean} */
-		set(obj, field, newVal) {
-
-			// Don't allow setting proxies on underlying obj.
-			// We need to remove them recursivly in case of something like newVal=[Proxy(obj)].
-
-			let path = [...paths.get(obj), field];
-			obj[field] = removeProxies(newVal);
-			if (field !== 'length')
-				callback('set', path, obj[field]);
-			return 1; // Proxy requires us to return true.
-		},
-
-		/**
-		 * Trap called whenever anything in an array or object is deleted.
-		 * @param obj {Array|object} root or an object within root that we're deleting a property on.
-		 * @param field {int|string} An object key or array index.
-		 * @returns {boolean} */
-		deleteProperty(obj, field) {
-			if (Array.isArray(obj))
-				obj.splice(field, 1);
-			else
-				delete obj[field];
-			callback('delete', [...paths.get(obj), field]);
-			return 1; // Proxy requires us to return true.
-		}
-	};
-
-	return new Proxy(root, handler);
 };
+
+
+
+
+
+
+
 
 /**
  * Operates recursively to remove all proxies.  But should it?
@@ -277,6 +419,8 @@ var watch = (obj, path, callback) => {
  * @param path {string|string[]}
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
+	if (obj.isProxy)
+		obj = obj.removeProxy;
 	var wp = watched.get(obj);
 
 	if (wp) {
@@ -316,6 +460,8 @@ var watchlessSet = (obj, path, val) => {
 	// Or just use removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
+	if (obj.isProxy)
+		obj = obj.removeProxy;
 	var wp = watched.get(obj);
 
 

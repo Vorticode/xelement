@@ -50,6 +50,25 @@ var test_Watch = {
 			b.items = [b.items[0]]; // new array, proxied original object inside.
 			assert(!b.items.removeProxy[0].isProxy);
 		})();
+
+		// Two watchers of the same array, make sure changing it through one path notifies the other.
+		(function() {
+			var b = [1, 2, 3];
+			var ops = [];
+
+			var b1 = watchObj(b, function(action, path, value) {
+				ops.push('b1');
+			});
+			var b2 = watchObj(b, function(action, path, value) {
+				ops.push('b2');
+			});
+
+			b2[0] = 5;
+
+			assertEq(ops.length, 2);
+			assertEq(ops[0], 'b1');
+			assertEq(ops[1], 'b2');
+		})();
 	},
 
 	pop: function() {
@@ -191,8 +210,6 @@ var test_XElement = {
 		assertEq(p.invalidattr, 'val1');
 	},
 
-
-
 	embed: function() {
 		class E1 extends XElement {}
 		E1.html = '<div title="E1">E1</div>';
@@ -206,7 +223,6 @@ var test_XElement = {
 		assertEq(e2.shadowRoot.innerHTML, '<x-e1 title="E2">E1</x-e1>');
 	},
 
-
 	slot: function() {
 		class S1 extends XElement {}
 		S1.html = '<div><b><slot>Fallback</slot></b></div>';
@@ -218,7 +234,6 @@ var test_XElement = {
 		assertEq(div.innerHTML, '<x-s1>Hello</x-s1>');
 		assertEq(div.childNodes[0].shadowRoot.innerHTML, '<b><slot>Fallback</slot></b>');
 	},
-
 
 	slot2: function() {
 		class S2 extends XElement {}
@@ -1234,9 +1249,63 @@ var test_XElement = {
 
 	temp: function() {
 
+		// Watches with roots on both an object and it's sub-property.
+		(function() {
+
+
+			var a = {
+				b1: {
+					c: 1,
+					parent: undefined
+				},
+				b2: [1, 2]
+			};
+			a.b1.parent = a;
+
+			var cb1 = function(action, path, value) {
+				console.log('a.b2', path);
+			};
+			watch(a, ['b2'], cb1);
+
+			var cb2 = function(action, path, value) {
+				console.log('b1.parent.b2', path);
+			};
+			watch(a.b1, ['parent', 'b2'], cb2);
+
+
+			var item = a.b1.parent.b2;
+			item[0] = 5;
+
+
+		})();
+
 	},
 
 
+	temp2: function() {
+
+		// Make sure loop items property unsubscribe as they're removed.  This used to fail.
+		(function () {
+			class BL10 extends XElement {}
+			BL10.html =
+				'<div data-loop="items:item">' +
+					'<span data-text="item.name"></span>' +
+				'</div>';
+
+			var b = new BL10();
+			b.items = [{name: 1}, {name: 2}];
+
+			b.items.splice(0, 1); // remove the first item.
+			var subs = Object.keys(watched.get(b).subs_);
+			console.log(subs);
+
+
+			b.items.splice(0, 1);
+			subs = Object.keys(watched.get(b).subs_);
+			console.log(subs);
+		})();
+
+	},
 
 
 
@@ -1265,40 +1334,5 @@ var test_XElement = {
 			console.log(c.wheel.car.name);
 			console.log(c.wheel.shadowRoot.children[0].firstChild);
 		})();
-
-
-		// Setting input value rebuilds all children!
-		(function() {
-			class T2 extends XElement {}
-			T2.html = `
-			<div>
-				<div id="loop" data-loop="t1.items: item">					
-					<input data-val="item.name">
-				</div>
-			</div>`;
-
-			class T extends XElement {}
-			T.html = `
-			<div>
-				<div id="loop" data-loop="items: item">					
-					<div data-text="item.name"></div>
-				</div>
-				<x-t2 id="t2" data-bind="t1: this"></x-t2>
-			</div>`;
-
-			var t = new T();
-			window.debug = true;
-
-			t.items = [{name: '1'}];
-
-
-			debugger;
-			t.t2.loop.children[0].value = '2';
-			t.t2.loop.children[0].dispatchEvent(new Event('input'));
-
-			console.log(t.items[0].name);
-			console.log(t.loop.children[0].textContent);
-		})();
-
 	},
 };

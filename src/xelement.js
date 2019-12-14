@@ -653,9 +653,8 @@ var bindings = {
 
 			// Loop through newItems, creating and moving children as needed.
 			for (let i=0; i<newItems.length; i++) {
-				let newItem = newItems[i];
 				let oldChild = el.children[i];
-				let newChild = (oldMap.get(newItem) || []).pop(); // last on, first off b/c above we iterate in reverse.
+				let newChild = (oldMap.get(newItems[i]) || []).pop(); // last on, first off b/c above we iterate in reverse.
 				let isNew = !newChild;
 
 				// If the existing child doesn't match the new item.
