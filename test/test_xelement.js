@@ -842,7 +842,7 @@ var test_XElement = {
 				error = e;
 			}
 
-			//assert(error instanceof XElementError);
+			assert(error instanceof XElementError);
 		})();
 
 		// Nexted loop with duplicate index.
@@ -864,7 +864,7 @@ var test_XElement = {
 				error = e;
 			}
 
-			//assert(error instanceof XElementError);
+			assert(error instanceof XElementError);
 		})();
 	},
 
@@ -1247,7 +1247,7 @@ var test_XElement = {
 
 
 
-	temp: function() {
+	failures: function() {
 
 		// Watches with roots on both an object and it's sub-property.
 		(function() {
@@ -1282,87 +1282,4 @@ var test_XElement = {
 	},
 
 
-	temp2: function() {
-
-		// Make sure loop items property unsubscribe as they're removed.  This used to fail.
-		(function () {
-			class BL10 extends XElement {}
-			BL10.html =
-				'<div data-loop="items:item">' +
-					'<span data-text="item.name"></span>' +
-				'</div>';
-
-			var b = new BL10();
-			window.b = b;
-			b.items = [{name: 1}, {name: 2}];
-
-			//window.debug = true;
-			b.items.splice(0, 1); // remove the first item.
-
-
-			var subs = Object.keys(watched.get(b).subs_);
-			console.log(subs);
-			//
-			//
-			// b.items.splice(0, 1);
-			// subs = Object.keys(watched.get(b).subs_);
-			// console.log(subs);
-		})();
-
-	},
-
-	temp3: function() {
-
-		// Nested loop over two separate properties
-		(function() {
-
-			class BL30 extends XElement {}
-			BL30.html =
-				'<div data-loop="items:item">' +
-				'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">Hi</span>' +
-				'</div>' +
-				'</div>';
-
-			var b = new BL30();
-			window.b = b;
-			b.items = ['A'];
-			b.cats = [1];
-
-			window.debug = true;
-			b.items.push('B');
-			console.log(b.shadowRoot.innerHTML);
-
-		})();
-
-	},
-
-
-
-
-
-
-	failures: function() {
-
-		// Fails
-		(function() {
-			class Bd1Wheel extends XElement {}
-			Bd1Wheel.html = `				
-				<div>
-				    <b data-text="car.name"></b>
-				</div>`;
-
-			class Bd1Car extends XElement {}
-			Bd1Car.html = `				
-				<div>
-				    <x-bd1wheel id="wheel" data-bind="car: this"></x-bd1wheel>
-				</div>`;
-
-			var c = new Bd1Car();
-			c.name = 'Toyota'; // Fails because 'name' isn't a watched property on c.
-
-			console.log(c.wheel.car.name);
-			console.log(c.wheel.shadowRoot.children[0].firstChild);
-		})();
-	},
 };

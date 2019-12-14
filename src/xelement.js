@@ -73,11 +73,11 @@ var watchedEls = new WeakMap();
 
 class ElSubscriptions {
 	constructor() {
-		this.subscriptions = [];
+		this.subs = [];
 	}
 
 	add(path, callback) {
-		this.subscriptions.push({
+		this.subs.push({
 			path: path,
 			callback: callback
 		});
@@ -183,8 +183,6 @@ var getContext = (el) => {
  *  The looped item becomes:
  *         <div data-val="this.items[0].name"> */
 var bindEl = (self, el, context) => {
-	//var foreach, item, indexVar;
-
 
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
@@ -197,19 +195,6 @@ var bindEl = (self, el, context) => {
 				// Get context only if needed.
 				if (!context)
 					context = getContext(el);
-				/*
-
-				// Replace loopVars
-				// We do this here instead of in the bind function so we can build the context as we descend.
-				if (attrName === 'loop') { // only the foreach part of a data-loop="..."
-
-					// Replace vars only in the part of the foreach loop before the ":"
-					// This is necessary for inner nested loops.
-					[foreach, item, indexVar] = parseLoop(code);
-					foreach = replaceVars(foreach, context);
-					foreach = addThis(foreach, context);
-				}
-				*/
 
 				if (bindings[attrName])
 					bindings[attrName](self, code, el, context);
@@ -223,29 +208,12 @@ var bindEl = (self, el, context) => {
 
 	// Allow traversing from host element into its own shadowRoot
 	// But not into the shadow root of other elements.
-	let root = el;
-	if (el===self && el.shadowRoot)
-		root = el.shadowRoot;
+	let root = el===self && el.shadowRoot ? el.shadowRoot : el;
 
 	// Data loop already binds its own children when first applied.
 	if (!el.hasAttribute('data-loop'))
-		for (let i=0; i < root.children.length; i++) {
-
-			// Add to context as we descend.
-			// This seems only needed to soupport nested loops?
-			/*
-			if (foreach) {
-				context[item] = foreach + '[' + i + ']';
-				if (indexVar !== undefined)
-					context[indexVar] = i;
-			}*/
-
+		for (let i=0; i < root.children.length; i++)
 			bindEl(self, root.children[i], context);
-		}
-
-	// Remove the loop context after we traverse outside of it.
-	//if (item)
-	//	delete context[item];
 };
 
 
@@ -262,13 +230,8 @@ var unbindEl = (root) => {
 
 		for (let attr of el.attributes) {
 			if (attr.name.startsWith('data-')) {
-				let subs = watchedEls.get(el);
-				if (subs) {
-					let code = attr.value;
-					var context = context || getContext(el);
-
-					if (attr.name === 'data-loop') // get vars from only the foreach part of a data-loop="..."
-						code = parseLoop(code)[0];
+				let watchedEl = watchedEls.get(el);
+				if (watchedEl) {
 
 					if (attr.name === 'data-loop') {
 						el.innerHTML = el.$loopHtml;
@@ -276,10 +239,7 @@ var unbindEl = (root) => {
 						delete el.items;
 					}
 
-					code = replaceVars(code, context);
-					let paths = parseVars(code); // TODO this will not property parse classes, attribs, and data-bind.
-
-					for (let sub of subs.subscriptions) {
+					for (let sub of watchedEl.subs) {
 						var p = p || getXParent(root);
 						unwatch(p, sub.path, sub.callback);
 					}
@@ -302,9 +262,8 @@ var bindEvents = (self, root) => {
 
 	// Traverse through every child element.
 	// TODO: Don't descend into other xelements once we make shadowdom optional.
-	for (let el of els) {
+	for (let el of els)
 		bindElEvents(self, el);
-	}
 };
 
 var bindElEvents = (self, el, getAttributesFrom) => {
@@ -698,23 +657,8 @@ var bindings = {
 					el.insertBefore(newChild, oldChild);
 
 					// Add binding for any new elements.
-					if (isNew) {
-						let i = Array.from(el.children).indexOf(newChild);
-
-						//if (loopVar in context)
-						//	throw new XElementError();
-
-						context[loopVar] = foreach + '[' + i + ']';
-						if (indexVar !== undefined) {
-
-							//if (indexVar in context)
-							//	throw new XElementError();
-							context[indexVar] = i;
-						}
-
-						//bindEl(self, newChild, context); // should I pass a clone of context?
+					if (isNew)
 						bindEvents(self, newChild);
-					}
 				}
 			}
 
@@ -727,7 +671,13 @@ var bindings = {
 				}
 			}
 
-
+			var localContext = {...context};
+			//#IFDEV
+			if (loopVar in localContext)
+				throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
+			if (indexVar && indexVar in localContext)
+				throw new XElementError('Loop index variable "' + indexVar + '" already used in outer loop.');
+			//#endif
 
 			// this breaks nested loops.
 			// Perhaps because we rebind the parent after the children.
@@ -735,13 +685,12 @@ var bindings = {
 				let child = el.children[i];
 				if (child.index !== i) {
 
-
 					unbindEl(child);
 
-					context[loopVar] = foreach + '[' + i + ']';
+					localContext[loopVar] = foreach + '[' + i + ']';
 					if (indexVar !== undefined)
-						context[indexVar] = i;
-					bindEl(self, child, context);
+						localContext[indexVar] = i;
+					bindEl(self, child, localContext);
 				}
 				delete child.index;
 			}
@@ -774,9 +723,6 @@ var bindings = {
 			watchXElement(self, path, rebuildChildren);
 			addWatchedEl(el, path, rebuildChildren);
 		}
-
-		// if (window.debug && el.getAttribute('data-loop') === 'cats:cat')
-		// 	debugger;
 
 		// Set initial children
 		rebuildChildren.call(self);
