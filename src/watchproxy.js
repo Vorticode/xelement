@@ -15,7 +15,7 @@ var handler = {
 		if (field==='$removeProxy')
 			return obj;
 		if (field==='$roots')
-			return ProxyObject.get(obj).roots;
+			return ProxyObject.get(obj).roots_;
 
 
 		let result = obj[field];
@@ -25,8 +25,7 @@ var handler = {
 		if (isObj(result)) {
 
 			// Remove any proxies.
-			if (result.$isProxy)
-				result = result.$removeProxy;
+			result = result.$removeProxy || result;
 			//#IFDEV
 			if (result.$isProxy)
 				throw new XElementError("Double wrapped proxy found.");
@@ -36,23 +35,23 @@ var handler = {
 			// Keeping a shared copy lets us have multiple watchers on the same object,
 			// and notify one when another changes the value.
 			var proxyObj = ProxyObject.get(obj);
-			var proxyResult = ProxyObject.get(result, proxyObj.roots);
+			var proxyResult = ProxyObject.get(result, proxyObj.roots_);
 
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-			for (let root of proxyObj.roots) {
-				let path = proxyResult.paths.get(root);
+			for (let root of proxyObj.roots_) {
+				let path = proxyResult.paths_.get(root);
 
 				// Set path for the first time.
 				if (!path) {
-					let parentPath = proxyObj.getPath(root);
+					let parentPath = proxyObj.getPath_(root);
 					path = [...parentPath, field];
-					proxyResult.paths.set(root, path);
+					proxyResult.paths_.set(root, path);
 				}
 			}
 
 			// If setting the value to an object or array, also create a proxy around that one.
-			return proxyResult.proxy;
+			return proxyResult.proxy_;
 		}
 		return result;
 	},
@@ -67,16 +66,16 @@ var handler = {
 	set(obj, field, newVal) {
 
 		var proxyObj = ProxyObject.get(obj);
-		for (let root of proxyObj.roots) {
-			if (field === 'length')
-				continue;
+		for (let root of proxyObj.roots_) {
+			if (field !== 'length') {
 
-			// Don't allow setting proxies on underlying obj.
-			// This removes them recursivly in case of something like newVal=[Proxy(obj)].
-			obj[field] = removeProxies(newVal);
+				// Don't allow setting proxies on underlying obj.
+				// This removes them recursivly in case of something like newVal=[Proxy(obj)].
+				obj[field] = removeProxies(newVal);
 
-			let path = [...proxyObj.getPath(root), field];
-			root.notify('set', path, obj[field]);
+				let path = [...proxyObj.getPath_(root), field];
+				root.notify_('set', path, obj[field]);
+			}
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -94,9 +93,9 @@ var handler = {
 			delete obj[field];
 
 		var proxyObj = ProxyObject.get(obj);
-		for (let root of proxyObj.roots) {
-			let path = [...proxyObj.getPath(root), field];
-			root.notify('delete', path);
+		for (let root of proxyObj.roots_) {
+			let path = [...proxyObj.getPath_(root), field];
+			root.notify_('delete', path);
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -111,31 +110,31 @@ class ProxyObject {
 		/**
 		 * One shared proxy
 		 * @type object */
-		this.object = obj;
+		//this.object = obj;
 
 		/**
 		 * One shared proxy.
 		 * @type Proxy */
-		this.proxy = new Proxy(obj, handler);
+		this.proxy_ = new Proxy(obj, handler);
 
 		/**
 		 * Can have multiple paths, one per root.
 		 * @type {WeakMap<ProxyRoot, string[]>} */
-		this.paths = new WeakMap();
+		this.paths_ = new WeakMap();
 
 		/**
 		 *  One object can belong to multiple roots.
 		 * @type {Set<ProxyRoot>} */
-		this.roots = new Set(roots || []);
+		this.roots_ = new Set(roots || []);
 	}
 
 	/**
 	 * @param root {object}
 	 * @returns {string[]} */
-	getPath(root) {
-		if (!this.paths.has(root))
-			this.paths.set(root, []);
-		return this.paths.get(root);
+	getPath_(root) {
+		if (!this.paths_.has(root))
+			this.paths_.set(root, []);
+		return this.paths_.get(root);
 	}
 
 	/**
@@ -143,17 +142,15 @@ class ProxyObject {
 	 * @param roots {object[]=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
 	static get(obj, roots) {
-		if (obj.$isProxy)
-			obj = obj.$removeProxy;
+		obj = obj.$removeProxy || obj;
 
 		var result = proxyObjects.get(obj);
 		if (!result) {
-			result = new ProxyObject(obj, roots);
-			proxyObjects.set(obj, result);
+			proxyObjects.set(obj, result = new ProxyObject(obj, roots));
 		}
 		// Merge in new roots
 		else if (roots)
-			result.roots = new Set([...result.roots, ...roots]);
+			result.roots_ = new Set([...result.roots_, ...roots]);
 
 		return result;
 	}
@@ -167,33 +164,33 @@ class ProxyRoot {
 		/**
 		 * Root element we're watching.
 		 * @type object */
-		this.root = root;
+		this.root_ = root;
 
 		/**
 		 * Functions to call when an object changes.
 		 * @type {function[]} */
-		this.callbacks = [];
+		this.callbacks_ = [];
 
 		// Add root to the ProxyObjects.
 		var po = ProxyObject.get(root);
-		po.roots.add(this);
+		po.roots_.add(this);
 	}
 
-	notify(action, path, value) {
-		for (let callback of this.callbacks)
-			callback.apply(this.root, arguments);
+	notify_(/*action, path, value*/) {
+		for (let callback of this.callbacks_)
+			callback.apply(this.root_, arguments);
 	}
 
 	/**
 	 * @param root {object}
 	 * @returns {ProxyRoot} */
 	static get(root) {
-		if (root.$isProxy)
-			root = root.$removeProxy;
+		root = root.$removeProxy || root;
 
-		if (!proxyRoots.has(root))
-			proxyRoots.set(root, new ProxyRoot(root));
-		return proxyRoots.get(root);
+		var po = proxyRoots.get(root);
+		if (!po)
+			proxyRoots.set(root, po= new ProxyRoot(root));
+		return po;
 	}
 }
 
@@ -218,6 +215,6 @@ var proxyObjects = new WeakMap();  // Map from objects back to their roots.
  * @returns {Proxy} */
 var watchProxy = (root, callback) => {
 	var proxyRoot = ProxyRoot.get(root);
-	proxyRoot.callbacks.push(callback);
-	return proxyObjects.get(root).proxy;
+	proxyRoot.callbacks_.push(callback);
+	return proxyObjects.get(root).proxy_;
 };

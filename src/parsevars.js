@@ -137,12 +137,14 @@ var parseObj = (code) => {
 	return result;
 };
 
+/*
 var joinObj = (obj) => {
 	var result = [];
 	for (let name in obj)
 		result.push (name + ':' + obj[name]);
 	return result.join(';');
 };
+*/
 
 /**
  * Parse "items : item" into two part, always splitting on the last colon.

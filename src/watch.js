@@ -46,7 +46,7 @@ class WatchProperties {
 		this.obj_ = obj;   // Original object being watched.
 		this.fields_ = {}; // $removeProxy underlying fields that store the data.
 		                   // This is necessary to store the values of obj_ after defineProperty() is called.
-		this.proxy_ = watchProxy(this.fields_, this.notify.bind(this));
+		this.proxy_ = watchProxy(this.fields_, this.notify_.bind(this));
 		this.subs_ = {};
 	}
 
@@ -55,7 +55,7 @@ class WatchProperties {
 	 * @param action {string}
 	 * @param path {string[]}
 	 * @param value {*=} */
-	notify(action, path, value) {
+	notify_(action, path, value) {
 
 		// Traverse up the path looking for anything subscribed.
 		var parentPath = path.slice(0, -1);
@@ -80,7 +80,7 @@ class WatchProperties {
 	 *
 	 * @param path {string|string[]}
 	 * @param callback {function((action:string, path:string[], value:string?)} */
-	subscribe(path, callback) {
+	subscribe_(path, callback) {
 		if (typeof path === 'string')
 			path = [path];
 
@@ -97,12 +97,8 @@ class WatchProperties {
 			Object.defineProperty(self.obj_, field, {
 				enumerable: 1,
 				configurable: 1,
-				get: () => {
-					return self.proxy_[field];
-				},
-				set: (val) => {
-					return self.proxy_[field] = val;
-				}
+				get: () => self.proxy_[field],
+				set: (val) => self.proxy_[field] = val
 			});
 		}
 
@@ -116,7 +112,7 @@ class WatchProperties {
 		self.subs_[cpath].push(callback);
 	}
 
-	unsubscribe(path, callback) {
+	unsubscribe_(path, callback) {
 
 		// Make sure path is an array.
 		if (typeof path === 'string')
@@ -160,9 +156,7 @@ var watched = new WeakMap();
  * @param path {string|string[]}
  * @param callback {function(action:string, path:string[], value:string?)} */
 var watch = (obj, path, callback) => {
-	if (obj.$isProxy)
-		obj = obj.$removeProxy;
-
+	obj = obj.$removeProxy || obj;
 
 	// Keep only one WatchProperties per watched object.
 	var wp;
@@ -173,7 +167,7 @@ var watch = (obj, path, callback) => {
 	else
 		wp = watched.get(obj);
 
-	wp.subscribe(path, callback);
+	wp.subscribe_(path, callback);
 };
 
 /**
@@ -182,16 +176,15 @@ var watch = (obj, path, callback) => {
  * @param path {string|string[]}
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
-	if (obj.$isProxy)
-		obj = obj.$removeProxy;
+	obj = obj.$removeProxy || obj;
 	var wp = watched.get(obj);
 
 	if (wp) {
 		if (path)
-			wp.unsubscribe(path, callback);
+			wp.unsubscribe_(path, callback);
 		else
 			for (let sub in wp.subs_)
-				wp.unsubscribe(sub);
+				wp.unsubscribe_(sub);
 
 		// Remove from watched objects if we're no longer watching
 		if (!Object.keys(wp.subs_).length)
@@ -223,8 +216,7 @@ var watchlessSet = (obj, path, val) => {
 	// Or just use $removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
-	if (obj.$isProxy)
-		obj = obj.$removeProxy;
+	obj = obj.$removeProxy || obj;
 	var wp = watched.get(obj);
 
 
@@ -238,8 +230,7 @@ var watchlessSet = (obj, path, val) => {
 		//	throw new XElementError('Variable ' + p + ' is already a proxy.');
 		//#ENDIF
 
-		if (node.$isProxy)
-			node = node.$removeProxy;
+		node = node.$removeProxy || node;
 	}
 
 	return node[prop] = val;

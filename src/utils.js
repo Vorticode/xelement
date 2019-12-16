@@ -15,21 +15,13 @@ var arrayEq = (array1, array2) => {
 	if (array1.length !== array2.length)
 		return false;
 
-	if (array1.$isProxy)
-		array1 = array1.$removeProxy;
-	if (array2.$isProxy)
-		array2 = array2.$removeProxy;
-	return array1.every((value, index) => eq(value, array2[index]))
+	array2 = array2.$removeProxy || array2;
+	return (array1.$removeProxy || array1).every((value, index) => eq(value, array2[index]))
 };
 
 var eq = (item1, item2) => {
-
-	if (item1.$isProxy)
-		item1 = item1.$removeProxy;
-	if (item2.$isProxy)
-		item2 = item2.$removeProxy;
-	return item1 === item2;
-}
+	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
+};
 
 
 
@@ -94,24 +86,6 @@ var parentIndex = (el) => {
 
 
 /**
- * Evaluate expr, but allow undefined variables.
- * @param expr {string}
- * @returns {*} */
-function safeEval(expr) {
-	try {
-		return eval(expr);
-	}
-	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
-			e.message += ' in expression "' + expr + '"';
-			throw e;
-		}
-	}
-	return undefined;
-}
-
-
-/**
  * @param obj {object}
  * @param path {string[]}
  * @param create {boolean=false} Create the path if it doesn't exist.
@@ -163,4 +137,26 @@ var events = Object.keys(document.__proto__.__proto__)
 	.filter((x) => x.startsWith('on'))
 	.map(   (x) => x.slice(2));
 
+
+
+
+
+/**
+ * Evaluate expr, but allow undefined variables.
+ * @param expr {string}
+ * @returns {*} */
+function safeEval(expr) {
+	try {
+		return eval(expr);
+	}
+	catch (e) { // Don't fail for null values.
+		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
+			//#IFDEV
+				e.message += ' in expression "' + expr + '"';
+			//#ENDIF
+			throw e;
+		}
+	}
+	return undefined;
+}
 

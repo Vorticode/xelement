@@ -18,21 +18,13 @@ var arrayEq = (array1, array2) => {
 	if (array1.length !== array2.length)
 		return false;
 
-	if (array1.isProxy)
-		array1 = array1.removeProxy;
-	if (array2.isProxy)
-		array2 = array2.removeProxy;
-	return array1.every((value, index) => eq(value, array2[index]))
+	array2 = array2.$removeProxy || array2;
+	return (array1.$removeProxy || array1).every((value, index) => eq(value, array2[index]))
 };
 
 var eq = (item1, item2) => {
-
-	if (item1.isProxy)
-		item1 = item1.removeProxy;
-	if (item2.isProxy)
-		item2 = item2.removeProxy;
-	return item1 === item2;
-}
+	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
+};
 
 
 
@@ -97,22 +89,6 @@ var parentIndex = (el) => {
 
 
 /**
- * Evaluate expr, but allow undefined variables.
- * @param expr {string}
- * @returns {*} */
-function safeEval(expr) {
-	try {
-		return eval(expr);
-	}
-	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError) || (!e.message.match('undefined')))
-			throw e;
-	}
-	return undefined;
-}
-
-
-/**
  * @param obj {object}
  * @param path {string[]}
  * @param create {boolean=false} Create the path if it doesn't exist.
@@ -164,6 +140,28 @@ var events = Object.keys(document.__proto__.__proto__)
 	.filter((x) => x.startsWith('on'))
 	.map(   (x) => x.slice(2));
 
+
+
+
+
+/**
+ * Evaluate expr, but allow undefined variables.
+ * @param expr {string}
+ * @returns {*} */
+function safeEval(expr) {
+	try {
+		return eval(expr);
+	}
+	catch (e) { // Don't fail for null values.
+		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
+			//#IFDEV
+				e.message += ' in expression "' + expr + '"';
+			//#ENDIF
+			throw e;
+		}
+	}
+	return undefined;
+}
 
 ;
 
@@ -306,12 +304,14 @@ var parseObj = (code) => {
 	return result;
 };
 
+/*
 var joinObj = (obj) => {
 	var result = [];
 	for (let name in obj)
 		result.push (name + ':' + obj[name]);
 	return result.join(';');
 };
+*/
 
 /**
  * Parse "items : item" into two part, always splitting on the last colon.
@@ -380,12 +380,12 @@ var handler = {
 	get(obj, field) {
 
 		// Special properties
-		if (field==='isProxy')
+		if (field==='$isProxy')
 			return true;
-		if (field==='removeProxy')
+		if (field==='$removeProxy')
 			return obj;
 		if (field==='$roots')
-			return ProxyObject.get(obj).roots;
+			return ProxyObject.get(obj).roots_;
 
 
 		let result = obj[field];
@@ -395,10 +395,9 @@ var handler = {
 		if (isObj(result)) {
 
 			// Remove any proxies.
-			if (result.isProxy)
-				result = result.removeProxy;
+			result = result.$removeProxy || result;
 			//#IFDEV
-			if (result.isProxy)
+			if (result.$isProxy)
 				throw new XElementError("Double wrapped proxy found.");
 			//#ENDIF
 
@@ -406,23 +405,23 @@ var handler = {
 			// Keeping a shared copy lets us have multiple watchers on the same object,
 			// and notify one when another changes the value.
 			var proxyObj = ProxyObject.get(obj);
-			var proxyResult = ProxyObject.get(result, proxyObj.roots);
+			var proxyResult = ProxyObject.get(result, proxyObj.roots_);
 
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-			for (let root of proxyObj.roots) {
-				let path = proxyResult.paths.get(root);
+			for (let root of proxyObj.roots_) {
+				let path = proxyResult.paths_.get(root);
 
 				// Set path for the first time.
 				if (!path) {
-					let parentPath = proxyObj.getPath(root);
+					let parentPath = proxyObj.getPath_(root);
 					path = [...parentPath, field];
-					proxyResult.paths.set(root, path);
+					proxyResult.paths_.set(root, path);
 				}
 			}
 
 			// If setting the value to an object or array, also create a proxy around that one.
-			return proxyResult.proxy;
+			return proxyResult.proxy_;
 		}
 		return result;
 	},
@@ -437,16 +436,16 @@ var handler = {
 	set(obj, field, newVal) {
 
 		var proxyObj = ProxyObject.get(obj);
-		for (let root of proxyObj.roots) {
-			if (field === 'length')
-				continue;
+		for (let root of proxyObj.roots_) {
+			if (field !== 'length') {
 
-			// Don't allow setting proxies on underlying obj.
-			// This removes them recursivly in case of something like newVal=[Proxy(obj)].
-			obj[field] = removeProxies(newVal);
+				// Don't allow setting proxies on underlying obj.
+				// This removes them recursivly in case of something like newVal=[Proxy(obj)].
+				obj[field] = removeProxies(newVal);
 
-			let path = [...proxyObj.getPath(root), field];
-			root.notify('set', path, obj[field]);
+				let path = [...proxyObj.getPath_(root), field];
+				root.notify_('set', path, obj[field]);
+			}
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -464,9 +463,9 @@ var handler = {
 			delete obj[field];
 
 		var proxyObj = ProxyObject.get(obj);
-		for (let root of proxyObj.roots) {
-			let path = [...proxyObj.getPath(root), field];
-			root.notify('delete', path);
+		for (let root of proxyObj.roots_) {
+			let path = [...proxyObj.getPath_(root), field];
+			root.notify_('delete', path);
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -481,31 +480,31 @@ class ProxyObject {
 		/**
 		 * One shared proxy
 		 * @type object */
-		this.object = obj;
+		//this.object = obj;
 
 		/**
 		 * One shared proxy.
 		 * @type Proxy */
-		this.proxy = new Proxy(obj, handler);
+		this.proxy_ = new Proxy(obj, handler);
 
 		/**
 		 * Can have multiple paths, one per root.
 		 * @type {WeakMap<ProxyRoot, string[]>} */
-		this.paths = new WeakMap();
+		this.paths_ = new WeakMap();
 
 		/**
 		 *  One object can belong to multiple roots.
 		 * @type {Set<ProxyRoot>} */
-		this.roots = new Set(roots || []);
+		this.roots_ = new Set(roots || []);
 	}
 
 	/**
 	 * @param root {object}
 	 * @returns {string[]} */
-	getPath(root) {
-		if (!this.paths.has(root))
-			this.paths.set(root, []);
-		return this.paths.get(root);
+	getPath_(root) {
+		if (!this.paths_.has(root))
+			this.paths_.set(root, []);
+		return this.paths_.get(root);
 	}
 
 	/**
@@ -513,55 +512,55 @@ class ProxyObject {
 	 * @param roots {object[]=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
 	static get(obj, roots) {
-		if (obj.isProxy)
-			obj = obj.removeProxy;
+		obj = obj.$removeProxy || obj;
 
 		var result = proxyObjects.get(obj);
 		if (!result) {
-			result = new ProxyObject(obj, roots);
-			proxyObjects.set(obj, result);
+			proxyObjects.set(obj, result = new ProxyObject(obj, roots));
 		}
 		// Merge in new roots
 		else if (roots)
-			result.roots = new Set([...result.roots, ...roots]);
+			result.roots_ = new Set([...result.roots_, ...roots]);
 
 		return result;
 	}
 }
 
+// TODO: Could this be replaced with a weakmap from the root  ,to the callbacks?
+// Yes, but it wouldn't be as clean.
 class ProxyRoot {
 	constructor(root) {
 
 		/**
 		 * Root element we're watching.
 		 * @type object */
-		this.root = root;
+		this.root_ = root;
 
 		/**
 		 * Functions to call when an object changes.
 		 * @type {function[]} */
-		this.callbacks = [];
+		this.callbacks_ = [];
 
 		// Add root to the ProxyObjects.
 		var po = ProxyObject.get(root);
-		po.roots.add(this);
+		po.roots_.add(this);
 	}
 
-	notify(action, path, value) {
-		for (let callback of this.callbacks)
-			callback.apply(this.root, arguments);
+	notify_(/*action, path, value*/) {
+		for (let callback of this.callbacks_)
+			callback.apply(this.root_, arguments);
 	}
 
 	/**
 	 * @param root {object}
 	 * @returns {ProxyRoot} */
 	static get(root) {
-		if (root.isProxy)
-			root = root.removeProxy;
+		root = root.$removeProxy || root;
 
-		if (!proxyRoots.has(root))
-			proxyRoots.set(root, new ProxyRoot(root));
-		return proxyRoots.get(root);
+		var po = proxyRoots.get(root);
+		if (!po)
+			proxyRoots.set(root, po= new ProxyRoot(root));
+		return po;
 	}
 }
 
@@ -584,10 +583,10 @@ var proxyObjects = new WeakMap();  // Map from objects back to their roots.
  * @param root {object}
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
-var watchObj = (root, callback) => {
+var watchProxy = (root, callback) => {
 	var proxyRoot = ProxyRoot.get(root);
-	proxyRoot.callbacks.push(callback);
-	return proxyObjects.get(root).proxy;
+	proxyRoot.callbacks_.push(callback);
+	return proxyObjects.get(root).proxy_;
 };;
 
 
@@ -601,11 +600,11 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	while (obj.isProxy) // should never be more than 1 level deep of proxies.
-		obj = obj.removeProxy;
+	while (obj.$isProxy) // should never be more than 1 level deep of proxies.
+		obj = obj.$removeProxy;
 
 	//#IFDEV
-	if (obj.isProxy)
+	if (obj.$isProxy)
 		throw new XElementError("Double wrapped proxy found.");
 	//#ENDIF
 
@@ -622,7 +621,7 @@ var removeProxies = (obj, visited) => {
 				let v = removeProxies(t, visited);
 				if (v !== t)
 					watchlessSet(obj, [name],  v);
-					// obj.removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
+					// obj.$removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
 			}
 	}
 	return obj;
@@ -636,9 +635,9 @@ class WatchProperties {
 
 	constructor(obj) {
 		this.obj_ = obj;   // Original object being watched.
-		this.fields_ = {}; // removeProxy underlying fields that store the data.
+		this.fields_ = {}; // $removeProxy underlying fields that store the data.
 		                   // This is necessary to store the values of obj_ after defineProperty() is called.
-		this.proxy_ = watchObj(this.fields_, this.notify.bind(this));
+		this.proxy_ = watchProxy(this.fields_, this.notify_.bind(this));
 		this.subs_ = {};
 	}
 
@@ -647,7 +646,7 @@ class WatchProperties {
 	 * @param action {string}
 	 * @param path {string[]}
 	 * @param value {*=} */
-	notify(action, path, value) {
+	notify_(action, path, value) {
 
 		// Traverse up the path looking for anything subscribed.
 		var parentPath = path.slice(0, -1);
@@ -672,7 +671,7 @@ class WatchProperties {
 	 *
 	 * @param path {string|string[]}
 	 * @param callback {function((action:string, path:string[], value:string?)} */
-	subscribe(path, callback) {
+	subscribe_(path, callback) {
 		if (typeof path === 'string')
 			path = [path];
 
@@ -689,12 +688,8 @@ class WatchProperties {
 			Object.defineProperty(self.obj_, field, {
 				enumerable: 1,
 				configurable: 1,
-				get: () => {
-					return self.proxy_[field];
-				},
-				set: (val) => {
-					return self.proxy_[field] = val;
-				}
+				get: () => self.proxy_[field],
+				set: (val) => self.proxy_[field] = val
 			});
 		}
 
@@ -708,7 +703,7 @@ class WatchProperties {
 		self.subs_[cpath].push(callback);
 	}
 
-	unsubscribe(path, callback) {
+	unsubscribe_(path, callback) {
 
 		// Make sure path is an array.
 		if (typeof path === 'string')
@@ -752,9 +747,7 @@ var watched = new WeakMap();
  * @param path {string|string[]}
  * @param callback {function(action:string, path:string[], value:string?)} */
 var watch = (obj, path, callback) => {
-	if (obj.isProxy)
-		obj = obj.removeProxy;
-
+	obj = obj.$removeProxy || obj;
 
 	// Keep only one WatchProperties per watched object.
 	var wp;
@@ -765,7 +758,7 @@ var watch = (obj, path, callback) => {
 	else
 		wp = watched.get(obj);
 
-	wp.subscribe(path, callback);
+	wp.subscribe_(path, callback);
 };
 
 /**
@@ -774,16 +767,15 @@ var watch = (obj, path, callback) => {
  * @param path {string|string[]}
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
-	if (obj.isProxy)
-		obj = obj.removeProxy;
+	obj = obj.$removeProxy || obj;
 	var wp = watched.get(obj);
 
 	if (wp) {
 		if (path)
-			wp.unsubscribe(path, callback);
+			wp.unsubscribe_(path, callback);
 		else
 			for (let sub in wp.subs_)
-				wp.unsubscribe(sub);
+				wp.unsubscribe_(sub);
 
 		// Remove from watched objects if we're no longer watching
 		if (!Object.keys(wp.subs_).length)
@@ -803,7 +795,7 @@ function watchlessGet(obj, path) {
 	let node = watched.get(obj).fields_;
 	for (let p of path) {
 		node = node[p];
-		if (node.isProxy)
+		if (node.$isProxy)
 			throw new XElementError();
 	}
 	return node;
@@ -812,11 +804,10 @@ function watchlessGet(obj, path) {
 
 var watchlessSet = (obj, path, val) => {
 	// TODO: Make this work instead:
-	// Or just use removeProxy prop?
+	// Or just use $removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
-	if (obj.isProxy)
-		obj = obj.removeProxy;
+	obj = obj.$removeProxy || obj;
 	var wp = watched.get(obj);
 
 
@@ -826,12 +817,11 @@ var watchlessSet = (obj, path, val) => {
 		node = node[p];
 		//#IFDEV
 		// This can happen if one XElement subscribes within the path of another XElement via data-bind?
-		//if (node.isProxy) // optional sanity check
+		//if (node.$isProxy) // optional sanity check
 		//	throw new XElementError('Variable ' + p + ' is already a proxy.');
 		//#ENDIF
 
-		if (node.isProxy)
-			node = node.removeProxy;
+		node = node.$removeProxy || node;
 	}
 
 	return node[prop] = val;
@@ -872,7 +862,8 @@ Named slot support? - https://developer.mozilla.org/en-US/docs/Web/Web_Component
 Separate out a lite version that doesn't do binding?
 	This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
 TODO:
-
+warning on loop element id.
+warning if binding to id attribute assigned to element.
 We could even add enableUpdates() / disableUpdates() / clearUpdates() functions.
 
 
@@ -886,7 +877,7 @@ Requires data and methods, can't bind directly to class props.
 Doesn't support ShadowDOM, only emulates nested styles.
 Requires key="" attributes everywhere to make identical elements unique.
 Vue.js doesn't watch array indices or object property add/remove!
-   You have to call Vue.set(array...)
+   Every time you assign have to call Vue.set(array...)
 data: {} items shared between each component instance, unless it's wrapped in a function.
 No id's to class properties.
 
@@ -899,7 +890,7 @@ IDE support
 transition effects
 Automatically adds vendor prefixes for data-styles="" binding.
 key/value iteration over objects.
-Checkboxes and multi-select to array of names.
+Checkboxes and <select multiple> to array of names.
 lazy modifier for input binding, to only trigger update after change.
 
 */
@@ -912,13 +903,13 @@ var watchedEls = new WeakMap();
 
 class ElSubscriptions {
 	constructor() {
-		this.subs = [];
+		this.subs_ = [];
 	}
 
 	add(path, callback) {
-		this.subs.push({
-			path: path,
-			callback: callback
+		this.subs_.push({
+			path_: path,
+			callback_: callback
 		});
 	}
 }
@@ -934,7 +925,7 @@ var addWatchedEl = (el, path, callback) => {
  * @param cls {Function}
  * @returns {string} */
 var getXName = (cls) => {
-	if (!cls.xname) {
+	if (!cls.xname_) {
 		let lname = cls.name.toLowerCase();
 		if (lname.startsWith('x'))
 			lname = lname.slice(1);
@@ -945,9 +936,9 @@ var getXName = (cls) => {
 		for (let i = 2; customElements.get(name); i++)
 			name = 'x-' + lname + i;
 
-		cls.xname = name;
+		cls.xname_ = name;
 	}
-	return cls.xname;
+	return cls.xname_;
 };
 
 var getXParent = (el) => {
@@ -956,6 +947,25 @@ var getXParent = (el) => {
 			return el.host;
 	} while (el = el.parentNode);
 };
+
+
+/**
+ * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
+ * Traverse starting from path and working upward,
+ * looking for an existing XElement to watch.
+ * This allows the corret object to be watched when data-bind is used.
+ * @param obj
+ * @param path
+ * @param callback
+var watchXElement = (obj, path, callback) => {
+	for (let i=path.length; i>=0; i--) {
+		let item = traversePath(obj, path.slice(0, i));
+		if (item instanceof XElement) {
+			watch(item, path.slice(i), callback);
+			break;
+		}
+	}
+};*/
 
 /**
  * Traverse through all parents to build the loop context.
@@ -1004,7 +1014,7 @@ var getContext = (el) => {
 			lastEl = parent;
 
 		// Stop once we reach an XElement.
-		if (parent.bindings)
+		if (parent.bindings) // if instanceof XElement
 			break;
 	}
 	return context;
@@ -1073,14 +1083,14 @@ var unbindEl = (root) => {
 				if (watchedEl) {
 
 					if (attr.name === 'data-loop') {
-						el.innerHTML = el.$loopHtml;
-						delete el.$loopHtml;
-						delete el.items;
+						el.innerHTML = el.loopHtml_;
+						delete el.loopHtml_;
+						delete el.items_;
 					}
 
-					for (let sub of watchedEl.subs) {
+					for (let sub of watchedEl.subs_) {
 						var p = p || getXParent(root);
-						unwatch(p, sub.path, sub.callback);
+						unwatch(p, sub.path_, sub.callback_);
 					}
 				}
 			}
@@ -1092,17 +1102,16 @@ var unbindEl = (root) => {
  * We rebind event attributes because otherwise there's no way
  * to make them call the class methods.
  * @param self {XElement}
- * @param root {HTMLElement} */
-var bindEvents = (self, root) => {
+ * @param el {HTMLElement} */
+var bindEvents = (self, el) => {
 
-	var els = [...root.querySelectorAll('*')];
-	if (root.attributes)
-		els.unshift(root); // Add root if it's not a DocumentFragment from shadowDOM
-
-	// Traverse through every child element.
-	// TODO: Don't descend into other xelements once we make shadowdom optional.
-	for (let el of els)
+	if (el.getAttribute) // if not document fragment
 		bindElEvents(self, el);
+
+	// data-loop handles its own children.
+	if (!el.getAttribute || !el.hasAttribute('data-loop'))
+		for  (let child of el.children)
+			bindEvents(self, child);
 };
 
 var bindElEvents = (self, el, getAttributesFrom) => {
@@ -1187,7 +1196,7 @@ var initHtml = (self) => {
 	// 6. Create Shadow DOM
 	self.attachShadow({mode: 'open'});
 	while (div.firstChild)
-		self.shadowRoot.appendChild(div.firstChild);
+		self.shadowRoot.insertBefore(div.firstChild, null);
 	var root = self.shadowRoot || self;
 
 
@@ -1225,10 +1234,8 @@ var initHtml = (self) => {
 
 			enumerable: 1,
 			configurable: 1,
-			get: function() {
-				return node;
-			},
-			set: function() {
+			get: () => node,
+			set: () => {
 				//#IFDEV
 				throw new XElementError('Property ' + id + ' not writable');
 				//#ENDIF
@@ -1310,7 +1317,7 @@ var bindings = {
 			// If the variables in code, change, execute the code.
 			// Then set the attribute to the value returned by the code.
 			for (let path of parseVars(attrExpr)) {
-				watchXElement(self, path, setAttr);
+				watch(self, path, setAttr);
 				addWatchedEl(el, path, setAttr);
 			}
 
@@ -1332,7 +1339,7 @@ var bindings = {
 			// Assign the referenced object to a variable on el.
 			let expr = addThis(replaceVars(obj[prop], context), context);
 
-			let updateProp = function updateProp(action, path, value) {
+			let updateProp = function updateProp(/*action, path, value*/) {
 				el[prop] = safeEval.call(self, expr);
 			}.bind(self);
 
@@ -1366,7 +1373,7 @@ var bindings = {
 			// Add a regular watch.
 			else
 				for (let path of parseVars(expr))
-					watchXElement(self, path, updateProp);
+					watch(self, path, updateProp);
 		}
 
 	},
@@ -1400,18 +1407,15 @@ var bindings = {
 			// Set initial values.
 			updateClass();
 		}
-
-
 	},
 
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = function setText(action, path, value) {
-			//debugger;
+		let setText = function setText(/*action, path, value*/) {
 			el.textContent = safeEval.call(self, code);
 		};
 		for (let path of parseVars(code)) {
-			watchXElement(self, path, setText);
+			watch(self, path, setText);
 			addWatchedEl(el, path, setText);
 		}
 
@@ -1421,7 +1425,7 @@ var bindings = {
 
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = function setHtml(action, path, value) {
+		let setHtml = function setHtml(/*action, path, value*/) {
 			el.innerHTML = safeEval.call(self, code);
 		};
 
@@ -1442,12 +1446,10 @@ var bindings = {
 
 		context = {...context}; // copy
 
-		function rebuildChildren(action, path, value) {
-			if (window.debug)
-				debugger;
+		var rebuildChildren = (/*action, path, value*/) => {
 
 			var newItems = removeProxies(safeEval.call(self, foreach) || []);
-			var oldItems = removeProxies(el.items || []);
+			var oldItems = removeProxies(el.items_ || []);
 
 			if (arrayEq(oldItems, newItems))
 				return;
@@ -1455,7 +1457,7 @@ var bindings = {
 			var newSet = new Set(newItems);
 
 			for (let i in Array.from(el.children))
-				el.children[i].index = i;
+				el.children[i].index_ = i;
 
 			// Create a map from the old items to the elements that represent them.
 			var oldMap = new Map();
@@ -1490,7 +1492,7 @@ var bindings = {
 
 					// Create a new one if needed.
 					if (isNew)
-						newChild = createEl(el.$loopHtml);
+						newChild = createEl(el.loopHtml_);
 
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
@@ -1516,13 +1518,12 @@ var bindings = {
 				throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
 			if (indexVar && indexVar in localContext)
 				throw new XElementError('Loop index variable "' + indexVar + '" already used in outer loop.');
-			//#endif
+			//#ENDIF
 
-			// this breaks nested loops.
-			// Perhaps because we rebind the parent after the children.
+			// Rebind events on any elements that had their index change.
 			for (let i in Array.from(el.children)) {
 				let child = el.children[i];
-				if (child.index !== i) {
+				if (child.index_ !== i) {
 
 					unbindEl(child);
 
@@ -1531,27 +1532,27 @@ var bindings = {
 						localContext[indexVar] = i;
 					bindEl(self, child, localContext);
 				}
-				delete child.index;
+				delete child.index_;
 			}
 
 
-			el.items = newItems.slice(); // copy
-		}
+			el.items_ = newItems.slice(); // copy
+		};
 
 
-
-		// Allow loop attrib to be applied above shadowroot.
-		el = el.shadowRoot || el;
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
 
+		// Allow loop attrib to be applied above shadowroot.
+		el = el.shadowRoot || el;
+
 		// The code we'll loop over.
 		// We store it here because innerHTML is lost if we unbind and rebind.
-		if (!el.$loopHtml)
-			el.$loopHtml = el.innerHTML.trim();
+		if (!el.loopHtml_)
+			el.loopHtml_ = el.innerHTML.trim();
 
 		// Remove children before calling rebuildChildren()
 		// That way we don't unbind elements that were never bound.
@@ -1559,12 +1560,12 @@ var bindings = {
 			el.removeChild(el.lastChild);
 
 		for (let path of parseVars(foreach)) {
-			watchXElement(self, path, rebuildChildren);
+			watch(self, path, rebuildChildren);
 			addWatchedEl(el, path, rebuildChildren);
 		}
 
 		// Set initial children
-		rebuildChildren.call(self);
+		rebuildChildren();
 	},
 
 	// Special 2-way binding
@@ -1585,7 +1586,7 @@ var bindings = {
 				traversePath(self, paths[0], true, value);
 			});
 
-		let setVal = function(action, path, value) {
+		let setVal = function(/*action, path, value*/) {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
@@ -1597,7 +1598,7 @@ var bindings = {
 
 		// Update input value when object property changes.
 		for (let path of paths) {
-			watchXElement(self, path, setVal);
+			watch(self, path, setVal);
 			addWatchedEl(el, path, setVal);
 		}
 
@@ -1630,33 +1631,11 @@ var bindings = {
 	*/
 };
 
-
-/**
- * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
- * Traverse starting from path and working upward,
- * looking for an existing XElement to watch.
- * This allows the corret object to be watched when data-bind is used.
- * @param obj
- * @param path
- * @param callback */
-function watchXElement(obj, path, callback) {
-	for (let i=path.length; i>=0; i--) {
-		let item = traversePath(obj, path.slice(0, i));
-		if (item instanceof XElement) {
-			watch(item, path.slice(i), callback);
-			break;
-		}
-	}
-}
-
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
 Object.defineProperty(XElement, 'html', {
-	get: function () {
-		return this.html_;
-	},
+	get: () => this.html_,
 	set: function (html) {
-		const self = this;
 
 		// TODO: We want to be able to do:
 		// <x-item arg1="1", arg2="2">
@@ -1664,6 +1643,7 @@ Object.defineProperty(XElement, 'html', {
 		// Here we can get the names of those arguments, but how to intercept the browser's call to the constructor?
 		// Below I tried to work around this by subclassing.
 		// But we can't get a reference to the <x-item> to read its attributes before the super() call.
+		// const self = this;
 		// function getConstructorArgs(func) {
 		// 	return func.toString()  // stackoverflow.com/a/14660057
 		// 		.replace(/((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,'') // Remove comments. TODO: Also remove strings.
@@ -1681,16 +1661,14 @@ Object.defineProperty(XElement, 'html', {
 
 		// Could the customElements.whenDefined() callback be helpful?
 
-		let name = getXName(self);
-
 		// New way where we pass attributes to the constructor:
 		// customElements.define(name, Embedded);
 		// customElements.define(name+'-internal', this);
 
 		// Old way:
-		customElements.define(name, self);
+		customElements.define(getXName(this), this);
 
-		return self.html_ = html;
+		return this.html_ = html;
 	}
 });
 

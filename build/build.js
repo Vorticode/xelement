@@ -27,6 +27,7 @@ fs.writeFileSync('../xelement.js', code);
 
 // Do replacements
 var replacementFuncs = [
+	'Array.from',
 	"RegExp",
 	"JSON.stringify",
 	"eval",
@@ -34,42 +35,55 @@ var replacementFuncs = [
 	'Object.defineProperty',
 	'Object.keys',
 	'customElements',
-	'WeakMap',
+	'WeakMap', // Completely removes it.  something's broken.
+	
+	// round 2
+	'Array'
 ];
 
 var replacementProps = [ // These appear as .name
-	'shadowRoot',
-	'isProxy',
-	'filter',
-	"length",
-	//"substr", // we always use slice instead.
 	"addEventListener",
-	"innerHTML",
-	"querySelectorAll",
-	"slice",
-	"startsWith",
-	"value",
-	'firstChild',
-	'lastChild',
-	'children',
-	'parentNode',
-	'removeChild',
+	//'apply', // makes it larger.
 	'attributes',
-	'setAttribute',
+	//'appendChild',
+	'bind',
+	'checkbox',
+	'checked', // doesn't replace anything.
+	'children',
+	'classList',
+	//'constructor', // makes no difference.
+	'data-',
+	'data-loop',
+	'filter',
+	'firstChild',
 	"getAttribute",
 	'hasAttribute',
-	'removeAttribute',
-	'name',
-	'appendChild',
+	//'includes', // makes no difference
+	'indexOf',
+	"innerHTML",
+	'insertBefore',
+	'isProxy',
+	'lastChild',
 	'lastIndex',
+	"length",
 	'match',
-	'trim',
-	'bind',
-	'data-loop',
-	'data-',
-	'checkbox',
+	'name', // doesn't work.
+	'parentNode',
+	'push',
+	"querySelectorAll",
+	'removeAttribute',
+	'removeChild',
 	'removeProxy',
-	'checked', // makes no difference
+	'setAttribute',
+	"slice",
+	'shadowRoot',
+	//'split', // Doesn't make it any smaller.
+	"startsWith",
+	'trim',
+	"value",
+	
+	'\\$isProxy',
+	'\\$removeProxy',
 	//'push': 'PU', // makes no difference in size.
 	//'string': 'STR', // Increases size
 	//'connectedCallback': 'CC'
@@ -78,10 +92,15 @@ var i=0;
 var a = [];
 for (let name of replacementFuncs) {
 	let vname = 'i' + i;
-	code = code.replace(new RegExp(name+'(?![A-Za-z0-9_$])', 'g'), vname);
+	let newCode = code.replace(new RegExp(name+'(?![A-Za-z0-9_$])', 'g'), vname);
+	if (newCode.length < code.length) {
+		// Add variable definition.
+		a.push('var ' + vname + '=' + name + ';');
+	
+		code = newCode;
+	}
 
-	// Add variable definition.
-	a.push('var ' + vname + '=' + name + ';');
+
 
 	i++;
 }
@@ -92,17 +111,26 @@ for (let name of replacementProps) {
 
 	// Replace .prop instances
 	let regex = new RegExp('\\.' + name + '(?![A-Za-z0-9_$])', 'g');
-	code = code.replace(regex, '['+vname+']');
+	let newCode = code.replace(regex, '['+vname+']');
 
 	// Replace string instances of the props
 	regex = new RegExp('"' + name + "'", 'g');
-	code = code.replace(regex, vname);
+	newCode = newCode.replace(regex, vname);
 
 	regex = new RegExp("'" + name + "'", 'g');
-	code = code.replace(regex, vname);
-
-	// Add variable definition.
-	a.push('var ' + vname + '=' + "'" + name + "';\r\n");
+	newCode = newCode.replace(regex, vname);
+	
+	// Only use this replacement if it makes it shorter.
+	// (this length check fails b/c the replacemnt may be shorter after minified.).
+	var def = 'var ' + vname + '=' + "'" + name + "';\r\n";
+	//if (newCode.length + def.length < code.length) 
+	{
+		// Add variable definition.
+		a.push(def);
+	
+		code = newCode;
+	}
+		
 	i++;
 }
 

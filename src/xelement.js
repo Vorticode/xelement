@@ -48,7 +48,7 @@ Requires data and methods, can't bind directly to class props.
 Doesn't support ShadowDOM, only emulates nested styles.
 Requires key="" attributes everywhere to make identical elements unique.
 Vue.js doesn't watch array indices or object property add/remove!
-   You have to call Vue.set(array...)
+   Every time you assign have to call Vue.set(array...)
 data: {} items shared between each component instance, unless it's wrapped in a function.
 No id's to class properties.
 
@@ -61,7 +61,7 @@ IDE support
 transition effects
 Automatically adds vendor prefixes for data-styles="" binding.
 key/value iteration over objects.
-Checkboxes and multi-select to array of names.
+Checkboxes and <select multiple> to array of names.
 lazy modifier for input binding, to only trigger update after change.
 
 */
@@ -74,13 +74,13 @@ var watchedEls = new WeakMap();
 
 class ElSubscriptions {
 	constructor() {
-		this.subs = [];
+		this.subs_ = [];
 	}
 
 	add(path, callback) {
-		this.subs.push({
-			path: path,
-			callback: callback
+		this.subs_.push({
+			path_: path,
+			callback_: callback
 		});
 	}
 }
@@ -96,7 +96,7 @@ var addWatchedEl = (el, path, callback) => {
  * @param cls {Function}
  * @returns {string} */
 var getXName = (cls) => {
-	if (!cls.xname) {
+	if (!cls.xname_) {
 		let lname = cls.name.toLowerCase();
 		if (lname.startsWith('x'))
 			lname = lname.slice(1);
@@ -107,9 +107,9 @@ var getXName = (cls) => {
 		for (let i = 2; customElements.get(name); i++)
 			name = 'x-' + lname + i;
 
-		cls.xname = name;
+		cls.xname_ = name;
 	}
-	return cls.xname;
+	return cls.xname_;
 };
 
 var getXParent = (el) => {
@@ -118,6 +118,25 @@ var getXParent = (el) => {
 			return el.host;
 	} while (el = el.parentNode);
 };
+
+
+/**
+ * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
+ * Traverse starting from path and working upward,
+ * looking for an existing XElement to watch.
+ * This allows the corret object to be watched when data-bind is used.
+ * @param obj
+ * @param path
+ * @param callback
+var watchXElement = (obj, path, callback) => {
+	for (let i=path.length; i>=0; i--) {
+		let item = traversePath(obj, path.slice(0, i));
+		if (item instanceof XElement) {
+			watch(item, path.slice(i), callback);
+			break;
+		}
+	}
+};*/
 
 /**
  * Traverse through all parents to build the loop context.
@@ -166,7 +185,7 @@ var getContext = (el) => {
 			lastEl = parent;
 
 		// Stop once we reach an XElement.
-		if (parent.bindings)
+		if (parent.bindings) // if instanceof XElement
 			break;
 	}
 	return context;
@@ -235,14 +254,14 @@ var unbindEl = (root) => {
 				if (watchedEl) {
 
 					if (attr.name === 'data-loop') {
-						el.innerHTML = el.$loopHtml;
-						delete el.$loopHtml;
-						delete el.items;
+						el.innerHTML = el.loopHtml_;
+						delete el.loopHtml_;
+						delete el.items_;
 					}
 
-					for (let sub of watchedEl.subs) {
+					for (let sub of watchedEl.subs_) {
 						var p = p || getXParent(root);
-						unwatch(p, sub.path, sub.callback);
+						unwatch(p, sub.path_, sub.callback_);
 					}
 				}
 			}
@@ -254,17 +273,16 @@ var unbindEl = (root) => {
  * We rebind event attributes because otherwise there's no way
  * to make them call the class methods.
  * @param self {XElement}
- * @param root {HTMLElement} */
-var bindEvents = (self, root) => {
+ * @param el {HTMLElement} */
+var bindEvents = (self, el) => {
 
-	var els = [...root.querySelectorAll('*')];
-	if (root.attributes)
-		els.unshift(root); // Add root if it's not a DocumentFragment from shadowDOM
-
-	// Traverse through every child element.
-	// TODO: Don't descend into other xelements once we make shadowdom optional.
-	for (let el of els)
+	if (el.getAttribute) // if not document fragment
 		bindElEvents(self, el);
+
+	// data-loop handles its own children.
+	if (!el.getAttribute || !el.hasAttribute('data-loop'))
+		for  (let child of el.children)
+			bindEvents(self, child);
 };
 
 var bindElEvents = (self, el, getAttributesFrom) => {
@@ -349,7 +367,7 @@ var initHtml = (self) => {
 	// 6. Create Shadow DOM
 	self.attachShadow({mode: 'open'});
 	while (div.firstChild)
-		self.shadowRoot.appendChild(div.firstChild);
+		self.shadowRoot.insertBefore(div.firstChild, null);
 	var root = self.shadowRoot || self;
 
 
@@ -387,10 +405,8 @@ var initHtml = (self) => {
 
 			enumerable: 1,
 			configurable: 1,
-			get: function() {
-				return node;
-			},
-			set: function() {
+			get: () => node,
+			set: () => {
 				//#IFDEV
 				throw new XElementError('Property ' + id + ' not writable');
 				//#ENDIF
@@ -472,7 +488,7 @@ var bindings = {
 			// If the variables in code, change, execute the code.
 			// Then set the attribute to the value returned by the code.
 			for (let path of parseVars(attrExpr)) {
-				watchXElement(self, path, setAttr);
+				watch(self, path, setAttr);
 				addWatchedEl(el, path, setAttr);
 			}
 
@@ -494,7 +510,7 @@ var bindings = {
 			// Assign the referenced object to a variable on el.
 			let expr = addThis(replaceVars(obj[prop], context), context);
 
-			let updateProp = function updateProp(action, path, value) {
+			let updateProp = function updateProp(/*action, path, value*/) {
 				el[prop] = safeEval.call(self, expr);
 			}.bind(self);
 
@@ -528,7 +544,7 @@ var bindings = {
 			// Add a regular watch.
 			else
 				for (let path of parseVars(expr))
-					watchXElement(self, path, updateProp);
+					watch(self, path, updateProp);
 		}
 
 	},
@@ -566,12 +582,11 @@ var bindings = {
 
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = function setText(action, path, value) {
-			//debugger;
+		let setText = function setText(/*action, path, value*/) {
 			el.textContent = safeEval.call(self, code);
 		};
 		for (let path of parseVars(code)) {
-			watchXElement(self, path, setText);
+			watch(self, path, setText);
 			addWatchedEl(el, path, setText);
 		}
 
@@ -581,7 +596,7 @@ var bindings = {
 
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = function setHtml(action, path, value) {
+		let setHtml = function setHtml(/*action, path, value*/) {
 			el.innerHTML = safeEval.call(self, code);
 		};
 
@@ -602,12 +617,10 @@ var bindings = {
 
 		context = {...context}; // copy
 
-		function rebuildChildren(action, path, value) {
-			if (window.debug)
-				debugger;
+		var rebuildChildren = (/*action, path, value*/) => {
 
 			var newItems = removeProxies(safeEval.call(self, foreach) || []);
-			var oldItems = removeProxies(el.items || []);
+			var oldItems = removeProxies(el.items_ || []);
 
 			if (arrayEq(oldItems, newItems))
 				return;
@@ -615,7 +628,7 @@ var bindings = {
 			var newSet = new Set(newItems);
 
 			for (let i in Array.from(el.children))
-				el.children[i].index = i;
+				el.children[i].index_ = i;
 
 			// Create a map from the old items to the elements that represent them.
 			var oldMap = new Map();
@@ -650,7 +663,7 @@ var bindings = {
 
 					// Create a new one if needed.
 					if (isNew)
-						newChild = createEl(el.$loopHtml);
+						newChild = createEl(el.loopHtml_);
 
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
@@ -676,13 +689,12 @@ var bindings = {
 				throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
 			if (indexVar && indexVar in localContext)
 				throw new XElementError('Loop index variable "' + indexVar + '" already used in outer loop.');
-			//#endif
+			//#ENDIF
 
-			// this breaks nested loops.
-			// Perhaps because we rebind the parent after the children.
+			// Rebind events on any elements that had their index change.
 			for (let i in Array.from(el.children)) {
 				let child = el.children[i];
-				if (child.index !== i) {
+				if (child.index_ !== i) {
 
 					unbindEl(child);
 
@@ -691,27 +703,27 @@ var bindings = {
 						localContext[indexVar] = i;
 					bindEl(self, child, localContext);
 				}
-				delete child.index;
+				delete child.index_;
 			}
 
 
-			el.items = newItems.slice(); // copy
-		}
+			el.items_ = newItems.slice(); // copy
+		};
 
 
-
-		// Allow loop attrib to be applied above shadowroot.
-		el = el.shadowRoot || el;
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
 
+		// Allow loop attrib to be applied above shadowroot.
+		el = el.shadowRoot || el;
+
 		// The code we'll loop over.
 		// We store it here because innerHTML is lost if we unbind and rebind.
-		if (!el.$loopHtml)
-			el.$loopHtml = el.innerHTML.trim();
+		if (!el.loopHtml_)
+			el.loopHtml_ = el.innerHTML.trim();
 
 		// Remove children before calling rebuildChildren()
 		// That way we don't unbind elements that were never bound.
@@ -719,12 +731,12 @@ var bindings = {
 			el.removeChild(el.lastChild);
 
 		for (let path of parseVars(foreach)) {
-			watchXElement(self, path, rebuildChildren);
+			watch(self, path, rebuildChildren);
 			addWatchedEl(el, path, rebuildChildren);
 		}
 
 		// Set initial children
-		rebuildChildren.call(self);
+		rebuildChildren();
 	},
 
 	// Special 2-way binding
@@ -745,7 +757,7 @@ var bindings = {
 				traversePath(self, paths[0], true, value);
 			});
 
-		let setVal = function(action, path, value) {
+		let setVal = function(/*action, path, value*/) {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
@@ -757,7 +769,7 @@ var bindings = {
 
 		// Update input value when object property changes.
 		for (let path of paths) {
-			watchXElement(self, path, setVal);
+			watch(self, path, setVal);
 			addWatchedEl(el, path, setVal);
 		}
 
@@ -790,33 +802,11 @@ var bindings = {
 	*/
 };
 
-
-/**
- * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
- * Traverse starting from path and working upward,
- * looking for an existing XElement to watch.
- * This allows the corret object to be watched when data-bind is used.
- * @param obj
- * @param path
- * @param callback */
-function watchXElement(obj, path, callback) {
-	for (let i=path.length; i>=0; i--) {
-		let item = traversePath(obj, path.slice(0, i));
-		if (item instanceof XElement) {
-			watch(item, path.slice(i), callback);
-			break;
-		}
-	}
-}
-
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
 Object.defineProperty(XElement, 'html', {
-	get: function () {
-		return this.html_;
-	},
+	get: () => this.html_,
 	set: function (html) {
-		const self = this;
 
 		// TODO: We want to be able to do:
 		// <x-item arg1="1", arg2="2">
@@ -824,6 +814,7 @@ Object.defineProperty(XElement, 'html', {
 		// Here we can get the names of those arguments, but how to intercept the browser's call to the constructor?
 		// Below I tried to work around this by subclassing.
 		// But we can't get a reference to the <x-item> to read its attributes before the super() call.
+		// const self = this;
 		// function getConstructorArgs(func) {
 		// 	return func.toString()  // stackoverflow.com/a/14660057
 		// 		.replace(/((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,'') // Remove comments. TODO: Also remove strings.
@@ -841,16 +832,14 @@ Object.defineProperty(XElement, 'html', {
 
 		// Could the customElements.whenDefined() callback be helpful?
 
-		let name = getXName(self);
-
 		// New way where we pass attributes to the constructor:
 		// customElements.define(name, Embedded);
 		// customElements.define(name+'-internal', this);
 
 		// Old way:
-		customElements.define(name, self);
+		customElements.define(getXName(this), this);
 
-		return self.html_ = html;
+		return this.html_ = html;
 	}
 });
 

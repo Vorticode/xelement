@@ -33,7 +33,7 @@ var test_Watch = {
 		(function() {
 			var o = {a: [0, 1]};
 			var wp = new WatchProperties(o);
-			wp.subscribe(['a'], (action, path, value) => {});
+			wp.subscribe_(['a'], (action, path, value) => {});
 			assertEq(o.a.length, 2);
 			assertEq(o.a[0], 0);
 			assertEq(o.a[1], 1);
@@ -136,8 +136,8 @@ var test_Watch = {
 
 		var o = { a: [0, 1] };
 		var wp = new WatchProperties(o);
-		wp.subscribe(['a', 0], (action, path, value) => {});
-		wp.subscribe(['a', 1], (action, path, value) => {});
+		wp.subscribe_(['a', 0], (action, path, value) => {});
+		wp.subscribe_(['a', 1], (action, path, value) => {});
 
 		assert(wp.subs_);
 		o.a.pop();
@@ -151,7 +151,7 @@ var test_Watch = {
 		var o = { a: [0, 1] };
 		var wp = new WatchProperties(o);
 		var ops = [];
-		wp.subscribe(['a'], function(action, path, value) {
+		wp.subscribe_(['a'], function(action, path, value) {
 			ops.push(Array.from(arguments));
 		});
 
@@ -169,16 +169,16 @@ var test_Watch = {
 		var o = { a: [0, 1] };
 		var wp = new WatchProperties(o);
 		var cb = ()=>{};
-		wp.subscribe(['a'], cb);
+		wp.subscribe_(['a'], cb);
 		assertEq(Object.keys(wp.subs_).length, 1);
 
-		wp.unsubscribe(['a'], cb);
+		wp.unsubscribe_(['a'], cb);
 		assertEq(Object.keys(wp.subs_).length, 0);
 
 
-		wp.subscribe(['a', 0], cb);
+		wp.subscribe_(['a', 0], cb);
 		assertEq(Object.keys(wp.subs_).length, 1);
-		wp.unsubscribe(['a', 0], cb);
+		wp.unsubscribe_(['a', 0], cb);
 		assertEq(Object.keys(wp.subs_).length, 0);
 	},
 
@@ -188,23 +188,23 @@ var test_Watch = {
 		var wp = new WatchProperties(o);
 		var cb = ()=>{};
 
-		wp.subscribe(['a'], cb);
-		wp.subscribe(['a', '0'], cb);
+		wp.subscribe_(['a'], cb);
+		wp.subscribe_(['a', '0'], cb);
 
 		// Unsubscribe one callback from a[0]
-		wp.unsubscribe(['a', '0'], cb);
+		wp.unsubscribe_(['a', '0'], cb);
 		assert(o.a.$isProxy);
 
 		// Unsubscribe all callbacks from a[0]
-		wp.unsubscribe(['a', '0']);
+		wp.unsubscribe_(['a', '0']);
 		assert(o.a.$isProxy);
 
 		// Unsubscribe last callbacks from a.
-		wp.unsubscribe(['a'], cb);
+		wp.unsubscribe_(['a'], cb);
 		assert(!o.a.$isProxy);
 
 		// Make sure we can subscribe back again.
-		wp.subscribe(['a'], cb);
+		wp.subscribe_(['a'], cb);
 		assert(o.a.$isProxy);
 	}
 };
@@ -870,7 +870,7 @@ var test_XElement = {
 				'</div>');
 		})();
 
-		// Nexted loop with index.
+		// Nested loop with index.
 		(function() {
 			class BL32 extends XElement {}
 			BL32.html = `
@@ -887,7 +887,7 @@ var test_XElement = {
 
 		})();
 
-		// Nexted loop with duplicate loopVar.
+		// Nested loop with duplicate loopVar.
 		(function() {
 			class BL33 extends XElement {}
 			BL33.html = `
@@ -909,7 +909,7 @@ var test_XElement = {
 			assert(error instanceof XElementError);
 		})();
 
-		// Nexted loop with duplicate index.
+		// Nested loop with duplicate index.
 		(function() {
 			class BL34 extends XElement {}
 			BL34.html = `
@@ -1037,6 +1037,26 @@ var test_XElement = {
 			assert(outer.clicked);
 		})();
 
+
+
+		// Test events in double loop (used to fail)
+		// onclick="this.result = i + car + ':' + j + wheel"
+		(function() {
+			class EV2 extends XElement {}
+			EV2.html = `
+				<div data-loop="numbers: n, number">
+					<div data-loop="letters: l, letter">
+						<span onclick="this.result = n + number + ':' + l + letter"></span>
+					</div>
+				</div>`;
+
+			var b = new EV2();
+			b.numbers = ['1', '2'];
+			b.letters = ['A', 'B'];
+
+			b.shadowRoot.children[0].children[0].dispatchEvent(new Event('click'));
+			assertEq(b.result, '01:0A');
+		})();
 	},
 
 	bindData: function() {
@@ -1281,26 +1301,5 @@ var test_XElement = {
 
 
 	failures: function() {
-
-		// Test events in double loop (used to fail)
-		// onclick="this.result = i + car + ':' + j + wheel"
-		(function() {
-			class EV2 extends XElement {}
-			EV2.html = `
-				<div data-loop="numbers: n, number">
-					<div data-loop="letters: l, letter">
-						<span data-text="n + number + ':' + l + letter" onclick="this.result = 5"></span>
-					</div>
-				</div>`;
-
-			var b = new EV2();
-			b.numbers = ['1', '2'];
-			b.letters = ['A', 'B'];
-
-
-			console.log(b.shadowRoot.children[0].children[0]);
-			b.shadowRoot.children[0].children[0].dispatchEvent(new Event('click'));
-			console.log(b.result);
-		})();
 	}
 };
