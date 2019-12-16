@@ -40,13 +40,13 @@ var createEl = (html) => {
  * Return the array as a quoted csv string.
  * @param array {string[]}
  * @returns {string} */
-var csv = (array) => {
-	return JSON.stringify(array).slice(1, -1); // slice() to remove starting and ending [].
-};
+var csv = (array) => JSON.stringify(array).slice(1, -1); // slice() to remove starting and ending [].
 
-var isObj = (obj) => {
-	return obj !== null && typeof obj === 'object';
-};
+
+/**
+ * @param obj {*}
+ * @returns {boolean} */
+var isObj = (obj) => obj && typeof obj === 'object'; // Make sure it's not null, since typof null === 'object'.
 
 /**
  * Is name a valid attribute for el.
@@ -54,11 +54,9 @@ var isObj = (obj) => {
  * @param name {string}
  * @returns {boolean} */
 var isValidAttribute = (el, name) => {
-	if (name.startsWith('data-') || el.hasAttribute(name))
+	if ((name.startsWith('data-') || el.hasAttribute(name)) ||
+		(name.startsWith('on') && events.includes(name.slice(2))))
 		return true;
-	if (name.startsWith('on') && events.includes(name.slice(2)))
-		return true;
-
 
 	if (name in el)
 		return false;
@@ -70,7 +68,13 @@ var isValidAttribute = (el, name) => {
 	return isAttr;
 };
 
+/**
+ * Find object values by keys that start with prefix.
+ * @param obj {object}
+ * @param prefix {string}
+ * @returns {Array} */
 var keysStartWith = (obj, prefix) => {
+
 	var result = [];
 	for (let key in obj)
 		if (key.startsWith(prefix))
@@ -81,12 +85,7 @@ var keysStartWith = (obj, prefix) => {
 /**
  * @param el {HTMLElement}
  * @returns {int} */
-var parentIndex = (el) => {
-	if (!el.parentNode)
-		return 0;
-	return Array.prototype.indexOf.call(el.parentNode.children, el);
-};
-
+var parentIndex = (el) => !el.parentNode ? 0 : Array.prototype.indexOf.call(el.parentNode.children, el);
 
 /**
  * @param obj {object}
@@ -94,8 +93,9 @@ var parentIndex = (el) => {
  * @param create {boolean=false} Create the path if it doesn't exist.
  * @param value {*=} If not undefined, set the object's path field to this value. */
 var traversePath = (obj, path, create, value) => {
-	for (let i=0; i<path.length; i++) {
-		let srcProp = path[i];
+	let i = 0;
+	for (let srcProp of path) {
+		let last = i === path.length-1;
 
 		// If the path is undefined and we're not to the end yet:
 		if (obj[srcProp] === undefined) {
@@ -103,32 +103,26 @@ var traversePath = (obj, path, create, value) => {
 			// If the next index is an integer or integer string.
 			if (create) {
 
-				if (i === path.length-1)
-				{
-					// deliberately empty.  but need to refactor loop logic.
+				if (!last) {
+					// If next level path is a number, create as an array
+					if ((path[i + 1] + '').match(/^\d+$/))
+						obj[srcProp] = [];
+					else
+						obj[srcProp] = {};
 				}
-
-				// If next level path is a number, create as an array
-				else if ((path[i + 1] + '').match(/^\d+$/))
-					obj[srcProp] = [];
-				else
-					obj[srcProp] = {};
 			}
 			else
 				return undefined; // can't traverse
 		}
 
 		// If last item in path
-		if (i === path.length-1) {
-			if (value !== undefined)
-				obj[srcProp] = value;
-		}
+		if (last && value !== undefined)
+			obj[srcProp] = value;
 
 		// Traverse deeper along destination object.
 		obj = obj[srcProp];
+		i++;
 	}
-
-
 
 	return obj;
 };
@@ -385,7 +379,7 @@ var handler = {
 		if (field==='$removeProxy')
 			return obj;
 		if (field==='$roots')
-			return ProxyObject.get(obj).roots_;
+			return ProxyObject.get_(obj).roots_;
 
 
 		let result = obj[field];
@@ -404,8 +398,8 @@ var handler = {
 			// Get (or create) the single unique instances of obj shared among all roots.
 			// Keeping a shared copy lets us have multiple watchers on the same object,
 			// and notify one when another changes the value.
-			var proxyObj = ProxyObject.get(obj);
-			var proxyResult = ProxyObject.get(result, proxyObj.roots_);
+			var proxyObj = ProxyObject.get_(obj);
+			var proxyResult = ProxyObject.get_(result, proxyObj.roots_);
 
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
@@ -435,7 +429,7 @@ var handler = {
 	 * @returns {boolean} */
 	set(obj, field, newVal) {
 
-		var proxyObj = ProxyObject.get(obj);
+		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
 			if (field !== 'length') {
 
@@ -462,7 +456,7 @@ var handler = {
 		else
 			delete obj[field];
 
-		var proxyObj = ProxyObject.get(obj);
+		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
 			let path = [...proxyObj.getPath_(root), field];
 			root.notify_('delete', path);
@@ -478,8 +472,8 @@ class ProxyObject {
 	constructor(obj, roots) {
 
 		/**
-		 * One shared proxy
-		 * @type object */
+		 * Not used.
+		 * \@type object */
 		//this.object = obj;
 
 		/**
@@ -511,13 +505,13 @@ class ProxyObject {
 	 * @param obj {object}
 	 * @param roots {object[]=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
-	static get(obj, roots) {
+	static get_(obj, roots) {
 		obj = obj.$removeProxy || obj;
 
 		var result = proxyObjects.get(obj);
-		if (!result) {
+		if (!result)
 			proxyObjects.set(obj, result = new ProxyObject(obj, roots));
-		}
+
 		// Merge in new roots
 		else if (roots)
 			result.roots_ = new Set([...result.roots_, ...roots]);
@@ -526,7 +520,7 @@ class ProxyObject {
 	}
 }
 
-// TODO: Could this be replaced with a weakmap from the root  ,to the callbacks?
+// TODO: Could this be replaced with a weakmap from the root to the callbacks?
 // Yes, but it wouldn't be as clean.
 class ProxyRoot {
 	constructor(root) {
@@ -542,7 +536,7 @@ class ProxyRoot {
 		this.callbacks_ = [];
 
 		// Add root to the ProxyObjects.
-		var po = ProxyObject.get(root);
+		var po = ProxyObject.get_(root);
 		po.roots_.add(this);
 	}
 
@@ -554,12 +548,12 @@ class ProxyRoot {
 	/**
 	 * @param root {object}
 	 * @returns {ProxyRoot} */
-	static get(root) {
+	static get_(root) {
 		root = root.$removeProxy || root;
 
 		var po = proxyRoots.get(root);
 		if (!po)
-			proxyRoots.set(root, po= new ProxyRoot(root));
+			proxyRoots.set(root, po = new ProxyRoot(root));
 		return po;
 	}
 }
@@ -584,7 +578,7 @@ var proxyObjects = new WeakMap();  // Map from objects back to their roots.
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
 var watchProxy = (root, callback) => {
-	var proxyRoot = ProxyRoot.get(root);
+	var proxyRoot = ProxyRoot.get_(root);
 	proxyRoot.callbacks_.push(callback);
 	return proxyObjects.get(root).proxy_;
 };;
@@ -619,9 +613,15 @@ var removeProxies = (obj, visited) => {
 			if (obj.hasOwnProperty(name)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
 				let t = obj[name];
 				let v = removeProxies(t, visited);
-				if (v !== t)
-					watchlessSet(obj, [name],  v);
+				if (v !== t) {
+					//watchlessSet(obj, [name], v);
 					// obj.$removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
+
+					obj = obj.$removeProxy || obj;
+					let wp = watched.get(obj);
+					let node = wp ? wp.fields_ : obj;
+					node[name] = v
+				}
 			}
 	}
 	return obj;
@@ -649,7 +649,8 @@ class WatchProperties {
 	notify_(action, path, value) {
 
 		// Traverse up the path looking for anything subscribed.
-		var parentPath = path.slice(0, -1);
+		let parentPath = path.slice(0, -1);
+		let cpath = csv(path);
 		while (parentPath.length) {
 			let cpath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
@@ -660,9 +661,8 @@ class WatchProperties {
 		}
 
 		// Traverse to our current level and downward looking for anything subscribed
-		let jpath = csv(path);
 		for (let name in this.subs_)
-			if (name.startsWith(jpath))
+			if (name.startsWith(cpath))
 				for (let callback of this.subs_[name])
 					callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 	}
@@ -672,7 +672,7 @@ class WatchProperties {
 	 * @param path {string|string[]}
 	 * @param callback {function((action:string, path:string[], value:string?)} */
 	subscribe_(path, callback) {
-		if (typeof path === 'string')
+		if (path.startsWith) // is string
 			path = [path];
 
 		// Create property at top level path, even if we're only watching something much deeper.
@@ -706,8 +706,8 @@ class WatchProperties {
 	unsubscribe_(path, callback) {
 
 		// Make sure path is an array.
-		if (typeof path === 'string')
-			path = JSON.parse('[' + path + ']');
+		if (path.startsWith) // is string
+			path = [path];
 
 		// Remove the callback from this path and all parent paths.
 		let cpath = csv(path);
@@ -725,10 +725,12 @@ class WatchProperties {
 
 			// Undo the Object.defineProperty() call when there are no more subscriptions to it.
 			let propCpath = csv([path[0]]);
+
+			// If here are no subscriptions that start with prpocPath
 			if (!keysStartWith(this.subs_, propCpath).filter((x) => x.length).length) {
 
 				delete this.obj_[path[0]]; // Remove the defined property.
-				this.obj_[path[0]] = this.fields_[path[0]];
+				this.obj_[path[0]] = this.fields_[path[0]]; // reset original unproxied value to object.
 
 				delete this.fields_[path[0]];
 			}
@@ -750,13 +752,9 @@ var watch = (obj, path, callback) => {
 	obj = obj.$removeProxy || obj;
 
 	// Keep only one WatchProperties per watched object.
-	var wp;
-	if (!watched.has(obj)) {
-		wp = new WatchProperties(obj);
-		watched.set(obj, wp);
-	}
-	else
-		wp = watched.get(obj);
+	var wp = watched.get(obj);
+	if (!wp)
+		watched.set(obj, wp = new WatchProperties(obj));
 
 	wp.subscribe_(path, callback);
 };
@@ -771,9 +769,9 @@ var unwatch = (obj, path, callback) => {
 	var wp = watched.get(obj);
 
 	if (wp) {
-		if (path)
+		if (path) // unsubscribe only from path.
 			wp.unsubscribe_(path, callback);
-		else
+		else // unsubscribe rom all paths.
 			for (let sub in wp.subs_)
 				wp.unsubscribe_(sub);
 
@@ -801,7 +799,7 @@ function watchlessGet(obj, path) {
 	return node;
 }
 */
-
+/*
 var watchlessSet = (obj, path, val) => {
 	// TODO: Make this work instead:
 	// Or just use $removeProxy prop?
@@ -815,17 +813,12 @@ var watchlessSet = (obj, path, val) => {
 	let prop = path.slice(-1)[0];
 	for (let p of path.slice(0, -1)) {
 		node = node[p];
-		//#IFDEV
-		// This can happen if one XElement subscribes within the path of another XElement via data-bind?
-		//if (node.$isProxy) // optional sanity check
-		//	throw new XElementError('Variable ' + p + ' is already a proxy.');
-		//#ENDIF
-
 		node = node.$removeProxy || node;
 	}
 
 	return node[prop] = val;
-};;
+};
+*/;
 
 /*
 Inherit from XElement to create custom HTML Components.
@@ -897,27 +890,18 @@ lazy modifier for input binding, to only trigger update after change.
 
 
 
-// A map between elements and the callback functions subscribed to them.
-// This way when we remove an element we know what to unbind.
+
+/**
+ * A map between elements and the callback functions subscribed to them.
+ * Each value is an array of objects with path and callback function.
+ * @type {WeakMap<HTMLElement, {path_:string, callback_:function}[]>} */
 var watchedEls = new WeakMap();
 
-class ElSubscriptions {
-	constructor() {
-		this.subs_ = [];
-	}
-
-	add(path, callback) {
-		this.subs_.push({
-			path_: path,
-			callback_: callback
-		});
-	}
-}
-
 var addWatchedEl = (el, path, callback) => {
-	if (!watchedEls.has(el))
-		watchedEls.set(el, new ElSubscriptions());
-	watchedEls.get(el).add(path, callback);
+	let we = watchedEls.get(el);
+	if (!we)
+		watchedEls.set(el, we = []);
+	we.push({path_: path, callback_: callback});
 };
 
 
@@ -926,26 +910,20 @@ var addWatchedEl = (el, path, callback) => {
  * @returns {string} */
 var getXName = (cls) => {
 	if (!cls.xname_) {
-		let lname = cls.name.toLowerCase();
-		if (lname.startsWith('x'))
-			lname = lname.slice(1);
-
-		let name = 'x-' + lname;
+		let lname =  'x-' + cls.name.toLowerCase().replace(/$x/, '');
+		cls.xname_ = lname;
 
 		// If name exists, add an incrementing integer to the end.
-		for (let i = 2; customElements.get(name); i++)
-			name = 'x-' + lname + i;
-
-		cls.xname_ = name;
+		// TODO: Should I throw an error instead?
+		for (let i = 2; customElements.get(cls.xname_); i++)
+			cls.xname_ = 'x-' + lname + i;
 	}
 	return cls.xname_;
 };
 
-var getXParent = (el) => {
-	do {
-		if (el.nodeType === 11) // doc fragment
-			return el.host;
-	} while (el = el.parentNode);
+var getXParent = (el) => { // will error if not in an XParent.
+	while ((el = el.parentNode).nodeType !== 11) {} // doc fragment
+	return el.host;
 };
 
 
@@ -976,8 +954,7 @@ var watchXElement = (obj, path, callback) => {
  * @return {object<string, string|int>} */
 var getContext = (el) => {
 	let context = {};
-	let parent = el;
-	let lastEl = el;
+	let parent = lastEl = el;
 
 	// Parent.host lets us traverse up beyond the shadow root, 
 	// in case data-loop is defined on the shadow host.
@@ -1039,14 +1016,13 @@ var bindEl = (self, el, context) => {
 			if (attr.name.startsWith('data-')) {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
-				let code = attr.value;
 
 				// Get context only if needed.
 				if (!context)
 					context = getContext(el);
 
-				if (bindings[attrName])
-					bindings[attrName](self, code, el, context);
+				if (bindings[attrName]) // attr.value is code.
+					bindings[attrName](self, attr.value, el, context);
 
 				//#IFDEV
 				else
@@ -1061,8 +1037,8 @@ var bindEl = (self, el, context) => {
 
 	// Data loop already binds its own children when first applied.
 	if (!el.hasAttribute('data-loop'))
-		for (let i=0; i < root.children.length; i++)
-			bindEl(self, root.children[i], context);
+		for (let child of root.children)
+			bindEl(self, child, context);
 };
 
 
@@ -1083,13 +1059,13 @@ var unbindEl = (root) => {
 				if (watchedEl) {
 
 					if (attr.name === 'data-loop') {
-						el.innerHTML = el.loopHtml_;
+						el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 						delete el.loopHtml_;
 						delete el.items_;
 					}
 
-					for (let sub of watchedEl.subs_) {
-						var p = p || getXParent(root);
+					for (let sub of watchedEl) {
+						var p = p || getXParent(root); // only getXParent when first needed.
 						unwatch(p, sub.path_, sub.callback_);
 					}
 				}
@@ -1152,7 +1128,7 @@ var setAttribute = (self, name, value) => {
 	if (!isValidAttribute(self, name)) {
 
 		// As javascript code to be evaluated.
-		if (value && value.length > 2 && value.slice(0, 1) === '{' && value.slice(-1) === '}') {
+		if (value && value.length > 2 && value.startsWith('{') && value.endsWith('}')) {
 			(() => { // Guard scope before calling eval.
 				value = eval('(' + value.slice(1, -1) + ')'); // code to eval
 			}).call(self); // Import "self" as "this" variable to eval'd code.  This lets us pass attribute="${this}" in html initialization.
@@ -1168,94 +1144,90 @@ var setAttribute = (self, name, value) => {
 
 
 var initHtml = (self) => {
-	if (self.init_)
-		return;
-	self.init_ = 1;
+	if (!self.init_) {
 
-	// 1. Create temporary element.
-	var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
+		self.init_ = 1;
 
-	// 2. Remove and save attributes from instantiation.
-	var attributes = {};
-	for (let attr of self.attributes) // From instantiation.
-		attributes[attr.name] = attr.value;
+		// 1. Create temporary element.
+		var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
 
-	// 3.  Add attributes from definition (Item.html='<div attr="value"')
-	for (let attr of div.attributes) { // From definition
-		if (attr.name !== undefined)
-			setAttribute(self, attr.name, attr.value);
-	}
+		// 2. Remove and save attributes from instantiation.
+		var attributes = {};
+		for (let attr of self.attributes) // From instantiation.
+			attributes[attr.name] = attr.value;
 
-	// 4. Bind events on the defintion to functions on its own element and not its container.
-	bindElEvents(self, self, div);
+		// 3.  Add attributes from definition (Item.html='<div attr="value"')
+		for (let attr of div.attributes) { // From definition
+			if (attr.name)
+				setAttribute(self, attr.name, attr.value);
+		}
 
-	// 5.  Add attributes from instantiation.
-	for (let name in attributes) // From instantiation
-		setAttribute(self, name, attributes[name]);
+		// 4. Bind events on the defintion to functions on its own element and not its container.
+		bindElEvents(self, self, div);
 
-	// 6. Create Shadow DOM
-	self.attachShadow({mode: 'open'});
-	while (div.firstChild)
-		self.shadowRoot.insertBefore(div.firstChild, null);
-	var root = self.shadowRoot || self;
+		// 5.  Add attributes from instantiation.
+		for (let name in attributes) // From instantiation
+			setAttribute(self, name, attributes[name]);
 
-
-	/*
-	// Old version before shadow dom:
-	// Html within <x-classname>...</x-classname>, where the tag is added to another element.
-	// This only works in the Edge shim.  It's an empty string in chrome and firefox.
-	var slotHtml = self.innerHTML;
-	var slot = div.querySelector('#slot');
-	if (slot)
-		slot.removeAttribute('id');
-
-	// Copy children from temporary div to this class.
-	if (slot || !slotHtml) {
-		self.innerHTML = '';
+		// 6. Create Shadow DOM
+		self.attachShadow({mode: 'open'});
 		while (div.firstChild)
-			self.appendChild(div.firstChild);
+			self.shadowRoot.insertBefore(div.firstChild, null);
+		var root = self.shadowRoot || self;
+
+
+		/*
+		// Old version before shadow dom:
+		// Html within <x-classname>...</x-classname>, where the tag is added to another element.
+		// This only works in the Edge shim.  It's an empty string in chrome and firefox.
+		var slotHtml = self.innerHTML;
+		var slot = div.querySelector('#slot');
+		if (slot)
+			slot.removeAttribute('id');
+
+		// Copy children from temporary div to this class.
+		if (slot || !slotHtml) {
+			self.innerHTML = '';
+			while (div.firstChild)
+				self.appendChild(div.firstChild);
+		}
+
+		// Copy children from <x-classname> into the slot.
+		if (slotHtml)
+			(slot || self).innerHTML = slotHtml;
+		*/
+
+
+		// 7. Create class properties that reference any html element with an id tag.
+		for (let node of root.querySelectorAll('[id]')) {
+			let id = node.getAttribute('id');
+			Object.defineProperty(self, id, {
+				// Make it readonly.
+				// Using writeable: false caused errors if the getter returns a proxy instead of the proper type.
+				// But how does it know it's the wrong type?
+
+				enumerable: 1,
+				configurable: 1,
+				get: () => node,
+				set: () => {
+					//#IFDEV
+					throw new XElementError('Property ' + id + ' not writable');
+					//#ENDIF
+				}
+			});
+
+			// Only leave the id attributes if we have a shadow root.
+			// Otherwise we'll have duplicate id's in the main document.
+			if (!self.shadowRoot)
+				node.removeAttribute('id');
+		}
+
+
+		// 8. Bind all data- and event attributes
+		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
+		bindEl(self, self);
+		bindEvents(self, root);
 	}
-
-	// Copy children from <x-classname> into the slot.
-	if (slotHtml)
-		(slot || self).innerHTML = slotHtml;
-	*/
-
-
-
-	// 7. Create class properties that reference any html element with an id tag.
-	var nodes = root.querySelectorAll('[id]');
-	for (let i = 0, node; node = nodes[i]; i++) {
-		let id = node.getAttribute('id');
-		Object.defineProperty(self, id, {
-			// Make it readonly.
-			// Using writeable: false caused errors if the getter returns a proxy instead of the proper type.
-			// But how does it know it's the wrong type?
-
-			enumerable: 1,
-			configurable: 1,
-			get: () => node,
-			set: () => {
-				//#IFDEV
-				throw new XElementError('Property ' + id + ' not writable');
-				//#ENDIF
-			}
-		});
-
-		// Only leave the id attributes if we have a shadow root.
-		// Otherwise we'll have duplicate id's in the main document.
-		if (!self.shadowRoot)
-			node.removeAttribute('id');
-	}
-
-
-
-
-	// 8. Bind all data- and event attributes
-	// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
-	bindEl(self, self);
-	bindEvents(self, root);
-
 };
 
 /**
@@ -1327,66 +1299,65 @@ var bindings = {
 
 
 	bind: (self, code, el, context) => {
-		if (!(self !== el && el instanceof XElement))
-			return;
+		// allow binding only on XElement
+		if (self !== el && el instanceof XElement)
+		{
+
+			var obj = parseObj(code);
+
+			for (let prop in obj) {
+
+				// Assign the referenced object to a variable on el.
+				let expr = addThis(replaceVars(obj[prop], context), context);
+
+				let updateProp = (/*action, path, value*/) => {
+					el[prop] = safeEval.call(self, expr);
+				};
 
 
-		// Temporary.  Put this in its own function or something.
-		var obj = parseObj(code);
+				// Set initial values.
+				updateProp();
 
-		for (let prop in obj) {
+				// If binding to the parent, "this", we need to take extra steps,
+				// because normally we can only bind to object properties and not the object itself.
+				if (expr === 'this') {
 
-			// Assign the referenced object to a variable on el.
-			let expr = addThis(replaceVars(obj[prop], context), context);
+					// 1. We get the subscriptions that watch the property on el.
+					let subs = watched.get(el).subs_;
 
-			let updateProp = function updateProp(/*action, path, value*/) {
-				el[prop] = safeEval.call(self, expr);
-			}.bind(self);
+					for (let sub in subs) {
+						if (sub.startsWith('"' + prop + '"')) {
+							let subPath = JSON.parse('[' + sub + ']');
 
-
-			// Set initial values.
-			updateProp();
-
-			// If binding to the parent, "this", we need to take extra steps,
-			// because normally we can only bind to object properties and not the object itself.
-			if (expr === 'this') {
-
-				// 1. We get the subscriptions that watch the property on el.
-				let subs = watched.get(el).subs_;
-
-				for (let sub in subs) {
-					if (sub.startsWith('"' + prop + '"')) {
-						let subPath = JSON.parse('[' + sub + ']');
-
-						// 2. For each function, we move the watch from the child object to the parent object.
-						for (let callback of subs[sub]) {
-							unwatch(el, subPath, callback);
-							watch(self, subPath.slice(1), function (action, path, value) {
-								// 3. And intercept its call to make sure we pass the original path.
-								callback.call(el, action, subPath, value);
-							});
+							// 2. For each function, we move the watch from the child object to the parent object.
+							for (let callback of subs[sub]) {
+								unwatch(el, subPath, callback);
+								watch(self, subPath.slice(1), function (/*action, path, value*/) {
+									// 3. And intercept its call to make sure we pass the original path.
+									callback.apply(el, arguments);
+								});
+							}
 						}
 					}
 				}
-			}
 
-			// Add a regular watch.
-			else
-				for (let path of parseVars(expr))
-					watch(self, path, updateProp);
+				// Add a regular watch.
+				else
+					for (let path of parseVars(expr))
+						watch(self, path, updateProp);
+			}
 		}
 
 	},
 
 	classes: (self, code, el, context) => {
 
-		// Temporary.  Put this in its own function or something.
 		var obj = parseObj(code);
 		for (let name in obj) {
 			let classExpr = addThis(replaceVars(obj[name], context), context);
 
 			// This code is called on every update.
-			let updateClass = function () {
+			let updateClass = () => {
 				let result = safeEval.call(self, classExpr);
 				if (result)
 					el.classList.add(name);
@@ -1395,7 +1366,7 @@ var bindings = {
 					if (!el.classList.length) // remove attribute after last class removed.
 						el.removeAttribute('class');
 				}
-			}.bind(self);
+			};
 
 
 			// Create properties and watch for changes.
@@ -1411,7 +1382,7 @@ var bindings = {
 
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = function setText(/*action, path, value*/) {
+		let setText = (/*action, path, value*/) => {
 			el.textContent = safeEval.call(self, code);
 		};
 		for (let path of parseVars(code)) {
@@ -1425,7 +1396,7 @@ var bindings = {
 
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = function setHtml(/*action, path, value*/) {
+		let setHtml = (/*action, path, value*/) => {
 			el.innerHTML = safeEval.call(self, code);
 		};
 
@@ -1586,7 +1557,7 @@ var bindings = {
 				traversePath(self, paths[0], true, value);
 			});
 
-		let setVal = function(/*action, path, value*/) {
+		let setVal = (/*action, path, value*/) => {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
@@ -1594,7 +1565,7 @@ var bindings = {
 				el.checked = result == true;
 			else
 				el.value = result;
-		}.bind(self);
+		};
 
 		// Update input value when object property changes.
 		for (let path of paths) {
@@ -1612,9 +1583,10 @@ var bindings = {
 		if (displayNormal === 'none')
 			displayNormal = '';
 
-		let setVisible = function(/*action, path, value*/) {
+		let setVisible = (/*action, path, value*/) => {
 			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
-		}.bind(self);
+		};
+
 		for (let path of parseVars(code)) {
 			watch(self, path, setVisible);
 			addWatchedEl(el, path, setVisible);

@@ -15,7 +15,7 @@ var handler = {
 		if (field==='$removeProxy')
 			return obj;
 		if (field==='$roots')
-			return ProxyObject.get(obj).roots_;
+			return ProxyObject.get_(obj).roots_;
 
 
 		let result = obj[field];
@@ -34,8 +34,8 @@ var handler = {
 			// Get (or create) the single unique instances of obj shared among all roots.
 			// Keeping a shared copy lets us have multiple watchers on the same object,
 			// and notify one when another changes the value.
-			var proxyObj = ProxyObject.get(obj);
-			var proxyResult = ProxyObject.get(result, proxyObj.roots_);
+			var proxyObj = ProxyObject.get_(obj);
+			var proxyResult = ProxyObject.get_(result, proxyObj.roots_);
 
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
@@ -65,7 +65,7 @@ var handler = {
 	 * @returns {boolean} */
 	set(obj, field, newVal) {
 
-		var proxyObj = ProxyObject.get(obj);
+		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
 			if (field !== 'length') {
 
@@ -92,7 +92,7 @@ var handler = {
 		else
 			delete obj[field];
 
-		var proxyObj = ProxyObject.get(obj);
+		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
 			let path = [...proxyObj.getPath_(root), field];
 			root.notify_('delete', path);
@@ -108,8 +108,8 @@ class ProxyObject {
 	constructor(obj, roots) {
 
 		/**
-		 * One shared proxy
-		 * @type object */
+		 * Not used.
+		 * \@type object */
 		//this.object = obj;
 
 		/**
@@ -141,13 +141,13 @@ class ProxyObject {
 	 * @param obj {object}
 	 * @param roots {object[]=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
-	static get(obj, roots) {
+	static get_(obj, roots) {
 		obj = obj.$removeProxy || obj;
 
 		var result = proxyObjects.get(obj);
-		if (!result) {
+		if (!result)
 			proxyObjects.set(obj, result = new ProxyObject(obj, roots));
-		}
+
 		// Merge in new roots
 		else if (roots)
 			result.roots_ = new Set([...result.roots_, ...roots]);
@@ -156,7 +156,7 @@ class ProxyObject {
 	}
 }
 
-// TODO: Could this be replaced with a weakmap from the root  ,to the callbacks?
+// TODO: Could this be replaced with a weakmap from the root to the callbacks?
 // Yes, but it wouldn't be as clean.
 class ProxyRoot {
 	constructor(root) {
@@ -172,7 +172,7 @@ class ProxyRoot {
 		this.callbacks_ = [];
 
 		// Add root to the ProxyObjects.
-		var po = ProxyObject.get(root);
+		var po = ProxyObject.get_(root);
 		po.roots_.add(this);
 	}
 
@@ -184,12 +184,12 @@ class ProxyRoot {
 	/**
 	 * @param root {object}
 	 * @returns {ProxyRoot} */
-	static get(root) {
+	static get_(root) {
 		root = root.$removeProxy || root;
 
 		var po = proxyRoots.get(root);
 		if (!po)
-			proxyRoots.set(root, po= new ProxyRoot(root));
+			proxyRoots.set(root, po = new ProxyRoot(root));
 		return po;
 	}
 }
@@ -214,7 +214,7 @@ var proxyObjects = new WeakMap();  // Map from objects back to their roots.
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
 var watchProxy = (root, callback) => {
-	var proxyRoot = ProxyRoot.get(root);
+	var proxyRoot = ProxyRoot.get_(root);
 	proxyRoot.callbacks_.push(callback);
 	return proxyObjects.get(root).proxy_;
 };

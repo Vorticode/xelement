@@ -84,9 +84,8 @@ var replacementProps = [ // These appear as .name
 	
 	'\\$isProxy',
 	'\\$removeProxy',
-	//'push': 'PU', // makes no difference in size.
-	//'string': 'STR', // Increases size
-	//'connectedCallback': 'CC'
+	//'push', // makes no difference in size.
+	//'string', // Increases size
 ];
 var i=0;
 var a = [];
