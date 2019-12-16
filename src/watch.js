@@ -9,11 +9,11 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	while (obj.isProxy) // should never be more than 1 level deep of proxies.
-		obj = obj.removeProxy;
+	while (obj.$isProxy) // should never be more than 1 level deep of proxies.
+		obj = obj.$removeProxy;
 
 	//#IFDEV
-	if (obj.isProxy)
+	if (obj.$isProxy)
 		throw new XElementError("Double wrapped proxy found.");
 	//#ENDIF
 
@@ -30,7 +30,7 @@ var removeProxies = (obj, visited) => {
 				let v = removeProxies(t, visited);
 				if (v !== t)
 					watchlessSet(obj, [name],  v);
-					// obj.removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
+					// obj.$removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
 			}
 	}
 	return obj;
@@ -44,9 +44,9 @@ class WatchProperties {
 
 	constructor(obj) {
 		this.obj_ = obj;   // Original object being watched.
-		this.fields_ = {}; // removeProxy underlying fields that store the data.
+		this.fields_ = {}; // $removeProxy underlying fields that store the data.
 		                   // This is necessary to store the values of obj_ after defineProperty() is called.
-		this.proxy_ = watchObj(this.fields_, this.notify.bind(this));
+		this.proxy_ = watchProxy(this.fields_, this.notify.bind(this));
 		this.subs_ = {};
 	}
 
@@ -160,8 +160,8 @@ var watched = new WeakMap();
  * @param path {string|string[]}
  * @param callback {function(action:string, path:string[], value:string?)} */
 var watch = (obj, path, callback) => {
-	if (obj.isProxy)
-		obj = obj.removeProxy;
+	if (obj.$isProxy)
+		obj = obj.$removeProxy;
 
 
 	// Keep only one WatchProperties per watched object.
@@ -182,8 +182,8 @@ var watch = (obj, path, callback) => {
  * @param path {string|string[]}
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
-	if (obj.isProxy)
-		obj = obj.removeProxy;
+	if (obj.$isProxy)
+		obj = obj.$removeProxy;
 	var wp = watched.get(obj);
 
 	if (wp) {
@@ -211,7 +211,7 @@ function watchlessGet(obj, path) {
 	let node = watched.get(obj).fields_;
 	for (let p of path) {
 		node = node[p];
-		if (node.isProxy)
+		if (node.$isProxy)
 			throw new XElementError();
 	}
 	return node;
@@ -220,11 +220,11 @@ function watchlessGet(obj, path) {
 
 var watchlessSet = (obj, path, val) => {
 	// TODO: Make this work instead:
-	// Or just use removeProxy prop?
+	// Or just use $removeProxy prop?
 	//traversePath(watched.get(obj).fields_, path, true, val);
 	//return val;
-	if (obj.isProxy)
-		obj = obj.removeProxy;
+	if (obj.$isProxy)
+		obj = obj.$removeProxy;
 	var wp = watched.get(obj);
 
 
@@ -234,12 +234,12 @@ var watchlessSet = (obj, path, val) => {
 		node = node[p];
 		//#IFDEV
 		// This can happen if one XElement subscribes within the path of another XElement via data-bind?
-		//if (node.isProxy) // optional sanity check
+		//if (node.$isProxy) // optional sanity check
 		//	throw new XElementError('Variable ' + p + ' is already a proxy.');
 		//#ENDIF
 
-		if (node.isProxy)
-			node = node.removeProxy;
+		if (node.$isProxy)
+			node = node.$removeProxy;
 	}
 
 	return node[prop] = val;

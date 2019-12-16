@@ -15,19 +15,19 @@ var arrayEq = (array1, array2) => {
 	if (array1.length !== array2.length)
 		return false;
 
-	if (array1.isProxy)
-		array1 = array1.removeProxy;
-	if (array2.isProxy)
-		array2 = array2.removeProxy;
+	if (array1.$isProxy)
+		array1 = array1.$removeProxy;
+	if (array2.$isProxy)
+		array2 = array2.$removeProxy;
 	return array1.every((value, index) => eq(value, array2[index]))
 };
 
 var eq = (item1, item2) => {
 
-	if (item1.isProxy)
-		item1 = item1.removeProxy;
-	if (item2.isProxy)
-		item2 = item2.removeProxy;
+	if (item1.$isProxy)
+		item1 = item1.$removeProxy;
+	if (item2.$isProxy)
+		item2 = item2.$removeProxy;
 	return item1 === item2;
 }
 
@@ -102,8 +102,10 @@ function safeEval(expr) {
 		return eval(expr);
 	}
 	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError) || (!e.message.match('undefined')))
+		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
+			e.message += ' in expression "' + expr + '"';
 			throw e;
+		}
 	}
 	return undefined;
 }

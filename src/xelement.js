@@ -33,7 +33,8 @@ Named slot support? - https://developer.mozilla.org/en-US/docs/Web/Web_Component
 Separate out a lite version that doesn't do binding?
 	This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
 TODO:
-
+warning on loop element id.
+warning if binding to id attribute assigned to element.
 We could even add enableUpdates() / disableUpdates() / clearUpdates() functions.
 
 
@@ -561,8 +562,6 @@ var bindings = {
 			// Set initial values.
 			updateClass();
 		}
-
-
 	},
 
 	text: (self, code, el, context) => {

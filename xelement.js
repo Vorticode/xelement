@@ -568,11 +568,11 @@ class ProxyRoot {
 
 /**
  * @type {WeakMap<object, ProxyRoot>} */
-var proxyRoots = new Map();
+var proxyRoots = new WeakMap();
 
 /**
  * @type {WeakMap<object, ProxyObject>} */
-var proxyObjects = new Map();  // Map from objects back to their roots.
+var proxyObjects = new WeakMap();  // Map from objects back to their roots.
 
 
 

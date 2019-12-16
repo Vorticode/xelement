@@ -48,7 +48,7 @@ var test_Watch = {
 
 			// Make sure setting an array with a proxied item inside doesn't add the proxy to the underlying object.
 			b.items = [b.items[0]]; // new array, proxied original object inside.
-			assert(!b.items.removeProxy[0].isProxy);
+			assert(!b.items.$removeProxy[0].$isProxy);
 		})();
 
 		// Two watchers of the same array, make sure changing it through one path notifies the other.
@@ -56,10 +56,10 @@ var test_Watch = {
 			var b = [1, 2, 3];
 			var ops = [];
 
-			var b1 = watchObj(b, function(action, path, value) {
+			var b1 = watchProxy(b, function(action, path, value) {
 				ops.push('b1');
 			});
-			var b2 = watchObj(b, function(action, path, value) {
+			var b2 = watchProxy(b, function(action, path, value) {
 				ops.push('b2');
 			});
 
@@ -68,6 +68,67 @@ var test_Watch = {
 			assertEq(ops.length, 2);
 			assertEq(ops[0], 'b1');
 			assertEq(ops[1], 'b2');
+		})();
+
+
+		// Watches with roots on both an object and it's sub-property.
+		(function() {
+
+			var a = {
+				b1: {parent: undefined},
+				b2: [1, 2]
+			};
+			a.b1.parent = a;
+			var called = new Set();
+
+			var aW = watchProxy(a, (action, path, value) => {
+				called.add('a.b2');
+			});
+
+			var bW = watchProxy(a.b1, (action, path, value) => {
+				called.add('b1.parent.b2');
+			});
+
+			// Trigger proxies to be created via get, just in case that's needed.
+			var v = aW.b1.parent.b2[0];
+			v = bW.parent;
+			v = v.b2[0];
+
+			var b2 = bW.parent.b2[0] = 5;
+
+			assertEq(a.b2[0], 5);
+			assert(called.has('a.b2'));
+			assert(called.has('b1.parent.b2'));
+		})();
+
+		// Same as above, but with watch() instead of watchProxy.
+		(function() {
+			var a = {
+				b1: {
+					c: 1,
+					parent: undefined
+				},
+				b2: [1, 2]
+			};
+			a.b1.parent = a;
+			var called = new Set();
+
+			var cb1 = function(action, path, value) {
+				called.add('a.b2');
+			};
+			watch(a, ['b2'], cb1);
+
+			var cb2 = function(action, path, value) {
+				called.add('b1.parent.b2');
+			};
+			watch(a.b1, ['parent', 'b2'], cb2);
+
+
+			a.b1.parent.b2[0] = 5;
+
+			assertEq(a.b2[0], 5);
+			assert(called.has('a.b2'));
+			assert(called.has('b1.parent.b2'));
 		})();
 	},
 
@@ -132,20 +193,19 @@ var test_Watch = {
 
 		// Unsubscribe one callback from a[0]
 		wp.unsubscribe(['a', '0'], cb);
-		assert(o.a.isProxy);
+		assert(o.a.$isProxy);
 
 		// Unsubscribe all callbacks from a[0]
 		wp.unsubscribe(['a', '0']);
-		assert(o.a.isProxy);
+		assert(o.a.$isProxy);
 
 		// Unsubscribe last callbacks from a.
 		wp.unsubscribe(['a'], cb);
-		assert(!o.a.isProxy);
+		assert(!o.a.$isProxy);
 
 		// Make sure we can subscribe back again.
 		wp.subscribe(['a'], cb);
-		assert(o.a.isProxy);
-
+		assert(o.a.$isProxy);
 	}
 };
 
@@ -317,9 +377,9 @@ var test_XElement = {
 			var b = new B5();
 			b.item = {name: 1};
 
-			assert(b.item.isProxy);
+			assert(b.item.$isProxy);
 			unbindEl(b, b.shadowRoot.children[1]);
-			assert(b.item.isProxy);
+			assert(b.item.$isProxy);
 		})();
 	},
 
@@ -733,42 +793,46 @@ var test_XElement = {
 		(function() {
 
 			class BL30 extends XElement {}
-			BL30.html =
-				'<div data-loop="items:item">' +
-				'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">Hi</span>' +
-				'</div>' +
-				'</div>';
+			BL30.html = `
+				<div data-loop="numbers:number">
+					<div data-loop="letters:letter">
+						<span data-text="number+\':\'+letter">Hi</span>
+					</div>
+				</div>`;
 
 			var b = new BL30();
-			b.items = [1, 2];
-			b.cats = [1, 2];
-			assertEq(b.shadowRoot.innerHTML,
-				'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:1</span>' +
-				'<span data-text="cat+\':\'+item">2:1</span>' +
-				'</div>' +
-				'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:2</span>' +
-				'<span data-text="cat+\':\'+item">2:2</span>' +
-				'</div>');
+			b.numbers = [1, 2];
+			b.letters = ['A', 'B'];
+
+
+			assertEq(b.shadowRoot.children[0].children[0].textContent, '1:A');
+			assertEq(b.shadowRoot.children[0].children[1].textContent, '1:B');
+			assertEq(b.shadowRoot.children[0].children.length, 2);
+
+			assertEq(b.shadowRoot.children[1].children[0].textContent, '2:A');
+			assertEq(b.shadowRoot.children[1].children[1].textContent, '2:B');
+			assertEq(b.shadowRoot.children[1].children.length, 2);
+
+			assertEq(b.shadowRoot.children.length, 2);
+
 
 			// Since this removes all children, it will convert cats back to a regular field instead of a defined property.
 			// But it should convert it back to a proxy when rebuildChildren() is called.
-			b.items.pop();
-			assertEq(b.shadowRoot.innerHTML,
-				'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:1</span>' +
-				'<span data-text="cat+\':\'+item">2:1</span>' +
-				'</div>');
+			b.numbers.pop();
+			assertEq(b.shadowRoot.children[0].children[0].textContent, '1:A');
+			assertEq(b.shadowRoot.children[0].children[1].textContent, '1:B');
+			assertEq(b.shadowRoot.children[0].children.length, 2);
 
-			b.cats.push(3);
-			assertEq(b.shadowRoot.innerHTML,
-				'<div data-loop="cats:cat">' +
-				'<span data-text="cat+\':\'+item">1:1</span>' +
-				'<span data-text="cat+\':\'+item">2:1</span>' +
-				'<span data-text="cat+\':\'+item">3:1</span>' +
-				'</div>');
+			assertEq(b.shadowRoot.children.length, 1);
+
+			b.letters.push('C');
+
+			assertEq(b.shadowRoot.children[0].children[0].textContent, '1:A');
+			assertEq(b.shadowRoot.children[0].children[1].textContent, '1:B');
+			assertEq(b.shadowRoot.children[0].children[2].textContent, '1:C');
+			assertEq(b.shadowRoot.children[0].children.length, 3);
+
+			assertEq(b.shadowRoot.children.length, 1);
 
 		})();
 
@@ -926,6 +990,9 @@ var test_XElement = {
 
 			b.shadowRoot.children[0].dispatchEvent(new Event('click'));
 			assertEq(b.result, '0A');
+
+			b.shadowRoot.children[1].dispatchEvent(new Event('click'));
+			assertEq(b.result, '1B');
 		})();
 
 		// Event attribute on definition and instantiation:
@@ -1018,9 +1085,7 @@ var test_XElement = {
 
 		// Make sure we can share a list between two XElements.  This used to fail.
 		(function () {
-			class BD3Inner extends XElement {
-			}
-
+			class BD3Inner extends XElement {}
 			BD3Inner.html = `
 			<div>
 				<div id="loop"  data-loop="items: item">					
@@ -1029,9 +1094,7 @@ var test_XElement = {
 			</div>`;
 
 
-			class BD3Outer extends XElement {
-			}
-
+			class BD3Outer extends XElement {}
 			BD3Outer.html = `
 			<div>
 				<div id="loop" data-loop="t2.items: item">
@@ -1051,9 +1114,7 @@ var test_XElement = {
 		// At one point, instantiating T() would cause watchlessSet() to try to overwrite sub,
 		// giving a property not writable error.
 		(function () {
-			class BD4Inner extends XElement {
-			}
-
+			class BD4Inner extends XElement {}
 			BD4Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1062,22 +1123,18 @@ var test_XElement = {
 			</div>`;
 
 
-			class BD4Outer extends XElement {
-			}
-
+			class BD4Outer extends XElement {}
 			BD4Outer.html = `
 			<div>
 				<x-bd4inner id="sub" data-bind="t1: this"></x-bd4inner>
 			</div>`;
 
-			var t = new BD4Outer();
+			new BD4Outer();
 		})();
 
 		// Bind directly to "this"
 		(function () {
-			class BD5Inner extends XElement {
-			}
-
+			class BD5Inner extends XElement {}
 			BD5Inner.html = `
 				<div>
 					<div id="loop" data-loop="t1.items: item">					
@@ -1085,9 +1142,7 @@ var test_XElement = {
 					</div>
 				</div>`;
 
-			class BD5Outer extends XElement {
-			}
-
+			class BD5Outer extends XElement {}
 			BD5Outer.html = `
 				<div>
 					<x-bd5inner id="t2" data-bind="t1: this"></x-bd5inner>
@@ -1102,9 +1157,7 @@ var test_XElement = {
 		// Same as above, but loop is used twice.
 		// This used to fail because the proxy instead of the original object was being watched the second time.
 		(function () {
-			class BD6Inner extends XElement {
-			}
-
+			class BD6Inner extends XElement {}
 			BD6Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1112,9 +1165,7 @@ var test_XElement = {
 				</div>
 			</div>`;
 
-			class BD6Outer extends XElement {
-			}
-
+			class BD6Outer extends XElement {}
 			BD6Outer.html = `
 			<div>
 				<div id="loop" data-loop="items: item">					
@@ -1132,9 +1183,7 @@ var test_XElement = {
 
 		// Make sure multiple subsribers are updated when an input changes.
 		(function () {
-			class BD7Inner extends XElement {
-			}
-
+			class BD7Inner extends XElement {}
 			BD7Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1142,9 +1191,7 @@ var test_XElement = {
 				</div>
 			</div>`;
 
-			class BD7Outer extends XElement {
-			}
-
+			class BD7Outer extends XElement {}
 			BD7Outer.html = `
 			<div>
 				<div id="loop" data-loop="items: item">					
@@ -1170,9 +1217,7 @@ var test_XElement = {
 		// Three level bind
 		(function () {
 
-			class BD8C extends XElement {
-			}
-
+			class BD8C extends XElement {}
 			BD8C.html = `				
 			<div>
 			    <span id="names" data-loop="c.names: name">
@@ -1180,17 +1225,13 @@ var test_XElement = {
 				</span>
 			</div>`;
 
-			class BD8B extends XElement {
-			}
-
+			class BD8B extends XElement {}
 			BD8B.html = `				
 			<div>
 			    <x-bd8c id="xc" data-bind="c: this.b.c"></x-bd8c>
 			</div>`;
 
-			class BD8A extends XElement {
-			}
-
+			class BD8A extends XElement {}
 			BD8A.html = `				
 			<div>
 			    <x-bd8b id="xb" data-bind="b: this.a.b"></x-bd8b>
@@ -1201,9 +1242,9 @@ var test_XElement = {
 			var a = {b: {c: {names: [1, 2, 3]}}};
 			xa.a = a;
 
-			assertEq(xa.a.removeProxy, a);
-			assertEq(xa.xb.b.removeProxy, a.b);
-			assertEq(xa.xb.xc.c.removeProxy, a.b.c);
+			assertEq(xa.a.$removeProxy, a);
+			assertEq(xa.xb.b.$removeProxy, a.b);
+			assertEq(xa.xb.xc.c.$removeProxy, a.b.c);
 			assertEq(xa.xb.xc.names.children[0].textContent, '1');
 
 		})();
@@ -1213,17 +1254,13 @@ var test_XElement = {
 		(function () {
 
 
-			class BD9B extends XElement {
-			}
-
+			class BD9B extends XElement {}
 			BD9B.html = `				
 			<div>
 			    <span id="nameText" data-text="item.name"></span>
 			</div>`;
 
-			class BD9A extends XElement {
-			}
-
+			class BD9A extends XElement {}
 			BD9A.html = `				
 			<div>
 			    <span id="loop" data-loop="a.items: item">
@@ -1243,74 +1280,27 @@ var test_XElement = {
 
 
 
-
-
-
-	// TODO: Make these into tests.
 	failures: function() {
 
-		// Watches with roots on both an object and it's sub-property.
+		// Test events in double loop (used to fail)
+		// onclick="this.result = i + car + ':' + j + wheel"
 		(function() {
+			class EV2 extends XElement {}
+			EV2.html = `
+				<div data-loop="numbers: n, number">
+					<div data-loop="letters: l, letter">
+						<span data-text="n + number + ':' + l + letter" onclick="this.result = 5"></span>
+					</div>
+				</div>`;
+
+			var b = new EV2();
+			b.numbers = ['1', '2'];
+			b.letters = ['A', 'B'];
 
 
-			var a = {
-				b1: {
-					c: 1,
-					parent: undefined
-				},
-				b2: [1, 2]
-			};
-			a.b1.parent = a;
-
-			var cb1 = function(action, path, value) {
-				console.log('a.b2', path);
-			};
-			watch(a, ['b2'], cb1);
-
-			var cb2 = function(action, path, value) {
-				console.log('b1.parent.b2', path);
-			};
-			watch(a.b1, ['parent', 'b2'], cb2);
-
-
-			var item = a.b1.parent.b2;
-			item[0] = 5;
-
-
+			console.log(b.shadowRoot.children[0].children[0]);
+			b.shadowRoot.children[0].children[0].dispatchEvent(new Event('click'));
+			console.log(b.result);
 		})();
-
-	},
-
-	failures2: function() {
-
-		// Simpler version of failure above:
-		(function() {
-
-			var a = {
-				b1: {parent: undefined},
-				b2: [1, 2]
-			};
-			a.b1.parent = a;
-
-			var aW = watchObj(a, (action, path, value) => {
-				console.log('aW', path);
-			});
-
-			var bW = watchObj(a.b1, (action, path, value) => {
-				console.log('bW', path);
-			});
-
-			// Trigger proxies to be created via get, just in case that's needed.
-			var v = aW.b1.parent.b2[0];
-			v = bW.parent;
-			v = v.b2[0];
-
-			//aW.b2[0] = 5;
-			var b2 = bW.parent.b2;
-			b2[0] = 5; // prints bW only if aW doesn't exist.
-
-
-		})();
-
-	},
+	}
 };

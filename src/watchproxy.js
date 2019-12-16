@@ -10,9 +10,9 @@ var handler = {
 	get(obj, field) {
 
 		// Special properties
-		if (field==='isProxy')
+		if (field==='$isProxy')
 			return true;
-		if (field==='removeProxy')
+		if (field==='$removeProxy')
 			return obj;
 		if (field==='$roots')
 			return ProxyObject.get(obj).roots;
@@ -25,10 +25,10 @@ var handler = {
 		if (isObj(result)) {
 
 			// Remove any proxies.
-			if (result.isProxy)
-				result = result.removeProxy;
+			if (result.$isProxy)
+				result = result.$removeProxy;
 			//#IFDEV
-			if (result.isProxy)
+			if (result.$isProxy)
 				throw new XElementError("Double wrapped proxy found.");
 			//#ENDIF
 
@@ -143,8 +143,8 @@ class ProxyObject {
 	 * @param roots {object[]=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
 	static get(obj, roots) {
-		if (obj.isProxy)
-			obj = obj.removeProxy;
+		if (obj.$isProxy)
+			obj = obj.$removeProxy;
 
 		var result = proxyObjects.get(obj);
 		if (!result) {
@@ -159,6 +159,8 @@ class ProxyObject {
 	}
 }
 
+// TODO: Could this be replaced with a weakmap from the root  ,to the callbacks?
+// Yes, but it wouldn't be as clean.
 class ProxyRoot {
 	constructor(root) {
 
@@ -186,8 +188,8 @@ class ProxyRoot {
 	 * @param root {object}
 	 * @returns {ProxyRoot} */
 	static get(root) {
-		if (root.isProxy)
-			root = root.removeProxy;
+		if (root.$isProxy)
+			root = root.$removeProxy;
 
 		if (!proxyRoots.has(root))
 			proxyRoots.set(root, new ProxyRoot(root));
@@ -198,11 +200,11 @@ class ProxyRoot {
 
 /**
  * @type {WeakMap<object, ProxyRoot>} */
-var proxyRoots = new Map();
+var proxyRoots = new WeakMap();
 
 /**
  * @type {WeakMap<object, ProxyObject>} */
-var proxyObjects = new Map();  // Map from objects back to their roots.
+var proxyObjects = new WeakMap();  // Map from objects back to their roots.
 
 
 
@@ -214,7 +216,7 @@ var proxyObjects = new Map();  // Map from objects back to their roots.
  * @param root {object}
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
-var watchObj = (root, callback) => {
+var watchProxy = (root, callback) => {
 	var proxyRoot = ProxyRoot.get(root);
 	proxyRoot.callbacks.push(callback);
 	return proxyObjects.get(root).proxy;
