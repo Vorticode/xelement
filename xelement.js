@@ -823,20 +823,22 @@ var watchlessSet = (obj, path, val) => {
 /*
 Inherit from XElement to create custom HTML Components.
 
+TODO: next goals:
+indexOf and includes() on arrays fail because they compare proxied objects.
+allow sortable?
+Make data- prefix optional.  Use "x-", ":", or no prefix?
+Fix failing Edge tests.
+
+
 
 TODO
-Make data- prefix optional.
-Fix failing Edge tests.
 Separate "this" binding for data attr on definition vs instantiation
 Make shadowdom optional.
-indexOf and includes() on arrays fail because they compare proxied objects.
 
-allow sortable?
 implement other binding functions.
 allow loop over slots if data-loop is on the instantiation.
 allow loop over more than one html tag.
 cache results of parseVars() and other parse functions?
-cache the context of loop vars.
 functions to enable/disable updates.
 function to trigger updates?  Or a callback to apply all updates before DOM is updated.
 
@@ -847,7 +849,7 @@ Auto bind to this in complex expressions if the class property already exists an
 improve minifcation.
 Expose bindings prop in minified version.
 non-ascii variable names.
-throttle, debounce? data-val only trigger on change.
+throttle, debounce? data-val only trigger on change.  Via :attributes?
 Auto two-way bind for simple variables?
 bind to <input type="file">
 bind to clipboard events
@@ -857,9 +859,6 @@ Separate out a lite version that doesn't do binding?
 TODO:
 warning on loop element id.
 warning if binding to id attribute assigned to element.
-We could even add enableUpdates() / disableUpdates() / clearUpdates() functions.
-
-
 
 
 Disadvantages of Vue.js
@@ -895,13 +894,21 @@ lazy modifier for input binding, to only trigger update after change.
  * A map between elements and the callback functions subscribed to them.
  * Each value is an array of objects with path and callback function.
  * @type {WeakMap<HTMLElement, {path_:string, callback_:function}[]>} */
-var watchedEls = new WeakMap();
-
-var addWatchedEl = (el, path, callback) => {
-	let we = watchedEls.get(el);
+var elWatches = new WeakMap();
+var addElWatch = (el, path, callback) => {
+	let we = elWatches.get(el);
 	if (!we)
-		watchedEls.set(el, we = []);
+		elWatches.set(el, we = []);
 	we.push({path_: path, callback_: callback});
+};
+
+
+var elEvents = new WeakMap();
+var addElEvent = (el, event, callback, originalCode) => {
+	let ee = elEvents.get(el);
+	if (!ee)
+		elEvents.set(el, ee = []);
+	ee.push([event, callback, originalCode]);
 };
 
 
@@ -951,7 +958,7 @@ var watchXElement = (obj, path, callback) => {
  * Because the outer loop must be processed and build before we know the index for the inner element.
  * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
  * @param el
- * @return {object<string, string|int>} */
+ * @return {object<string, string|int>}
 var getContext = (el) => {
 	let context = {};
 	let parent = lastEl = el;
@@ -996,7 +1003,7 @@ var getContext = (el) => {
 	}
 	return context;
 };
-
+ */
 
 /**
  * Recursively process all the data- attributes in el and its descendants.
@@ -1016,10 +1023,6 @@ var bindEl = (self, el, context) => {
 			if (attr.name.startsWith('data-')) {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
-
-				// Get context only if needed.
-				if (!context)
-					context = getContext(el);
 
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
@@ -1044,61 +1047,60 @@ var bindEl = (self, el, context) => {
 
 
 /**
- * @param root {HTMLElement} Remove all bindings within root and children.*/
-var unbindEl = (root) => {
+ * @param el {HTMLElement} Remove all bindings within root and children.*/
+var unbindEl = (el, root) => {
+	root = root || el;
+	var next = el.shadowRoot || el;
 
-	var els = [...root.querySelectorAll('*')];
-	if (root.attributes)
-		els.unshift(root);
+	for (let child of next.children)
+		unbindEl(child, root);
 
-	for (let el of els) {
-
+	if (el.attributes)
 		for (let attr of el.attributes) {
 			if (attr.name.startsWith('data-')) {
-				let watchedEl = watchedEls.get(el);
-				if (watchedEl) {
 
-					if (attr.name === 'data-loop') {
-						el.innerHTML = el.loopHtml_; // revert it back to the look template element.
-						delete el.loopHtml_;
-						delete el.items_;
-					}
+				if (attr.name === 'data-loop' && el.loopHtml_) {
+					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
+					delete el.loopHtml_;
+					delete el.items_;
+				}
 
+				let watchedEl = elWatches.get(el);
+				if (watchedEl)
 					for (let sub of watchedEl) {
 						var p = p || getXParent(root); // only getXParent when first needed.
 						unwatch(p, sub.path_, sub.callback_);
 					}
-				}
 			}
 		}
-	}
 };
+
+
 
 /**
  * We rebind event attributes because otherwise there's no way
  * to make them call the class methods.
  * @param self {XElement}
  * @param el {HTMLElement} */
-var bindEvents = (self, el) => {
+var bindEvents = (self, el, context) => {
 
 	if (el.getAttribute) // if not document fragment
-		bindElEvents(self, el);
+		bindElEvents(self, el, null, context);
 
 	// data-loop handles its own children.
 	if (!el.getAttribute || !el.hasAttribute('data-loop'))
-		for  (let child of el.children)
-			bindEvents(self, child);
+		for (let child of el.children)
+			bindEvents(self, child, context);
 };
 
-var bindElEvents = (self, el, getAttributesFrom) => {
+var bindElEvents = (self, el, getAttributesFrom, context) => {
 	getAttributesFrom = getAttributesFrom || el;
 
 	for (let event_ of events) {
 
 		let code = getAttributesFrom.getAttribute('on' + event_);
+		let originalCode = code;
 		if (code) {
-
-			let context = getContext(el);
 			code = replaceVars(code, context);
 
 			// If it's a simple function that exists in the class,
@@ -1110,13 +1112,30 @@ var bindElEvents = (self, el, getAttributesFrom) => {
 			// The code in the attribute can reference:
 			// 1. event, assigned to the current event.
 			// 2. this, assigned to the class instance.
-			el.addEventListener(event_, function (event) {
+			let callback = function (event) {
 				eval(code);
-			}.bind(self));
+			}.bind(self);
+			el.addEventListener(event_, callback);
+			addElEvent(el, event_, callback, originalCode);
 
 			// Remove the original version so it doesn't also fire.
 			el.removeAttribute('on' + event_);
 		}
+	}
+};
+
+var unbindEvents = (el) => {
+	unbindElEvents(el);
+	if (!el.hasAttribute('data-loop'))
+		for (let child of el.children)
+			unbindEvents(child);
+};
+
+var unbindElEvents = (el) => {
+	let ee = elEvents.get(el) || [];
+	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string]
+		el.removeEventListener(item[0], item[1]);
+		el.setAttribute('on' + item[0], item[2]);
 	}
 };
 
@@ -1128,9 +1147,10 @@ var setAttribute = (self, name, value) => {
 	if (!isValidAttribute(self, name)) {
 
 		// As javascript code to be evaluated.
+		// TODO: Should this feature be deprecated or moved to data-properties  Overlap with data-bind?
 		if (value && value.length > 2 && value.startsWith('{') && value.endsWith('}')) {
-			(() => { // Guard scope before calling eval.
-				value = eval('(' + value.slice(1, -1) + ')'); // code to eval
+			(function(){ // Guard scope before calling eval.
+				value = eval(value.slice(1, -1)); // code to eval
 			}).call(self); // Import "self" as "this" variable to eval'd code.  This lets us pass attribute="${this}" in html initialization.
 		}
 		else
@@ -1290,7 +1310,7 @@ var bindings = {
 			// Then set the attribute to the value returned by the code.
 			for (let path of parseVars(attrExpr)) {
 				watch(self, path, setAttr);
-				addWatchedEl(el, path, setAttr);
+				addElWatch(el, path, setAttr);
 			}
 
 			setAttr();
@@ -1387,7 +1407,7 @@ var bindings = {
 		};
 		for (let path of parseVars(code)) {
 			watch(self, path, setText);
-			addWatchedEl(el, path, setText);
+			addElWatch(el, path, setText);
 		}
 
 		// Set initial value.
@@ -1402,7 +1422,7 @@ var bindings = {
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setHtml);
-			addWatchedEl(el, path, setHtml);
+			addElWatch(el, path, setHtml);
 		}
 
 		// Set initial value.
@@ -1469,8 +1489,8 @@ var bindings = {
 					el.insertBefore(newChild, oldChild);
 
 					// Add binding for any new elements.
-					if (isNew)
-						bindEvents(self, newChild);
+					//if (isNew)
+					//	bindEvents(self, newChild, context);
 				}
 			}
 
@@ -1483,7 +1503,7 @@ var bindings = {
 				}
 			}
 
-			var localContext = {...context};
+			let localContext = {...context};
 			//#IFDEV
 			if (loopVar in localContext)
 				throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
@@ -1495,13 +1515,18 @@ var bindings = {
 			for (let i in Array.from(el.children)) {
 				let child = el.children[i];
 				if (child.index_ !== i) {
+					if  (window.debug)
+						debugger;
 
 					unbindEl(child);
+					unbindEvents(child);
 
 					localContext[loopVar] = foreach + '[' + i + ']';
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
+
 					bindEl(self, child, localContext);
+					bindEvents(self, child, localContext);
 				}
 				delete child.index_;
 			}
@@ -1532,12 +1557,16 @@ var bindings = {
 
 		for (let path of parseVars(foreach)) {
 			watch(self, path, rebuildChildren);
-			addWatchedEl(el, path, rebuildChildren);
+			addElWatch(el, path, rebuildChildren);
 		}
 
 		// Set initial children
 		rebuildChildren();
 	},
+
+
+
+
 
 	// Special 2-way binding
 	val: (self, code, el, context) => {
@@ -1570,7 +1599,7 @@ var bindings = {
 		// Update input value when object property changes.
 		for (let path of paths) {
 			watch(self, path, setVal);
-			addWatchedEl(el, path, setVal);
+			addElWatch(el, path, setVal);
 		}
 
 		// Set initial value.
@@ -1589,7 +1618,7 @@ var bindings = {
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setVisible);
-			addWatchedEl(el, path, setVisible);
+			addElWatch(el, path, setVisible);
 		}
 
 		// Set initial value.

@@ -1,20 +1,22 @@
 /*
 Inherit from XElement to create custom HTML Components.
 
+TODO: next goals:
+indexOf and includes() on arrays fail because they compare proxied objects.
+allow sortable?
+Make data- prefix optional.  Use "x-", ":", or no prefix?
+Fix failing Edge tests.
+
+
 
 TODO
-Make data- prefix optional.
-Fix failing Edge tests.
 Separate "this" binding for data attr on definition vs instantiation
 Make shadowdom optional.
-indexOf and includes() on arrays fail because they compare proxied objects.
 
-allow sortable?
 implement other binding functions.
 allow loop over slots if data-loop is on the instantiation.
 allow loop over more than one html tag.
 cache results of parseVars() and other parse functions?
-cache the context of loop vars.
 functions to enable/disable updates.
 function to trigger updates?  Or a callback to apply all updates before DOM is updated.
 
@@ -25,7 +27,7 @@ Auto bind to this in complex expressions if the class property already exists an
 improve minifcation.
 Expose bindings prop in minified version.
 non-ascii variable names.
-throttle, debounce? data-val only trigger on change.
+throttle, debounce? data-val only trigger on change.  Via :attributes?
 Auto two-way bind for simple variables?
 bind to <input type="file">
 bind to clipboard events
@@ -35,9 +37,6 @@ Separate out a lite version that doesn't do binding?
 TODO:
 warning on loop element id.
 warning if binding to id attribute assigned to element.
-We could even add enableUpdates() / disableUpdates() / clearUpdates() functions.
-
-
 
 
 Disadvantages of Vue.js
@@ -137,7 +136,7 @@ var watchXElement = (obj, path, callback) => {
  * Because the outer loop must be processed and build before we know the index for the inner element.
  * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
  * @param el
- * @return {object<string, string|int>} */
+ * @return {object<string, string|int>}
 var getContext = (el) => {
 	let context = {};
 	let parent = lastEl = el;
@@ -182,7 +181,7 @@ var getContext = (el) => {
 	}
 	return context;
 };
-
+ */
 
 /**
  * Recursively process all the data- attributes in el and its descendants.
@@ -202,10 +201,6 @@ var bindEl = (self, el, context) => {
 			if (attr.name.startsWith('data-')) {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
-
-				// Get context only if needed.
-				if (!context)
-					context = getContext(el);
 
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
@@ -266,7 +261,6 @@ var unbindEl = (el, root) => {
  * @param self {XElement}
  * @param el {HTMLElement} */
 var bindEvents = (self, el, context) => {
-	context = context || getContext(el);
 
 	if (el.getAttribute) // if not document fragment
 		bindElEvents(self, el, null, context);
@@ -285,8 +279,6 @@ var bindElEvents = (self, el, getAttributesFrom, context) => {
 		let code = getAttributesFrom.getAttribute('on' + event_);
 		let originalCode = code;
 		if (code) {
-
-			context = getContext(el);
 			code = replaceVars(code, context);
 
 			// If it's a simple function that exists in the class,
@@ -319,7 +311,7 @@ var unbindEvents = (el) => {
 
 var unbindElEvents = (el) => {
 	let ee = elEvents.get(el) || [];
-	for (let item of ee) {
+	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string]
 		el.removeEventListener(item[0], item[1]);
 		el.setAttribute('on' + item[0], item[2]);
 	}
