@@ -95,7 +95,7 @@ var addElEvent = (el, event, callback, originalCode) => {
  * @returns {string} */
 var getXName = (cls) => {
 	if (!cls.xname_) {
-		let lname =  'x-' + cls.name.toLowerCase().replace(/$x/, '');
+		let lname =  'x-' + cls.name.toLowerCase().replace(/^x/, '');
 		cls.xname_ = lname;
 
 		// If name exists, add an incrementing integer to the end.
