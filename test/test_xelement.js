@@ -1339,17 +1339,12 @@ var test_XElement = {
 
 		// Double deep loop binding.
 		(function () {
-			class C extends XElement {}
-			C.html = `				
-			<div>
-				<span data-text="wheel.num"></span>
-			</div>`;
 
 			class B extends XElement {}
 			B.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
-			        <x-c data-prop="wheel: wheel"></x-c>
+			       <span></span>
 				</span>
 			</div>`;
 
@@ -1363,12 +1358,41 @@ var test_XElement = {
 
 			var xa = new A();
 			xa.cars = [{wheels: [{num: 1}, {num: 2}]}, {wheels: [{num: 1}, {num: 2}]}];
-
-
-
 		})();
 	},
 
+
+
+	failures2: function() {
+		// Double deep loop binding.
+		(function () {
+			class C extends XElement {}
+			C.html = `				
+			<div>
+				<span data-text="wheel"></span>
+			</div>`;
+
+			class B extends XElement {}
+			B.html = `				
+			<div>
+			    <span id="loop" data-loop="car.wheels: wheel">
+			        <x-c data-prop="wheel: wheel"></x-c>
+				</span>
+				<div id="debug" data-text="JSON.stringify(this.car.wheels)"></div>
+			</div>`;
+
+			class A extends XElement {}
+			A.html = `				
+			<div data-loop="cars: car">
+				<x-b data-prop="car: car"></x-b>
+			</div>`;
+
+			var xa = new A();
+			xa.cars = [{wheels: [1]}];
+
+			assertEq(xa.shadowRoot.children[0].loop.children[0].shadowRoot.children[0].textContent, '1');
+		})();
+	},
 	/*
 	memory: function() {
 		// Make sure all proxyObjects and proxyRoots are freed:

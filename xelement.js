@@ -1365,6 +1365,7 @@ var bindings = {
 				// Assign the referenced object to a variable on el.
 				let expr = addThis(replaceVars(obj[prop], context), context);
 
+
 				let updateProp = (/*action, path, value*/) => {
 					el[prop] = safeEval.call(self, expr);
 				};
@@ -1472,7 +1473,30 @@ var bindings = {
 
 		context = {...context}; // copy
 
+
+
+		// Parse code into foreach parts
+		var [foreach, loopVar, indexVar] = parseLoop(code);
+		foreach = replaceVars(foreach, context);
+		foreach = addThis(foreach, context);
+
+		// Allow loop attrib to be applied above shadowroot.
+		el = el.shadowRoot || el;
+
 		var rebuildChildren = (/*action, path, value*/) => {
+
+
+			// The code we'll loop over.
+			// We store it here because innerHTML is lost if we unbind and rebind.
+			if (!el.loopHtml_) {
+				el.loopHtml_ = el.innerHTML.trim();
+
+				// Remove children before calling rebuildChildren()
+				// That way we don't unbind elements that were never bound.
+				while (el.lastChild)
+					el.removeChild(el.lastChild);
+			}
+
 
 			var newItems = removeProxies(safeEval.call(self, foreach) || []);
 			var oldItems = removeProxies(el.items_ || []);
@@ -1518,7 +1542,7 @@ var bindings = {
 
 					// Create a new one if needed.
 					if (isNew)
-						newChild = createEl(el.loopHtml_);
+						newChild = createEl(el.loopHtml_ || el.innerHTML);
 
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
@@ -1571,24 +1595,6 @@ var bindings = {
 		};
 
 
-
-		// Parse code into foreach parts
-		var [foreach, loopVar, indexVar] = parseLoop(code);
-		foreach = replaceVars(foreach, context);
-		foreach = addThis(foreach, context);
-
-		// Allow loop attrib to be applied above shadowroot.
-		el = el.shadowRoot || el;
-
-		// The code we'll loop over.
-		// We store it here because innerHTML is lost if we unbind and rebind.
-		if (!el.loopHtml_)
-			el.loopHtml_ = el.innerHTML.trim();
-
-		// Remove children before calling rebuildChildren()
-		// That way we don't unbind elements that were never bound.
-		while (el.lastChild)
-			el.removeChild(el.lastChild);
 
 		for (let path of parseVars(foreach)) {
 			watch(self, path, rebuildChildren);
