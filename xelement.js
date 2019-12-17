@@ -29,6 +29,11 @@ var eq = (item1, item2) => {
 
 
 var createEl = (html) => {
+	//#IFDEV
+	if (typeof html !== 'string')
+		throw new XElementError('Html argument must be a string.');
+	//#ENDIF
+
 	var div = document.createElement('div');
 	div.innerHTML = html;
 
@@ -826,11 +831,17 @@ Inherit from XElement to create custom HTML Components.
 TODO: next goals:
 indexOf and includes() on arrays fail because they compare proxied objects.
 allow sortable?
+rename data-bind to data-prop
 Make data- prefix optional.  Use "x-", ":", or no prefix?
+{{var}} in text and attributes
 Fix failing Edge tests.
+allow comments in loops.
+x-elements in loops get fully initialized then replaced.
 
 
 
+
+warning on data-prop wrong order.
 TODO
 Separate "this" binding for data attr on definition vs instantiation
 Make shadowdom optional.
@@ -938,7 +949,7 @@ var getXParent = (el) => { // will error if not in an XParent.
  * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
  * Traverse starting from path and working upward,
  * looking for an existing XElement to watch.
- * This allows the corret object to be watched when data-bind is used.
+ * This allows the corret object to be watched when data-prop is used.
  * @param obj
  * @param path
  * @param callback
@@ -1020,7 +1031,24 @@ var bindEl = (self, el, context) => {
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-')) {
+			if (attr.name.startsWith('data-loop')) {
+
+				let attrName = attr.name.slice(5); // remove data- prefix.
+
+				if (bindings[attrName]) // attr.value is code.
+					bindings[attrName](self, attr.value, el, context);
+
+				//#IFDEV
+				else
+					throw new Error (attrName);
+				//#ENDIF
+			}
+		}
+
+	// Seach attributes for data- bindings.
+	if (el.attributes) // shadow root has no attributes.
+		for (let attr of el.attributes) {
+			if (attr.name.startsWith('data-') && attr.name !== 'data-loop') {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
 
@@ -1036,11 +1064,11 @@ var bindEl = (self, el, context) => {
 
 	// Allow traversing from host element into its own shadowRoot
 	// But not into the shadow root of other elements.
-	let root = el===self && el.shadowRoot ? el.shadowRoot : el;
+	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
 
 	// Data loop already binds its own children when first applied.
 	if (!el.hasAttribute('data-loop'))
-		for (let child of root.children)
+		for (let child of next.children)
 			bindEl(self, child, context);
 };
 
@@ -1050,7 +1078,10 @@ var bindEl = (self, el, context) => {
  * @param el {HTMLElement} Remove all bindings within root and children.*/
 var unbindEl = (el, root) => {
 	root = root || el;
-	var next = el.shadowRoot || el;
+
+	// Only go into shadowroot if coming from the top level.
+	// This way we don't traverse into the shadowroots of other XElements.
+	var next = root===el && el.shadowRoot ? el.shadowRoot : el;
 
 	for (let child of next.children)
 		unbindEl(child, root);
@@ -1081,15 +1112,17 @@ var unbindEl = (el, root) => {
  * We rebind event attributes because otherwise there's no way
  * to make them call the class methods.
  * @param self {XElement}
- * @param el {HTMLElement} */
+ * @param el {HTMLElement}
+ * @param context object<string, string> */
 var bindEvents = (self, el, context) => {
 
 	if (el.getAttribute) // if not document fragment
 		bindElEvents(self, el, null, context);
 
 	// data-loop handles its own children.
-	if (!el.getAttribute || !el.hasAttribute('data-loop'))
-		for (let child of el.children)
+	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
+	if (!next.getAttribute || !next.hasAttribute('data-loop'))
+		for (let child of next.children)
 			bindEvents(self, child, context);
 };
 
@@ -1098,10 +1131,9 @@ var bindElEvents = (self, el, getAttributesFrom, context) => {
 
 	for (let event_ of events) {
 
-		let code = getAttributesFrom.getAttribute('on' + event_);
-		let originalCode = code;
-		if (code) {
-			code = replaceVars(code, context);
+		let originalCode = getAttributesFrom.getAttribute('on' + event_);
+		if (originalCode) {
+			let code = replaceVars(originalCode, context);
 
 			// If it's a simple function that exists in the class,
 			// add the "this" prefix.
@@ -1124,10 +1156,13 @@ var bindElEvents = (self, el, getAttributesFrom, context) => {
 	}
 };
 
-var unbindEvents = (el) => {
+var unbindEvents = (el, root) => {
+	root = root || el;
 	unbindElEvents(el);
-	if (!el.hasAttribute('data-loop'))
-		for (let child of el.children)
+
+	var next = root===el && el.shadowRoot ? el.shadowRoot : el;
+	if (!next.hasAttribute|| !next.hasAttribute('data-loop'))
+		for (let child of next.children)
 			unbindEvents(child);
 };
 
@@ -1147,7 +1182,7 @@ var setAttribute = (self, name, value) => {
 	if (!isValidAttribute(self, name)) {
 
 		// As javascript code to be evaluated.
-		// TODO: Should this feature be deprecated or moved to data-properties  Overlap with data-bind?
+		// TODO: Should this feature be deprecated or moved to data-properties  Overlap with data-prop?
 		if (value && value.length > 2 && value.startsWith('{') && value.endsWith('}')) {
 			(function(){ // Guard scope before calling eval.
 				value = eval(value.slice(1, -1)); // code to eval
@@ -1318,7 +1353,7 @@ var bindings = {
 	},
 
 
-	bind: (self, code, el, context) => {
+	prop: (self, code, el, context) => {
 		// allow binding only on XElement
 		if (self !== el && el instanceof XElement)
 		{
