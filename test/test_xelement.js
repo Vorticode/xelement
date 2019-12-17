@@ -378,7 +378,7 @@ var test_XElement = {
 			b.item = {name: 1};
 
 			assert(b.item.$isProxy);
-			unbindEl(b, b.shadowRoot.children[1]);
+			unbindEl(b.shadowRoot.children[1]);
 			assert(b.item.$isProxy);
 		})();
 	},
@@ -1037,6 +1037,61 @@ var test_XElement = {
 			assert(outer.clicked);
 		})();
 
+		// Test events in double loop (used to fail)
+		// onclick="this.result = i + car + ':' + j + wheel"
+		(function() {
+			class EV5 extends XElement {}
+			EV5.html = `
+				<div data-loop="letters: letter">
+					<span onclick="this.result = letter"></span>					
+				</div>`;
+
+			var b = new EV5();
+			b.letters = ['A', 'B'];
+
+			// Make sure we rebind events after splice.
+			b.letters.splice(0, 1);
+			b.shadowRoot.children[0].dispatchEvent(new Event('click'));
+			assertEq(b.result, 'B');
+		})();
+
+		// Test events in double loop (used to fail)
+		// onclick="this.result = i + car + ':' + j + wheel"
+		(function() {
+			class EV6 extends XElement {}
+			EV6.html = `
+				<div data-loop="numbers: n, number">
+					<div data-loop="letters: l, letter">
+						<span onclick="this.result = n + number + ':' + l + letter"></span>
+					</div>
+				</div>`;
+
+			var b = new EV6();
+			b.numbers = ['1', '2'];
+			b.letters = ['A', 'B'];
+
+			b.shadowRoot.children[0].children[0].dispatchEvent(new Event('click'));
+			assertEq(b.result, '01:0A');
+
+			b.shadowRoot.children[0].children[1].dispatchEvent(new Event('click'));
+			assertEq(b.result, '01:1B');
+
+			b.shadowRoot.children[1].children[0].dispatchEvent(new Event('click'));
+			assertEq(b.result, '12:0A');
+
+			b.shadowRoot.children[1].children[1].dispatchEvent(new Event('click'));
+			assertEq(b.result, '12:1B');
+
+			// Make sure we rebind events after splice.
+			b.numbers.splice(0, 1);
+
+			b.shadowRoot.children[0].children[0].dispatchEvent(new Event('click'));
+			assertEq(b.result, '02:0A');
+
+			b.shadowRoot.children[0].children[1].dispatchEvent(new Event('click'));
+			assertEq(b.result, '02:1B');
+		})();
+
 
 
 	},
@@ -1283,44 +1338,9 @@ var test_XElement = {
 
 
 	failures: function() {
+	},
 
-		// Test events in double loop (used to fail)
-		// onclick="this.result = i + car + ':' + j + wheel"
-		(function() {
-			class EV2 extends XElement {}
-			EV2.html = `
-				<div data-loop="numbers: n, number">
-					<div data-loop="letters: l, letter">
-						<span onclick="this.result = n + number + ':' + l + letter"></span>
-					</div>
-				</div>`;
-
-			var b = new EV2();
-			b.numbers = ['1', '2'];
-			b.letters = ['A', 'B'];
-
-			b.shadowRoot.children[0].children[0].dispatchEvent(new Event('click'));
-			assertEq(b.result, '01:0A');
-
-			b.shadowRoot.children[0].children[1].dispatchEvent(new Event('click'));
-			assertEq(b.result, '01:1B');
-
-			b.shadowRoot.children[1].children[0].dispatchEvent(new Event('click'));
-			assertEq(b.result, '12:0A');
-
-			b.shadowRoot.children[1].children[1].dispatchEvent(new Event('click'));
-			assertEq(b.result, '12:1B');
-
-			// Make sure we rebind events after splice.
-			b.numbers.splice(0, 1);
-
-			b.shadowRoot.children[0].children[0].dispatchEvent(new Event('click'));
-			assertEq(b.result, '01:0A');
-
-			b.shadowRoot.children[0].children[1].dispatchEvent(new Event('click'));
-			assertEq(b.result, '01:1B');
-
-		})();
+	failures2: function() {
 	},
 
 	/*
@@ -1346,7 +1366,7 @@ var test_XElement = {
 			setTimeout(function() {
 				console.log(proxyRoots);
 				console.log(proxyObjects);
-				console.log(watchedEls);
+				console.log(elWatches);
 			}, 4000);
 		})();
 	}
