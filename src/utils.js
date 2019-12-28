@@ -25,14 +25,19 @@ var eq = (item1, item2) => {
 
 
 
-var createEl = (html) => {
+
+var createEl = (html/*, constructorArgs*/) => {
 	//#IFDEV
 	if (typeof html !== 'string')
 		throw new XElementError('Html argument must be a string.');
 	//#ENDIF
 
+	//window.constructorArgs = constructorArgs;
+
 	var div = document.createElement('div');
 	div.innerHTML = html;
+
+	delete window.constructorArgs;
 
 	//  TODO: skip whitespace, comments
 	return div.removeChild(div.firstChild);

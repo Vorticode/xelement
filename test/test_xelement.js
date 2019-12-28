@@ -1339,33 +1339,6 @@ var test_XElement = {
 
 		// Double deep loop binding.
 		(function () {
-
-			class B extends XElement {}
-			B.html = `				
-			<div>
-			    <span id="loop" data-loop="car.wheels: wheel">
-			       <span></span>
-				</span>
-			</div>`;
-
-			class A extends XElement {}
-			A.html = `				
-			<div>
-				<p id="loop" data-loop="cars: car">
-					<x-b data-prop="car: car"></x-b>
-				</p>
-			</div>`;
-
-			var xa = new A();
-			xa.cars = [{wheels: [{num: 1}, {num: 2}]}, {wheels: [{num: 1}, {num: 2}]}];
-		})();
-	},
-
-
-
-	failures2: function() {
-		// Double deep loop binding.
-		(function () {
 			class C extends XElement {}
 			C.html = `				
 			<div>
@@ -1376,7 +1349,7 @@ var test_XElement = {
 			B.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
-			        <x-c data-prop="wheel: wheel"></x-c>
+			        <b></b>
 				</span>
 				<div id="debug" data-text="JSON.stringify(this.car.wheels)"></div>
 			</div>`;
@@ -1390,7 +1363,59 @@ var test_XElement = {
 			var xa = new A();
 			xa.cars = [{wheels: [1]}];
 
-			assertEq(xa.shadowRoot.children[0].loop.children[0].shadowRoot.children[0].textContent, '1');
+			console.log(xa.shadowRoot.children[0].loop.children[0].shadowRoot.children[0]);
+			console.log(xa.shadowRoot.children[0].loop.children[0].shadowRoot.children[0].textContent);
+		})();
+	},
+
+
+
+	failures2: function() {
+		/*
+		The problem:
+		When elements are instantiated they're normally created from the bottom up.
+		But when setting a variable that affects loops or nested loops, elements are created from top down.
+		When I set a data-prop bound to a loop, data-prop creates B and sets its values before the loop is instantiated.  I think.
+
+		To fix this:
+		Log when each element is instantiated after the data-prop is set.
+
+
+		Steps:
+
+
+
+		*/
+
+		// Double deep loop binding.
+		(function () {
+
+			class B extends XElement {}
+			B.html = `				
+			<div>
+			    <span id="loop" data-loop="car.wheels: wheel">
+			        <b data-text="wheel"></b>
+				</span>
+			</div>`;
+
+			class A extends XElement {}
+			A.html = `				
+			<div data-loop="cars: car">
+				<x-b data-prop="car: car"></x-b>
+			</div>`;
+
+			var xa = new A();
+
+			window.debug = true;
+
+			// the data-prop gets called on x-b's child template node before x-b#loop can build its children.
+
+			xa.cars = [{wheels: [1, 2]}];
+
+			//console.log(xa.shadowRoot.children[0].car);
+
+			console.log(xa.shadowRoot.children[0].loop.children);
+			console.log(xa.shadowRoot.children[0].loop.children[0].textContent);
 		})();
 	},
 	/*

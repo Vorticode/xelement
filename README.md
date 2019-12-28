@@ -13,7 +13,7 @@ class Inventory extends XElement {
     }   
 }
 Inventory.html = `
-    <template id="Inventory">4
+    <template id="Inventory">
         <button onclick="addItem()">Add Item</button>
         <div data-loop="items:item">
             <div>

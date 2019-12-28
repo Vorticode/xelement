@@ -99,6 +99,7 @@ class WatchProperties {
 
 			// If we're subscribing to something within the top-level field for the first time,
 			// then define it as a property that forward's to the proxy.
+			//console.log(Object.getOwnPropertyDescriptor(self.obj_, field));
 			delete self.obj_[field];
 			Object.defineProperty(self.obj_, field, {
 				enumerable: 1,
@@ -154,8 +155,10 @@ class WatchProperties {
 }
 
 
-// Keeps track of which objects we're watching.
-// That way watch() and unwatch() can work without adding any new fields to the objects they watch.
+/**
+ * Keeps track of which objects we're watching.
+ * That way watch() and unwatch() can work without adding any new fields to the objects they watch.
+ * @type {WeakMap<object, WatchProperties>} */
 var watched = new WeakMap();
 
 /**
@@ -214,7 +217,6 @@ function watchlessGet(obj, path) {
 	return node;
 }
 */
-/*
 var watchlessSet = (obj, path, val) => {
 	// TODO: Make this work instead:
 	// Or just use $removeProxy prop?
@@ -233,4 +235,3 @@ var watchlessSet = (obj, path, val) => {
 
 	return node[prop] = val;
 };
-*/

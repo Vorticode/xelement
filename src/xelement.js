@@ -201,10 +201,35 @@ var getContext = (el) => {
  *         <div data-val="this.items[0].name"> */
 var bindEl = (self, el, context) => {
 
+	//if (window.debug)
+	//	console.log(el);
+	if (window.debug)
+		console.log('bindEl:' + el.tagName);
+
+	bindElNonProp(self, el, context);
+	bindElProp(self, el, context);
+	bindEvents(self, el, context);
+	self.isBound = true;
+};
+
+
+var bindElNonProp = (self, el, context) => {
+
+	//if (window.debug)
+	//	console.log(el);
+	if (window.debug) {
+		console.log('bindElNonProp:' + el.tagName);
+	}
+
+
+	// Allow traversing from host element into its own shadowRoot
+	// But not into the shadow root of other elements.
+	let next = el.shadowRoot ? el.shadowRoot : el;
+
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-loop')) {
+			if (attr.name.startsWith('data-') && !attr.name.startsWith('data-prop')) {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
 
@@ -218,32 +243,50 @@ var bindEl = (self, el, context) => {
 			}
 		}
 
-	// Seach attributes for data- bindings.
-	if (el.attributes) // shadow root has no attributes.
-		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-') && attr.name !== 'data-loop') {
+	// Data loop already binds its own children when first applied.
+	if (!el.hasAttribute('data-loop'))
+		for (let child of next.children)
+			bindElNonProp(self, child, context);
+};
 
-				let attrName = attr.name.slice(5); // remove data- prefix.
 
-				if (bindings[attrName]) // attr.value is code.
-					bindings[attrName](self, attr.value, el, context);
+var bindElProp = (self, el, context) => {
 
-				//#IFDEV
-				else
-					throw new Error (attrName);
-				//#ENDIF
-			}
-		}
+	//if (window.debug)
+	//	console.log(el);
+	if (window.debug) {
+		console.log('bindElProp:' + el.tagName);
+	}
 
 	// Allow traversing from host element into its own shadowRoot
 	// But not into the shadow root of other elements.
 	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
 
+
+	// Seach attributes for data- bindings.
+	if (el.attributes) // shadow root has no attributes.
+		for (let attr of el.attributes) {
+			if (attr.name.startsWith('data-prop')) {
+
+				let attrName = attr.name.slice(5); // remove data- prefix.
+
+				if (bindings[attrName]) // attr.value is code.
+					bindings[attrName](self, attr.value, el, context);
+
+				//#IFDEV
+				else
+					throw new Error (attrName);
+				//#ENDIF
+			}
+		}
+
 	// Data loop already binds its own children when first applied.
 	if (!el.hasAttribute('data-loop'))
 		for (let child of next.children)
-			bindEl(self, child, context);
+			bindElProp(self, child, context);
 };
+
+
 
 
 
@@ -251,6 +294,13 @@ var bindEl = (self, el, context) => {
  * @param el {HTMLElement} Remove all bindings within root and children.*/
 var unbindEl = (el, root) => {
 	root = root || el;
+
+	if (window.debug) {
+		console.log('unbindEl:' + el.tagName);
+		//if (el.tagName === 'X-B')
+		//	debugger;
+	}
+
 
 	// Only go into shadowroot if coming from the top level.
 	// This way we don't traverse into the shadowroots of other XElements.
@@ -453,8 +503,9 @@ var initHtml = (self) => {
 
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
-		bindEl(self, self);
-		bindEvents(self, root);
+		if (!self.isBound) {
+			bindEl(self, self);
+		}
 	}
 };
 
@@ -528,18 +579,66 @@ var bindings = {
 
 	prop: (self, code, el, context) => {
 		// allow binding only on XElement
-		if (self !== el && el instanceof XElement)
-		{
+		if (self !== el && el instanceof XElement) {
+
+			if (window.debug)
+				console.log('prop:' + self.constructor.name);
+
 
 			var obj = parseObj(code);
 
 			for (let prop in obj) {
 
+				let expr = addThis(replaceVars(obj[prop], context), context);
+
+				let updateProp = () => {
+					el[prop] = safeEval.call(self, expr);
+				};
+
+
+				// Set initial values.
+				updateProp();
+				//watchlessSet(el, [prop], safeEval.call(self, expr));
+
+				for (let path of parseVars(expr))
+					watch(self, path, updateProp);
+
+
+				/*
+
 				// Assign the referenced object to a variable on el.
 				let expr = addThis(replaceVars(obj[prop], context), context);
 
 
-				let updateProp = (/*action, path, value*/) => {
+				delete el[prop];
+				Object.defineProperty(el, prop, {
+					get: function() {
+						return safeEval.call(self, expr);
+					},
+					set: function() {
+						throw new XElementError('read only property');
+					}
+				});
+
+
+				let wp = watched.get(el);
+				for (let path of parseVars(expr)) {
+
+					// Notify watches on the inner element when
+					watch(self, path, function (action, path, value) {
+						debugger;
+						wp.notify_(action, [prop], safeEval.call(self, expr));
+					});
+
+					wp.notify_('set', [prop], safeEval.call(self, expr));
+				}
+				*/
+
+
+				// old:
+				/*
+				let updateProp = (action, path, value) => {
+					console.log(expr);
 					el[prop] = safeEval.call(self, expr);
 				};
 
@@ -561,7 +660,7 @@ var bindings = {
 							// 2. For each function, we move the watch from the child object to the parent object.
 							for (let callback of subs[sub]) {
 								unwatch(el, subPath, callback);
-								watch(self, subPath.slice(1), function (/*action, path, value*/) {
+								watch(self, subPath.slice(1), function (action, path, value) {
 									// 3. And intercept its call to make sure we pass the original path.
 									callback.apply(el, arguments);
 								});
@@ -574,6 +673,7 @@ var bindings = {
 				else
 					for (let path of parseVars(expr))
 						watch(self, path, updateProp);
+				*/
 			}
 		}
 
@@ -647,6 +747,10 @@ var bindings = {
 		context = {...context}; // copy
 
 
+		if  (window.debug)
+			console.log('loop:' + self.constructor.name);
+
+
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
@@ -656,19 +760,22 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
+		// The code we'll loop over.
+		// We store it here because innerHTML is lost if we unbind and rebind.
+		if (!el.loopHtml_)
+			el.loopHtml_ = el.innerHTML.trim();
+
+		// Remove children before calling rebuildChildren()
+		// That way we don't unbind elements that were never bound.
+		while (el.lastChild)
+			el.removeChild(el.lastChild);
+
 		var rebuildChildren = (/*action, path, value*/) => {
+			if (window.debug)
+				console.log('rebuildChildren:' + self.constructor.name);
 
-
-			// The code we'll loop over.
-			// We store it here because innerHTML is lost if we unbind and rebind.
-			if (!el.loopHtml_) {
-				el.loopHtml_ = el.innerHTML.trim();
-
-				// Remove children before calling rebuildChildren()
-				// That way we don't unbind elements that were never bound.
-				while (el.lastChild)
-					el.removeChild(el.lastChild);
-			}
+			if (!el.loopHtml_)
+				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
 
 
 			var newItems = removeProxies(safeEval.call(self, foreach) || []);
@@ -676,6 +783,7 @@ var bindings = {
 
 			if (arrayEq(oldItems, newItems))
 				return;
+
 
 			var newSet = new Set(newItems);
 
@@ -715,14 +823,10 @@ var bindings = {
 
 					// Create a new one if needed.
 					if (isNew)
-						newChild = createEl(el.loopHtml_ || el.innerHTML);
+						newChild = createEl(el.loopHtml_);
 
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
-
-					// Add binding for any new elements.
-					//if (isNew)
-					//	bindEvents(self, newChild, context);
 				}
 			}
 
@@ -747,9 +851,6 @@ var bindings = {
 			for (let i in Array.from(el.children)) {
 				let child = el.children[i];
 				if (child.index_ !== i) {
-					if  (window.debug)
-						debugger;
-
 					unbindEl(child);
 					unbindEvents(child);
 
@@ -758,7 +859,6 @@ var bindings = {
 						localContext[indexVar] = i;
 
 					bindEl(self, child, localContext);
-					bindEvents(self, child, localContext);
 				}
 				delete child.index_;
 			}
