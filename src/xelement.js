@@ -206,10 +206,12 @@ var bindEl = (self, el, context) => {
 	if (window.debug)
 		console.log('bindEl:' + el.tagName);
 
-	bindElNonProp(self, el, context);
-	bindElProp(self, el, context);
-	bindEvents(self, el, context);
-	self.isBound = true;
+	//if (!el.isBound) {
+		bindElNonProp(self, el, context);
+		bindElProp(self, el, context);
+		bindEvents(self, el, context);
+		el.isBound = true;
+	//}
 };
 
 
@@ -224,6 +226,10 @@ var bindElNonProp = (self, el, context) => {
 
 	// Allow traversing from host element into its own shadowRoot
 	// But not into the shadow root of other elements.
+	//let next = el===self && el.shadowRoot ? el.shadowRoot : el;
+
+	// TODO: we do this instead so that we traverse the element with the data-prop attribute already has its children setup.
+	// But this causes those children to be boudn twice!
 	let next = el.shadowRoot ? el.shadowRoot : el;
 
 	// Seach attributes for data- bindings.
@@ -503,9 +509,7 @@ var initHtml = (self) => {
 
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
-		if (!self.isBound) {
-			bindEl(self, self);
-		}
+		bindEl(self, self);
 	}
 };
 
