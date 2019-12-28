@@ -1379,12 +1379,6 @@ var test_XElement = {
 
 		To fix this:
 		Log when each element is instantiated after the data-prop is set.
-
-
-		Steps:
-
-
-
 		*/
 
 		// Double deep loop binding.

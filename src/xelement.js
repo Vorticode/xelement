@@ -206,54 +206,13 @@ var bindEl = (self, el, context) => {
 	if (window.debug)
 		console.log('bindEl:' + el.tagName);
 
-	//if (!el.isBound) {
-		bindElNonProp(self, el, context);
-		bindElProp(self, el, context);
-		bindEvents(self, el, context);
-		el.isBound = true;
-	//}
+	bindElProp(self, el, context);
+	bindEvents(self, el, context);
+
+	// TODO: assert() to make sure element isn't bound twice.
 };
 
 
-var bindElNonProp = (self, el, context) => {
-
-	//if (window.debug)
-	//	console.log(el);
-	if (window.debug) {
-		console.log('bindElNonProp:' + el.tagName);
-	}
-
-
-	// Allow traversing from host element into its own shadowRoot
-	// But not into the shadow root of other elements.
-	//let next = el===self && el.shadowRoot ? el.shadowRoot : el;
-
-	// TODO: we do this instead so that we traverse the element with the data-prop attribute already has its children setup.
-	// But this causes those children to be boudn twice!
-	let next = el.shadowRoot ? el.shadowRoot : el;
-
-	// Seach attributes for data- bindings.
-	if (el.attributes) // shadow root has no attributes.
-		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-') && !attr.name.startsWith('data-prop')) {
-
-				let attrName = attr.name.slice(5); // remove data- prefix.
-
-				if (bindings[attrName]) // attr.value is code.
-					bindings[attrName](self, attr.value, el, context);
-
-				//#IFDEV
-				else
-					throw new Error (attrName);
-				//#ENDIF
-			}
-		}
-
-	// Data loop already binds its own children when first applied.
-	if (!el.hasAttribute('data-loop'))
-		for (let child of next.children)
-			bindElNonProp(self, child, context);
-};
 
 
 var bindElProp = (self, el, context) => {
@@ -272,7 +231,7 @@ var bindElProp = (self, el, context) => {
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-prop')) {
+			if (attr.name.startsWith('data-')) {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
 
@@ -508,7 +467,7 @@ var initHtml = (self) => {
 
 
 		// 8. Bind all data- and event attributes
-		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
+		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
 		bindEl(self, self);
 	}
 };
@@ -775,8 +734,9 @@ var bindings = {
 			el.removeChild(el.lastChild);
 
 		var rebuildChildren = (/*action, path, value*/) => {
-			if (window.debug)
+			if (window.debug) {
 				console.log('rebuildChildren:' + self.constructor.name);
+			}
 
 			if (!el.loopHtml_)
 				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
@@ -826,6 +786,8 @@ var bindings = {
 				if (!oldChild || oldChild !== newChild) {
 
 					// Create a new one if needed.
+					// TODO: createEl() binds nexted x-elements before we're ready for them to be bound.
+					// E.g. below we set the localContext for loop variables.
 					if (isNew)
 						newChild = createEl(el.loopHtml_);
 
@@ -855,6 +817,8 @@ var bindings = {
 			for (let i in Array.from(el.children)) {
 				let child = el.children[i];
 				if (child.index_ !== i) {
+
+					// TODO: It's sloppy coding that unbindEl() operates within child, but bindEl(self, child) only operates on the child's attributes.
 					unbindEl(child);
 					unbindEvents(child);
 
@@ -862,6 +826,10 @@ var bindings = {
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
 
+					// Operates within the child.
+					bindEl(child, child, localContext);
+
+					// Operates on the child's attributes within self.  E.g. data-prop
 					bindEl(self, child, localContext);
 				}
 				delete child.index_;
@@ -869,6 +837,9 @@ var bindings = {
 
 
 			el.items_ = newItems.slice(); // copy
+
+			if (window.debug)
+				console.log('rebuildChildrenFinished:' + self.constructor.name);
 		};
 
 

@@ -65,7 +65,6 @@ class WatchProperties {
 
 		// Traverse up the path looking for anything subscribed.
 		let parentPath = path.slice(0, -1);
-		let cpath = csv(path);
 		while (parentPath.length) {
 			let cpath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
@@ -76,6 +75,7 @@ class WatchProperties {
 		}
 
 		// Traverse to our current level and downward looking for anything subscribed
+		let cpath = csv(path);
 		for (let name in this.subs_)
 			if (name.startsWith(cpath))
 				for (let callback of this.subs_[name])
