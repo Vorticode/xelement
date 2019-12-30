@@ -119,77 +119,6 @@ var getXParent = (el) => { // will error if not in an XParent.
 
 
 /**
- * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
- * Traverse starting from path and working upward,
- * looking for an existing XElement to watch.
- * This allows the corret object to be watched when data-prop is used.
- * @param obj
- * @param path
- * @param callback
-var watchXElement = (obj, path, callback) => {
-	for (let i=path.length; i>=0; i--) {
-		let item = traversePath(obj, path.slice(0, i));
-		if (item instanceof XElement) {
-			watch(item, path.slice(i), callback);
-			break;
-		}
-	}
-};*/
-
-/**
- * Traverse through all parents to build the loop context.
- * This will return an incorrect result if called on a nested loop element.
- * Because the outer loop must be processed and build before we know the index for the inner element.
- * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
- * @param el
- * @return {object<string, string|int>}
-var getContext = (el) => {
-	let context = {};
-	let parent = lastEl = el;
-
-	// Parent.host lets us traverse up beyond the shadow root, 
-	// in case data-loop is defined on the shadow host.
-	// We also start by checking the parent for the context instead of this element,
-	// because an element only sets its context for its children, not itself.
-	while (parent = (parent.host || parent.parentNode)) {
-
-		// Shadow root documnet fragment won't have getAttrbute.
-		let code = parent.getAttribute && parent.getAttribute('data-loop');
-		if (code) {
-
-			// Check for an inner loop having the same variable name
-			let [foreach, itemVar, indexVar] = parseLoop(code);
-			foreach = addThis(foreach);
-
-			//#IFDEV
-			if (itemVar in context)
-				throw new XElementError('Loop variable "' + itemVar + '" already used in a parent loop.');
-			if (indexVar && indexVar in context)
-				throw new XElementError('Loop index "' + indexVar + '" already used in a parent loop.');
-			//#ENDIF
-
-			// As we traverse upward, we set the index of variables.
-			if (lastEl) {
-				let index = parentIndex(lastEl);
-				context[itemVar] = foreach + '[' + index + ']';
-				if (indexVar) // will be undefined if it doesn't exist.
-					context[indexVar] = index;
-			}
-		}
-
-		// If not a DocumentFragment from the ShadowRoot.
-		if (parent.getAttribute)
-			lastEl = parent;
-
-		// Stop once we reach an XElement.
-		if (parent.bindings) // if instanceof XElement
-			break;
-	}
-	return context;
-};
- */
-
-/**
  * Recursively process all the data- attributes in el and its descendants.
  * @param self {XElement}
  * @param el {HTMLElement}
@@ -217,16 +146,6 @@ var bindEl = (self, el, context) => {
 
 var bindElProp = (self, el, context) => {
 
-	//if (window.debug)
-	//	console.log(el);
-	if (window.debug) {
-		console.log('bindElProp:' + el.tagName);
-	}
-
-	// Allow traversing from host element into its own shadowRoot
-	// But not into the shadow root of other elements.
-	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
-
 
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
@@ -245,6 +164,12 @@ var bindElProp = (self, el, context) => {
 			}
 		}
 
+
+
+	// Allow traversing from host element into its own shadowRoot
+	// But not into the shadow root of other elements.
+	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
+
 	// Data loop already binds its own children when first applied.
 	if (!el.hasAttribute('data-loop'))
 		for (let child of next.children)
@@ -253,19 +178,10 @@ var bindElProp = (self, el, context) => {
 
 
 
-
-
 /**
  * @param el {HTMLElement} Remove all bindings within root and children.*/
 var unbindEl = (el, root) => {
 	root = root || el;
-
-	if (window.debug) {
-		console.log('unbindEl:' + el.tagName);
-		//if (el.tagName === 'X-B')
-		//	debugger;
-	}
-
 
 	// Only go into shadowroot if coming from the top level.
 	// This way we don't traverse into the shadowroots of other XElements.
@@ -552,8 +468,11 @@ var bindings = {
 
 			for (let prop in obj) {
 
+
 				let expr = addThis(replaceVars(obj[prop], context), context);
 
+				/*
+				// newer:
 				let updateProp = () => {
 					el[prop] = safeEval.call(self, expr);
 				};
@@ -565,14 +484,11 @@ var bindings = {
 
 				for (let path of parseVars(expr))
 					watch(self, path, updateProp);
+				*/
 
 
 				/*
-
-				// Assign the referenced object to a variable on el.
-				let expr = addThis(replaceVars(obj[prop], context), context);
-
-
+				// new:
 				delete el[prop];
 				Object.defineProperty(el, prop, {
 					get: function() {
@@ -599,9 +515,7 @@ var bindings = {
 
 
 				// old:
-				/*
 				let updateProp = (action, path, value) => {
-					console.log(expr);
 					el[prop] = safeEval.call(self, expr);
 				};
 
@@ -636,7 +550,6 @@ var bindings = {
 				else
 					for (let path of parseVars(expr))
 						watch(self, path, updateProp);
-				*/
 			}
 		}
 

@@ -227,16 +227,16 @@ var test_XElement = {
 
 	attributes: function() {
 		(function() {
-			class A extends XElement {}
-			A.html = '<div title="val1"></div>';
+			class AT extends XElement {}
+			AT.html = '<div title="val1"></div>';
 
 			// Make sure attribute is set from html.
-			var a = new A();
+			var a = new AT();
 			assertEq(a.getAttribute('title'), 'val1');
 
 			// Overriding attribute.
 			var div = document.createElement('div');
-			div.innerHTML = '<x-a title="val2">';
+			div.innerHTML = '<x-at title="val2">';
 			//document.body.appendChild(div);
 			assertEq(div.children[0].getAttribute('title'), 'val2');
 		})();
@@ -309,77 +309,77 @@ var test_XElement = {
 
 	},
 
-	data: function() {
+	misc: function() {
 		// Regular attribute
 		(function () {
-			class B1 extends XElement {}
-			B1.html = '<div><span id="span" data-attribs="title: titleProp">Text</span></div>';
-			var b = new B1();
+			class M1 extends XElement {}
+			M1.html = '<div><span id="span" data-attribs="title: titleProp">Text</span></div>';
+			var m = new M1();
 
-			b.titleProp = 'val1';
-			assertEq(b.span.getAttribute('title'), 'val1');
+			m.titleProp = 'val1';
+			assertEq(m.span.getAttribute('title'), 'val1');
 		})();
 
 		// Bind to sub-property
 		(function () {
-			class B1 extends XElement {}
-			B1.html = '<div><span data-attribs="title: span[0].titleProp">Text</span></div>';
-			var b = new B1();
+			class M2 extends XElement {}
+			M2.html = '<div><span data-attribs="title: span[0].titleProp">Text</span></div>';
+			var m = new M2();
 
 			// Ensure the span was created as an array.
-			assertEq(b.span.length, 1);
-			assertEq(b.span[0].titleProp, undefined); // We make a way to the property but we don't create it.
-			assertEq(b.shadowRoot.children[0].getAttribute('title'), null); // prop doesn't exist yet.
+			assertEq(m.span.length, 1);
+			assertEq(m.span[0].titleProp, undefined); // We make a way to the property but we don't create it.
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), null); // prop doesn't exist yet.
 
 			// Set the prop
-			b.span[0].titleProp = 'val1';
-			assertEq(b.shadowRoot.children[0].getAttribute('title'), 'val1');
+			m.span[0].titleProp = 'val1';
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val1');
 
 			// Set the prop
-			b.span[0] = {titleProp: 'val2'};
-			assertEq(b.shadowRoot.children[0].getAttribute('title'), 'val2');
+			m.span[0] = {titleProp: 'val2'};
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val2');
 
 			// Set the prop
-			b.span = [{titleProp: 'val3'}];
-			assertEq(b.shadowRoot.children[0].getAttribute('title'), 'val3');
+			m.span = [{titleProp: 'val3'}];
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val3');
 		})();
 
 		// data-html bind
 		(function () {
-			class B2 extends XElement {}
-			B2.html = '<div><span data-html="spanHtml">Text</span></div>';
+			class M3 extends XElement {}
+			M3.html = '<div><span data-html="spanHtml">Text</span></div>';
 
-			var b = new B2();
+			var m = new M3();
 			let html = 'some <b>bold</b> text';
-			b.spanHtml = html;
-			assertEq(b.shadowRoot.children[0].innerHTML, html);
+			m.spanHtml = html;
+			assertEq(m.shadowRoot.children[0].innerHTML, html);
 		})();
 
 		// data-text bind
 		(function () {
-			class B3 extends XElement {}
-			B3.html = '<div><span data-text="spanHtml">Text</span></div>';
+			class M4 extends XElement {}
+			M4.html = '<div><span data-text="spanHtml">Text</span></div>';
 
-			var b = new B3();
+			var m = new M4();
 			let text = 'some <b>bold</b> text';
-			b.spanHtml = text;
-			assertEq(b.shadowRoot.children[0].textContent, text);
+			m.spanHtml = text;
+			assertEq(m.shadowRoot.children[0].textContent, text);
 		})();
 
 		// Make sure unbinding one element doesn't unsubscribe() other watches.
 		(function() {
-			class B5 extends XElement {}
-			B5.html =
+			class M5 extends XElement {}
+			M5.html =
 				'<div>' +
 					'<span data-text="item.name"></span>' +
 					'<p data-text="item.name"></p>' +
 				'</div>';
-			var b = new B5();
-			b.item = {name: 1};
+			var m = new M5();
+			m.item = {name: 1};
 
-			assert(b.item.$isProxy);
-			unbindEl(b.shadowRoot.children[1]);
-			assert(b.item.$isProxy);
+			assert(m.item.$isProxy);
+			unbindEl(m.shadowRoot.children[1]);
+			assert(m.item.$isProxy);
 		})();
 	},
 
@@ -954,7 +954,6 @@ var test_XElement = {
 					'<span id="bt2" onclick="click2()">Button</span>' +
 					'<span id="bt3" onclick="this.click3()">Button</span>' +
 					'<span id="bt4" onclick="var a=1; this.click4(); var b=2;">Button</span>' +
-
 				'</div>';
 
 			var e = new EV1();
@@ -965,7 +964,7 @@ var test_XElement = {
 			//Object.defineProperty(ev, 'target', {writable: false, value: e.btn1}); // stackoverflow.com/a/49122553
 			e.bt1.dispatchEvent(ev);
 			assert(e.itWorked instanceof Event);
-			///assertEq(e.itWorked.target, e.bt1); // fails!
+			//assertEq(e.itWorked.target, e.bt1); // fails!
 
 			e.bt2.dispatchEvent(new Event('click'));
 			assert(e.itWorked2);
@@ -1349,9 +1348,8 @@ var test_XElement = {
 			B.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
-			        <b></b>
+			        <x-c data-prop="wheel: wheel"></x-c>
 				</span>
-				<div id="debug" data-text="JSON.stringify(this.car.wheels)"></div>
 			</div>`;
 
 			class A extends XElement {}
@@ -1363,8 +1361,10 @@ var test_XElement = {
 			var xa = new A();
 			xa.cars = [{wheels: [1]}];
 
-			console.log(xa.shadowRoot.children[0].loop.children[0].shadowRoot.children[0]);
-			console.log(xa.shadowRoot.children[0].loop.children[0].shadowRoot.children[0].textContent);
+
+			var bloop = xa.shadowRoot.children[0].loop;
+			var c = bloop.children[0];
+			assertEq(c.shadowRoot.children[0].textContent, '1');
 		})();
 	},
 
@@ -1384,21 +1384,21 @@ var test_XElement = {
 		// Double deep loop binding.
 		(function () {
 
-			class B extends XElement {}
-			B.html = `				
+			class B2 extends XElement {}
+			B2.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
 			        <b data-text="wheel"></b>
 				</span>
 			</div>`;
 
-			class A extends XElement {}
-			A.html = `				
+			class A2 extends XElement {}
+			A2.html = `				
 			<div data-loop="cars: car">
-				<x-b data-prop="car: car"></x-b>
+				<x-b2 data-prop="car: car"></x-b2>
 			</div>`;
 
-			var xa = new A();
+			var xa = new A2();
 
 			window.debug = true;
 
