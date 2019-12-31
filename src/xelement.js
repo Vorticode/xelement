@@ -87,12 +87,22 @@ var addElWatch = (el, path, callback) => {
 };
 
 
+/**
+ * A map between elements and the events assigned to them. *
+ * @type {WeakMap<HTMLElement, *[]>} */
 var elEvents = new WeakMap();
-var addElEvent = (el, event, callback, originalCode) => {
+
+/**
+ *
+ * @param el {HTMLElement}
+ * @param eventName {string}
+ * @param callback {function}
+ * @param originalEventAttrib {string} */
+var addElEvent = (el, eventName, callback, originalEventAttrib) => {
 	let ee = elEvents.get(el);
 	if (!ee)
 		elEvents.set(el, ee = []);
-	ee.push([event, callback, originalCode]);
+	ee.push([eventName, callback, originalEventAttrib]);
 };
 
 
@@ -112,8 +122,12 @@ var getXName = (cls) => {
 	return cls.xname_;
 };
 
+/**
+ * Get the nearest XElement parent.
+ * @param el {HTMLElement}
+ * @returns {XElement} */
 var getXParent = (el) => { // will error if not in an XParent.
-	while ((el = el.parentNode).nodeType !== 11) {} // doc fragment
+	while ((el = el.parentNode).nodeType !== 11) {} // 11 is doc fragment
 	return el.host;
 };
 
@@ -182,11 +196,11 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 	if (el.getAttribute) { // if not document fragment
 		getAttributesFrom = getAttributesFrom || el;
 
-		for (let event_ of events) {
+		for (let eventName of events) {
 
-			let originalCode = getAttributesFrom.getAttribute('on' + event_);
-			if (originalCode) {
-				let code = replaceVars(originalCode, context);
+			let originalEventAttrib = getAttributesFrom.getAttribute('on' + eventName);
+			if (originalEventAttrib) {
+				let code = replaceVars(originalEventAttrib, context);
 
 				// If it's a simple function that exists in the class,
 				// add the "this" prefix.
@@ -200,11 +214,11 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 				let callback = function (event) {
 					eval(code);
 				}.bind(self);
-				el.addEventListener(event_, callback);
-				addElEvent(el, event_, callback, originalCode);
+				el.addEventListener(eventName, callback);
+				addElEvent(el, eventName, callback, originalEventAttrib);
 
 				// Remove the original version so it doesn't also fire.
-				el.removeAttribute('on' + event_);
+				el.removeAttribute('on' + eventName);
 			}
 		}
 	}

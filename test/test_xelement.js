@@ -226,6 +226,44 @@ var test_XElement = {
 	},
 
 	attributes: function() {
+
+
+		// Regular attribute
+		(function () {
+			class M1 extends XElement {}
+			M1.html = '<div><span id="span" data-attribs="title: titleProp">Text</span></div>';
+			var m = new M1();
+
+			m.titleProp = 'val1';
+			assertEq(m.span.getAttribute('title'), 'val1');
+		})();
+
+
+		// Bind to sub-property
+		(function () {
+			class M2 extends XElement {}
+			M2.html = '<div><span data-attribs="title: span[0].titleProp">Text</span></div>';
+			var m = new M2();
+
+			// Ensure the span was created as an array.
+			assertEq(m.span.length, 1);
+			assertEq(m.span[0].titleProp, undefined); // We make a way to the property but we don't create it.
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), null); // prop doesn't exist yet.
+
+			// Set the prop
+			m.span[0].titleProp = 'val1';
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val1');
+
+			// Set the prop
+			m.span[0] = {titleProp: 'val2'};
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val2');
+
+			// Set the prop
+			m.span = [{titleProp: 'val3'}];
+			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val3');
+		})();
+
+		// Instantiation overrides definition attribute.
 		(function() {
 			class AT extends XElement {}
 			AT.html = '<div title="val1"></div>';
@@ -237,10 +275,8 @@ var test_XElement = {
 			// Overriding attribute.
 			var div = document.createElement('div');
 			div.innerHTML = '<x-at title="val2">';
-			//document.body.appendChild(div);
 			assertEq(div.children[0].getAttribute('title'), 'val2');
 		})();
-
 
 
 
@@ -271,78 +307,51 @@ var test_XElement = {
 	},
 
 	embed: function() {
-		class E1 extends XElement {}
-		E1.html = '<div title="E1">E1</div>';
-		var e1 = new E1();
-		assertEq(e1.shadowRoot.innerHTML, 'E1');
+		// Embed
+		(function() {
+			class E1 extends XElement {}
+			E1.html = '<div title="E1">E1</div>';
+			var e1 = new E1();
+			assertEq(e1.shadowRoot.innerHTML, 'E1');
 
-		class E2 extends XElement {} // e2 wraps e1
-		E2.html = '<div><x-e1 title="E2">E1</x-e1></div>';
+			class E2 extends XElement {} // e2 wraps e1
+			E2.html = '<div><x-e1 title="E2">E1</x-e1></div>';
 
-		var e2 = new E2();
-		assertEq(e2.shadowRoot.innerHTML, '<x-e1 title="E2">E1</x-e1>');
-	},
+			var e2 = new E2();
+			assertEq(e2.shadowRoot.innerHTML, '<x-e1 title="E2">E1</x-e1>');
+		})();
 
-	slot: function() {
-		class S1 extends XElement {}
-		S1.html = '<div><b><slot>Fallback</slot></b></div>';
+		// Slot
+		(function() {
+			class S1 extends XElement {}
+			S1.html = '<div><b><slot>Fallback</slot></b></div>';
 
-		var div = document.createElement('div');
-		div.innerHTML = '<x-s1>Hello</x-s1>';
+			var div = document.createElement('div');
+			div.innerHTML = '<x-s1>Hello</x-s1>';
 
-		// Make sure element is placed inside slot.
-		assertEq(div.innerHTML, '<x-s1>Hello</x-s1>');
-		assertEq(div.childNodes[0].shadowRoot.innerHTML, '<b><slot>Fallback</slot></b>');
-	},
+			// Make sure element is placed inside slot.
+			assertEq(div.innerHTML, '<x-s1>Hello</x-s1>');
+			assertEq(div.childNodes[0].shadowRoot.innerHTML, '<b><slot>Fallback</slot></b>');
 
-	slot2: function() {
-		class S2 extends XElement {}
-		S2.html = '<div><i><slot name="f1" id="f1">f1</slot></i><u><slot name="f2" id="f2">f2</slot></u></div>';
+		})();
 
-		var div = document.createElement('div');
-		div.innerHTML = '<x-s2><b slot="f1">Hello</b><s slot="f2">Goodbye</s></x-s2>';
-		var s2 = div.childNodes[0];
-		//document.body.append(div); // for visual inspection
+		// Named slots
+		(function() {
+			class S2 extends XElement {}
+			S2.html = '<div><i><slot name="f1" id="f1">f1</slot></i><u><slot name="f2" id="f2">f2</slot></u></div>';
 
-		assertEq(s2.shadowRoot.children[0].children[0].assignedNodes()[0].outerHTML, '<b slot="f1">Hello</b>');
-		assertEq(s2.shadowRoot.children[1].children[0].assignedNodes()[0].outerHTML,'<s slot="f2">Goodbye</s>');
+			var div = document.createElement('div');
+			div.innerHTML = '<x-s2><b slot="f1">Hello</b><s slot="f2">Goodbye</s></x-s2>';
+			var s2 = div.childNodes[0];
+			//document.body.append(div); // for visual inspection
 
+			assertEq(s2.shadowRoot.children[0].children[0].assignedNodes()[0].outerHTML, '<b slot="f1">Hello</b>');
+			assertEq(s2.shadowRoot.children[1].children[0].assignedNodes()[0].outerHTML,'<s slot="f2">Goodbye</s>');
+
+		})();
 	},
 
 	misc: function() {
-		// Regular attribute
-		(function () {
-			class M1 extends XElement {}
-			M1.html = '<div><span id="span" data-attribs="title: titleProp">Text</span></div>';
-			var m = new M1();
-
-			m.titleProp = 'val1';
-			assertEq(m.span.getAttribute('title'), 'val1');
-		})();
-
-		// Bind to sub-property
-		(function () {
-			class M2 extends XElement {}
-			M2.html = '<div><span data-attribs="title: span[0].titleProp">Text</span></div>';
-			var m = new M2();
-
-			// Ensure the span was created as an array.
-			assertEq(m.span.length, 1);
-			assertEq(m.span[0].titleProp, undefined); // We make a way to the property but we don't create it.
-			assertEq(m.shadowRoot.children[0].getAttribute('title'), null); // prop doesn't exist yet.
-
-			// Set the prop
-			m.span[0].titleProp = 'val1';
-			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val1');
-
-			// Set the prop
-			m.span[0] = {titleProp: 'val2'};
-			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val2');
-
-			// Set the prop
-			m.span = [{titleProp: 'val3'}];
-			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val3');
-		})();
 
 		// data-html bind
 		(function () {
@@ -1311,7 +1320,6 @@ var test_XElement = {
 
 		// Data bind to loop item.
 		(function () {
-
 
 			class BD9B extends XElement {}
 			BD9B.html = `				
