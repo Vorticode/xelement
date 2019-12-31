@@ -186,7 +186,7 @@ The `data-visible` attribute sets an element to be display: none if it evaluates
 
 ### Classes
 
-The `data-classes` attribute allows toggling classes on or off  when an expression evaluates to true or false.  The code below renders the span as `<span classes="big: this.height>10, scary: isScary">It's a monster!</span>`
+The `data-classes` attribute allows toggling classes on or off  when an expression evaluates to true or false.  The code below renders the span as `<span class="big isScary">It's a monster!</span>`
 
 ```javascript
 class Monster extends XElement {}

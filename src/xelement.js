@@ -237,18 +237,18 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 
 /**
  * Unbind properties and events from the element.
- * @param el {HTMLElement} Remove all bindings within root and children.
- * @param root */
-var unbindEl = (el, root) => {
-	root = root || el;
+ * @param self {XElement}
+ * @param el {HTMLElement=} Remove all bindings within root and children. Defaults to self. */
+var unbindEl = (self, el) => {
+	el = el || self;
 
 	// Only go into shadowroot if coming from the top level.
 	// This way we don't traverse into the shadowroots of other XElements.
-	var next = root===el && el.shadowRoot ? el.shadowRoot : el;
+	var next = self===el && el.shadowRoot ? el.shadowRoot : el;
 
 	// Recursively unbind children.
 	for (let child of next.children)
-		unbindEl(child, root);
+		unbindEl(self, child);
 
 	// Unbind properties
 	if (el.attributes)
@@ -264,7 +264,7 @@ var unbindEl = (el, root) => {
 				let watchedEl = elWatches.get(el);
 				if (watchedEl)
 					for (let sub of watchedEl) {
-						var p = p || getXParent(root); // only getXParent when first needed.
+						var p = p || getXParent(self); // only getXParent when first needed.
 						unwatch(p, sub.path_, sub.callback_);
 					}
 			}
@@ -457,6 +457,11 @@ var bindings = {
 	},
 
 
+	/**
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param context {object<string, string>} */
 	prop: (self, code, el, context) => {
 		// allow binding only on XElement
 		if (self !== el && el instanceof XElement) {
@@ -501,9 +506,13 @@ var bindings = {
 						watch(self, path, updateProp);
 			}
 		}
-
 	},
 
+	/**
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param context {object<string, string>} */
 	classes: (self, code, el, context) => {
 
 		var obj = parseObj(code);
@@ -534,6 +543,11 @@ var bindings = {
 		}
 	},
 
+	/**
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setText = (/*action, path, value*/) => {
@@ -548,6 +562,11 @@ var bindings = {
 		setText();
 	},
 
+	/**
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setHtml = (/*action, path, value*/) => {
@@ -567,11 +586,14 @@ var bindings = {
 	// TODO: Removing an item from the beginning of the array copy the first to the 0th,
 	// then createEl a new 1st item before deleting it when rebuildChildren is called again with the delete operation.
 	// Batching updates into a set should fix this.
+	/**
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param context {object<string, string>} */
 	loop: (self, code, el, context) => {
 
-		context = {...context}; // copy
-
-
+		context = {...context}; // copy, because we add to it as we descend.
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
@@ -580,8 +602,6 @@ var bindings = {
 
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
-
-	
 
 		var rebuildChildren = (/*action, path, value*/) => {
 		
@@ -595,7 +615,6 @@ var bindings = {
 				while (el.lastChild)
 					el.removeChild(el.lastChild);
 			}
-		
 
 			if (!el.loopHtml_)
 				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
@@ -607,14 +626,13 @@ var bindings = {
 			if (arrayEq(oldItems, newItems))
 				return;
 
-
-			var newSet = new Set(newItems);
-
+			// Set temporary index on each child, so we can track how they're re-ordered.
 			for (let i in Array.from(el.children))
 				el.children[i].index_ = i;
 
 			// Create a map from the old items to the elements that represent them.
 			var oldMap = new Map();
+			var newSet = new Set(newItems);
 			for (let i=oldItems.length-1; i>=0; i--) {
 				let oldItem = oldItems[i];
 				let child = el.children[i];
@@ -712,10 +730,12 @@ var bindings = {
 	},
 
 
-
-
-
-	// Special 2-way binding
+	/**
+	 * Special 2-way binding
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param context {object<string, string>} */
 	val: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 
@@ -753,6 +773,11 @@ var bindings = {
 		setVal();
 	},
 
+	/**
+	 * @param self {XElement}
+	 * @param code {string}
+	 * @param el {HTMLElement}
+	 * @param context {object<string, string>} */
 	visible: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		var displayNormal = el.style.display;

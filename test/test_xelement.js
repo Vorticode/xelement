@@ -228,6 +228,23 @@ var test_XElement = {
 	attributes: function() {
 
 
+		// Regular, non-data attributes
+		// Instantiation overrides definition attribute.
+		(function() {
+			class AT extends XElement {}
+			AT.html = '<div title="val1"></div>';
+
+			// Make sure attribute is set from html.
+			var a = new AT();
+			assertEq(a.getAttribute('title'), 'val1');
+
+			// Overriding attribute.
+			var div = document.createElement('div');
+			div.innerHTML = '<x-at title="val2">';
+			assertEq(div.children[0].getAttribute('title'), 'val2');
+		})();
+
+
 		// Regular attribute
 		(function () {
 			class M1 extends XElement {}
@@ -261,21 +278,6 @@ var test_XElement = {
 			// Set the prop
 			m.span = [{titleProp: 'val3'}];
 			assertEq(m.shadowRoot.children[0].getAttribute('title'), 'val3');
-		})();
-
-		// Instantiation overrides definition attribute.
-		(function() {
-			class AT extends XElement {}
-			AT.html = '<div title="val1"></div>';
-
-			// Make sure attribute is set from html.
-			var a = new AT();
-			assertEq(a.getAttribute('title'), 'val1');
-
-			// Overriding attribute.
-			var div = document.createElement('div');
-			div.innerHTML = '<x-at title="val2">';
-			assertEq(div.children[0].getAttribute('title'), 'val2');
 		})();
 
 
@@ -319,6 +321,54 @@ var test_XElement = {
 
 			var e2 = new E2();
 			assertEq(e2.shadowRoot.innerHTML, '<x-e1 title="E2">E1</x-e1>');
+		})();
+
+		// Embed with binding to both parent and self.
+		(function() {
+			class E3 extends XElement {}
+			E3.html = '<div data-attribs="title: titleText">E1</div>';
+
+			class E4 extends XElement {} // e2 wraps e1
+			E4.html = '<div><x-e3 id="e3" data-classes="big: isBig">E1</x-e3></div>';
+
+			var e4 = new E4();
+
+			assertEq(e4.e3.getAttribute('title'), null);
+			assertEq(e4.e3.getAttribute('class'), null);
+
+			e4.titleText = 'hello';
+			e4.e3.isBig = true;
+
+			assertEq(e4.e3.getAttribute('title'), 'hello');
+			assertEq(e4.e3.getAttribute('class'), 'big');
+		})();
+
+
+
+		// Embed with conflicting binding to both parent and self.
+		(function() {
+			class E5 extends XElement {}
+			E5.html = '<div data-classes="big1: isBig">E1</div>';
+
+			class E6 extends XElement {}
+			E6.html = '<div><x-e5 id="e5" data-classes="big2: isBig">E1</x-e5></div>';
+
+			// The data-classes attribute on E5's instantiation overrides the same attribute on E5's definition.
+			// But we subscribe to isBig on both E6 and E5.  Setting either updates the class.
+			// TODO: We shold define what the best behavior for this case is.  Right now this tests exists only to ensure nothing breaks.
+			var e6 = new E6();
+
+			assertEq(e6.e5.getAttribute('class'), null);
+
+			//e6.isBig = true;
+			e6.isBig = true;
+			assertEq(e6.e5.getAttribute('class'), 'big2');
+
+			e6.e5.isBig = false;
+			assertEq(e6.e5.getAttribute('class'), null);
+
+			e6.e5.isBig = true;
+			assertEq(e6.e5.getAttribute('class'), 'big2');
 		})();
 
 		// Slot
@@ -1341,11 +1391,8 @@ var test_XElement = {
 			assertEq(xa.loop.children[0].nameText.textContent, '1');
 			assertEq(xa.loop.children[1].nameText.textContent, '2');
 		})();
-	},
 
 
-
-	failures: function() {
 
 		// Double deep loop binding.
 		(function () {
@@ -1377,22 +1424,8 @@ var test_XElement = {
 			var c = bloop.children[0];
 			assertEq(c.shadowRoot.children[0].textContent, '1');
 		})();
-	},
 
-
-
-	failures2: function() {
-		/*
-		The problem:
-		When elements are instantiated they're normally created from the bottom up.
-		But when setting a variable that affects loops or nested loops, elements are created from top down.n
-		When I set a data-prop bound to a loop, data-prop creates B and sets its values before the loop is instantiated.  I think.
-
-		To fix this:
-		Log when each element is instantiated after the data-prop is set.
-		*/
-
-		// Double deep loop binding.
+		// Double deep loop binding 2
 		(function () {
 
 			class B2 extends XElement {}
@@ -1423,6 +1456,11 @@ var test_XElement = {
 			assertEq(loop.children.length, 2);
 		})();
 	},
+
+	temp: function() {
+
+	}
+
 	/*
 	memory: function() {
 		// Make sure all proxyObjects and proxyRoots are freed:
