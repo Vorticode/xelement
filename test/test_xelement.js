@@ -605,7 +605,9 @@ var test_XElement = {
 			// Calls action=set on the parent element, which sends no action="delete"
 			v.items = [];
 			assertEq(v.loop.children.length, 0);
-			//assert(!watched.get(v)); // The object will be removed from teh watched weakmap if it has no subscribers.
+			//setTimeout(function() {
+			//	assert(!watched.get(v)); // The object will be removed from the watched weakmap if it has no subscribers.
+			//}, 5000);
 		})();
 
 		// Test splice
@@ -936,7 +938,8 @@ var test_XElement = {
 		(function () {
 			class EV1 extends XElement {
 				click(e) {
-					this.itWorked = e;
+					this.event = e;
+					this.target = e.target;
 				}
 				click2() {
 					this.itWorked2 = true;
@@ -963,8 +966,8 @@ var test_XElement = {
 			var ev = new Event('click');
 			//Object.defineProperty(ev, 'target', {writable: false, value: e.btn1}); // stackoverflow.com/a/49122553
 			e.bt1.dispatchEvent(ev);
-			assert(e.itWorked instanceof Event);
-			//assertEq(e.itWorked.target, e.bt1); // fails!
+			assert(e.event instanceof Event);
+			assertEq(e.target, e.bt1); // fails!
 
 			e.bt2.dispatchEvent(new Event('click'));
 			assert(e.itWorked2);
@@ -1374,7 +1377,7 @@ var test_XElement = {
 		/*
 		The problem:
 		When elements are instantiated they're normally created from the bottom up.
-		But when setting a variable that affects loops or nested loops, elements are created from top down.
+		But when setting a variable that affects loops or nested loops, elements are created from top down.n
 		When I set a data-prop bound to a loop, data-prop creates B and sets its values before the loop is instantiated.  I think.
 
 		To fix this:
@@ -1406,10 +1409,10 @@ var test_XElement = {
 
 			xa.cars = [{wheels: [1, 2]}];
 
-			//console.log(xa.shadowRoot.children[0].car);
-
-			console.log(xa.shadowRoot.children[0].loop.children);
-			console.log(xa.shadowRoot.children[0].loop.children[0].textContent);
+			var loop = xa.shadowRoot.children[0].loop;
+			assertEq(loop.children[0].textContent, '1');
+			assertEq(loop.children[1].textContent, '2');
+			assertEq(loop.children.length, 2);
 		})();
 	},
 	/*

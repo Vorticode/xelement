@@ -946,77 +946,6 @@ var getXParent = (el) => { // will error if not in an XParent.
 
 
 /**
- * TODO: This function may be unnecessary.  I should try replacing it with reguarl watch() and see if anything breaks.
- * Traverse starting from path and working upward,
- * looking for an existing XElement to watch.
- * This allows the corret object to be watched when data-prop is used.
- * @param obj
- * @param path
- * @param callback
-var watchXElement = (obj, path, callback) => {
-	for (let i=path.length; i>=0; i--) {
-		let item = traversePath(obj, path.slice(0, i));
-		if (item instanceof XElement) {
-			watch(item, path.slice(i), callback);
-			break;
-		}
-	}
-};*/
-
-/**
- * Traverse through all parents to build the loop context.
- * This will return an incorrect result if called on a nested loop element.
- * Because the outer loop must be processed and build before we know the index for the inner element.
- * TODO: We could maybe speed things up by having a weakmap<el, context:object> that caches the context of each loop?
- * @param el
- * @return {object<string, string|int>}
-var getContext = (el) => {
-	let context = {};
-	let parent = lastEl = el;
-
-	// Parent.host lets us traverse up beyond the shadow root, 
-	// in case data-loop is defined on the shadow host.
-	// We also start by checking the parent for the context instead of this element,
-	// because an element only sets its context for its children, not itself.
-	while (parent = (parent.host || parent.parentNode)) {
-
-		// Shadow root documnet fragment won't have getAttrbute.
-		let code = parent.getAttribute && parent.getAttribute('data-loop');
-		if (code) {
-
-			// Check for an inner loop having the same variable name
-			let [foreach, itemVar, indexVar] = parseLoop(code);
-			foreach = addThis(foreach);
-
-			//#IFDEV
-			if (itemVar in context)
-				throw new XElementError('Loop variable "' + itemVar + '" already used in a parent loop.');
-			if (indexVar && indexVar in context)
-				throw new XElementError('Loop index "' + indexVar + '" already used in a parent loop.');
-			//#ENDIF
-
-			// As we traverse upward, we set the index of variables.
-			if (lastEl) {
-				let index = parentIndex(lastEl);
-				context[itemVar] = foreach + '[' + index + ']';
-				if (indexVar) // will be undefined if it doesn't exist.
-					context[indexVar] = index;
-			}
-		}
-
-		// If not a DocumentFragment from the ShadowRoot.
-		if (parent.getAttribute)
-			lastEl = parent;
-
-		// Stop once we reach an XElement.
-		if (parent.bindings) // if instanceof XElement
-			break;
-	}
-	return context;
-};
- */
-
-/**
  * Recursively process all the data- attributes in el and its descendants.
  * @param self {XElement}
  * @param el {HTMLElement}
@@ -1028,27 +957,19 @@ var getContext = (el) => {
  *         <div data-val="this.items[0].name"> */
 var bindEl = (self, el, context) => {
 
-	// Seach attributes for data- bindings.
-	if (el.attributes) // shadow root has no attributes.
-		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-loop')) {
+	bindElProps(self, el, context);
+	bindElEvents(self, el, context, null, true);
 
-				let attrName = attr.name.slice(5); // remove data- prefix.
+	// TODO: assert() to make sure element isn't bound twice.
+};
 
-				if (bindings[attrName]) // attr.value is code.
-					bindings[attrName](self, attr.value, el, context);
 
-				//#IFDEV
-				else
-					throw new Error (attrName);
-				//#ENDIF
-			}
-		}
+var bindElProps = (self, el, context) => {
 
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-') && attr.name !== 'data-loop') {
+			if (attr.name.startsWith('data-')) {
 
 				let attrName = attr.name.slice(5); // remove data- prefix.
 
@@ -1069,13 +990,68 @@ var bindEl = (self, el, context) => {
 	// Data loop already binds its own children when first applied.
 	if (!el.hasAttribute('data-loop'))
 		for (let child of next.children)
-			bindEl(self, child, context);
+			bindElProps(self, child, context);
 };
 
 
 
+
 /**
- * @param el {HTMLElement} Remove all bindings within root and children.*/
+ * We rebind event attributes because otherwise there's no way
+ * to make them call the class methods.
+ * @param self {XElement}
+ * @param el {HTMLElement}
+ * @param context object<string, string>
+ * @param getAttributesFrom {*}
+ * @param recurse {boolean=false}    */
+var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
+
+	if (el.getAttribute) { // if not document fragment
+		getAttributesFrom = getAttributesFrom || el;
+
+		for (let event_ of events) {
+
+			let originalCode = getAttributesFrom.getAttribute('on' + event_);
+			if (originalCode) {
+				let code = replaceVars(originalCode, context);
+
+				// If it's a simple function that exists in the class,
+				// add the "this" prefix.
+				let path = parseVars(code, 0, 1)[0];
+				if (path && traversePath(self, path) instanceof Function)
+					code = addThis(code, context, isStandaloneCall);
+
+				// The code in the attribute can reference:
+				// 1. event, assigned to the current event.
+				// 2. this, assigned to the class instance.
+				let callback = function (event) {
+					eval(code);
+				}.bind(self);
+				el.addEventListener(event_, callback);
+				addElEvent(el, event_, callback, originalCode);
+
+				// Remove the original version so it doesn't also fire.
+				el.removeAttribute('on' + event_);
+			}
+		}
+	}
+
+	// data-loop handles its own children.
+	if (recurse) {
+		let next = el === self && el.shadowRoot ? el.shadowRoot : el;
+		if (!next.getAttribute || !next.hasAttribute('data-loop'))
+			for (let child of next.children)
+				bindElEvents(self, child, context, null, true);
+	}
+};
+
+
+
+
+/**
+ * Unbind properties and events from the element.
+ * @param el {HTMLElement} Remove all bindings within root and children.
+ * @param root */
 var unbindEl = (el, root) => {
 	root = root || el;
 
@@ -1083,9 +1059,11 @@ var unbindEl = (el, root) => {
 	// This way we don't traverse into the shadowroots of other XElements.
 	var next = root===el && el.shadowRoot ? el.shadowRoot : el;
 
+	// Recursively unbind children.
 	for (let child of next.children)
 		unbindEl(child, root);
 
+	// Unbind properties
 	if (el.attributes)
 		for (let attr of el.attributes) {
 			if (attr.name.startsWith('data-')) {
@@ -1104,69 +1082,8 @@ var unbindEl = (el, root) => {
 					}
 			}
 		}
-};
 
-
-
-/**
- * We rebind event attributes because otherwise there's no way
- * to make them call the class methods.
- * @param self {XElement}
- * @param el {HTMLElement}
- * @param context object<string, string> */
-var bindEvents = (self, el, context) => {
-
-	if (el.getAttribute) // if not document fragment
-		bindElEvents(self, el, null, context);
-
-	// data-loop handles its own children.
-	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
-	if (!next.getAttribute || !next.hasAttribute('data-loop'))
-		for (let child of next.children)
-			bindEvents(self, child, context);
-};
-
-var bindElEvents = (self, el, getAttributesFrom, context) => {
-	getAttributesFrom = getAttributesFrom || el;
-
-	for (let event_ of events) {
-
-		let originalCode = getAttributesFrom.getAttribute('on' + event_);
-		if (originalCode) {
-			let code = replaceVars(originalCode, context);
-
-			// If it's a simple function that exists in the class,
-			// add the "this" prefix.
-			let path = parseVars(code, 0, 1)[0];
-			if (path && traversePath(self, path) instanceof Function)
-				code = addThis(code, context, isStandaloneCall);
-
-			// The code in the attribute can reference:
-			// 1. event, assigned to the current event.
-			// 2. this, assigned to the class instance.
-			let callback = function (event) {
-				eval(code);
-			}.bind(self);
-			el.addEventListener(event_, callback);
-			addElEvent(el, event_, callback, originalCode);
-
-			// Remove the original version so it doesn't also fire.
-			el.removeAttribute('on' + event_);
-		}
-	}
-};
-
-var unbindEvents = (el, root) => {
-	root = root || el;
-	unbindElEvents(el);
-
-	var next = root===el && el.shadowRoot ? el.shadowRoot : el;
-	if (!next.hasAttribute|| !next.hasAttribute('data-loop'))
-		for (let child of next.children)
-			unbindEvents(child);
-};
-
-var unbindElEvents = (el) => {
+	// Unbind events
 	let ee = elEvents.get(el) || [];
 	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string]
 		el.removeEventListener(item[0], item[1]);
@@ -1218,7 +1135,7 @@ var initHtml = (self) => {
 		}
 
 		// 4. Bind events on the defintion to functions on its own element and not its container.
-		bindElEvents(self, self, div);
+		bindElEvents(self, self, null, div, false);
 
 		// 5.  Add attributes from instantiation.
 		for (let name in attributes) // From instantiation
@@ -1279,9 +1196,9 @@ var initHtml = (self) => {
 
 
 		// 8. Bind all data- and event attributes
-		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation.
-		bindEl(self, self);
-		bindEvents(self, root);
+		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
+		bindElProps(self, self);
+		bindElEvents(self, root, null, null, true);
 	}
 };
 
@@ -1355,21 +1272,15 @@ var bindings = {
 
 	prop: (self, code, el, context) => {
 		// allow binding only on XElement
-		if (self !== el && el instanceof XElement)
-		{
+		if (self !== el && el instanceof XElement) {
 
 			var obj = parseObj(code);
-
 			for (let prop in obj) {
 
-				// Assign the referenced object to a variable on el.
 				let expr = addThis(replaceVars(obj[prop], context), context);
-
-
-				let updateProp = (/*action, path, value*/) => {
+				let updateProp = (action, path, value) => {
 					el[prop] = safeEval.call(self, expr);
 				};
-
 
 				// Set initial values.
 				updateProp();
@@ -1388,7 +1299,7 @@ var bindings = {
 							// 2. For each function, we move the watch from the child object to the parent object.
 							for (let callback of subs[sub]) {
 								unwatch(el, subPath, callback);
-								watch(self, subPath.slice(1), function (/*action, path, value*/) {
+								watch(self, subPath.slice(1), function (action, path, value) {
 									// 3. And intercept its call to make sure we pass the original path.
 									callback.apply(el, arguments);
 								});
@@ -1483,9 +1394,10 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
+	
+
 		var rebuildChildren = (/*action, path, value*/) => {
-
-
+		
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
 			if (!el.loopHtml_) {
@@ -1496,6 +1408,10 @@ var bindings = {
 				while (el.lastChild)
 					el.removeChild(el.lastChild);
 			}
+		
+
+			if (!el.loopHtml_)
+				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
 
 
 			var newItems = removeProxies(safeEval.call(self, foreach) || []);
@@ -1503,6 +1419,7 @@ var bindings = {
 
 			if (arrayEq(oldItems, newItems))
 				return;
+
 
 			var newSet = new Set(newItems);
 
@@ -1541,15 +1458,13 @@ var bindings = {
 				if (!oldChild || oldChild !== newChild) {
 
 					// Create a new one if needed.
+					// TODO: createEl() binds nexted x-elements before we're ready for them to be bound.
+					// E.g. below we set the localContext for loop variables.
 					if (isNew)
-						newChild = createEl(el.loopHtml_ || el.innerHTML);
+						newChild = createEl(el.loopHtml_);
 
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
-
-					// Add binding for any new elements.
-					//if (isNew)
-					//	bindEvents(self, newChild, context);
 				}
 			}
 
@@ -1574,18 +1489,22 @@ var bindings = {
 			for (let i in Array.from(el.children)) {
 				let child = el.children[i];
 				if (child.index_ !== i) {
-					if  (window.debug)
-						debugger;
 
+					// TODO: It's sloppy coding that unbindEl() operates within child, but bindEl(self, child) only operates on the child's attributes.
 					unbindEl(child);
-					unbindEvents(child);
 
 					localContext[loopVar] = foreach + '[' + i + ']';
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
 
+
 					bindEl(self, child, localContext);
-					bindEvents(self, child, localContext);
+					
+					// Alt version that makes some things fail:
+					// Operates within the child.
+					//bindEl(child, child, localContext);
+					// Operates on the child's attributes within self.  E.g. data-prop
+					//bindEl(self, child, localContext);
 				}
 				delete child.index_;
 			}

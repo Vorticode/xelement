@@ -25,8 +25,7 @@ var eq = (item1, item2) => {
 
 
 
-
-var createEl = (html/*, constructorArgs*/) => {
+var createEl = (html) => {
 	//#IFDEV
 	if (typeof html !== 'string')
 		throw new XElementError('Html argument must be a string.');
