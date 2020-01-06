@@ -57,7 +57,7 @@ var isObj = (obj) => obj && typeof obj === 'object'; // Make sure it's not null,
  * @returns {boolean} */
 var isValidAttribute = (el, name) => {
 	if ((name.startsWith('data-') || el.hasAttribute(name)) ||
-		(name.startsWith('on') && events.includes(name.slice(2))))
+		(name.startsWith('on') && eventNames.includes(name.slice(2))))
 		return true;
 
 	if (name in el)
@@ -129,10 +129,10 @@ var traversePath = (obj, path, create, value) => {
 	return obj;
 };
 
-
-
-// Shortened version of this answer: stackoverflow.com/a/18751951
-var events = Object.keys(document.__proto__.__proto__)
+/**
+ * Shortened version of this answer: stackoverflow.com/a/18751951
+ * @type {string[]} */
+var eventNames = Object.keys(document.__proto__.__proto__)
 	.filter((x) => x.startsWith('on'))
 	.map(   (x) => x.slice(2));
 

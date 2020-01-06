@@ -16,7 +16,6 @@ x-elements in loops get fully initialized then replaced.
 
 warning on data-prop wrong order.
 TODO
-Separate "this" binding for data attr on definition vs instantiation
 Make shadowdom optional.
 
 implement other binding functions.
@@ -145,7 +144,7 @@ var getXParent = (el) => { // will error if not in an XParent.
 var bindEl = (self, el, context) => {
 
 	bindElProps(self, el, context);
-	bindElEvents(self, el, context, null, true);
+	bindElEvents(self, el, context, true);
 
 	// TODO: assert() to make sure element isn't bound twice.
 };
@@ -188,15 +187,17 @@ var bindElProps = (self, el, context) => {
  * to make them call the class methods.
  * @param self {XElement}
  * @param el {HTMLElement}
- * @param context object<string, string>
- * @param getAttributesFrom {*}
- * @param recurse {boolean=false}    */
-var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
+ * @param context {object<string, string>=}
+ * @param recurse {boolean=false}
+ * @param getAttributesFrom {HTMLElement=} */
+var bindElEvents = (self, el, context, recurse, getAttributesFrom) => {
 
 	if (el.getAttribute) { // if not document fragment
 		getAttributesFrom = getAttributesFrom || el;
 
-		for (let eventName of events) {
+		for (let eventName of eventNames) {
+			//if (eventName==='click')
+			//	debugger;
 
 			let originalEventAttrib = getAttributesFrom.getAttribute('on' + eventName);
 			if (originalEventAttrib) {
@@ -228,7 +229,7 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 		let next = el === self && el.shadowRoot ? el.shadowRoot : el;
 		if (!next.getAttribute || !next.hasAttribute('data-loop'))
 			for (let child of next.children)
-				bindElEvents(self, child, context, null, true);
+				bindElEvents(self, child, context, true);
 	}
 };
 
@@ -237,7 +238,7 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 
 /**
  * Unbind properties and events from the element.
- * @param self {XElement}
+ * @param self {XElement|HTMLElement}
  * @param el {HTMLElement=} Remove all bindings within root and children. Defaults to self. */
 var unbindEl = (self, el) => {
 	el = el || self;
@@ -321,8 +322,8 @@ var initHtml = (self) => {
 				setAttribute(self, attr.name, attr.value);
 		}
 
-		// 4. Bind events on the defintion to functions on its own element and not its container.
-		bindElEvents(self, self, null, div, false);
+		// 4. Bind events on the defintion to functions on its own element and not its container
+		bindElEvents(self, self, null, false, div);
 
 		// 5.  Add attributes from instantiation.
 		for (let name in attributes) // From instantiation
@@ -385,7 +386,7 @@ var initHtml = (self) => {
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
 		bindElProps(self, self);
-		bindElEvents(self, root, null, null, true);
+		bindElEvents(self, root, null, true);
 	}
 };
 
@@ -407,7 +408,6 @@ class XElement extends HTMLElement {
 			throw error;
 		}
 		//#ENDIF
-
 		let xname = getXName(this.constructor);
 		let self = this;
 		if (customElements.get(xname))
@@ -701,7 +701,6 @@ var bindings = {
 					localContext[loopVar] = foreach + '[' + i + ']';
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
-
 
 					bindEl(self, child, localContext);
 					

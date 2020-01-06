@@ -1098,7 +1098,7 @@ var test_XElement = {
 			assert(outer.clicked);
 		})();
 
-		// Test events in double loop (used to fail)
+		// Test events in loop.
 		// onclick="this.result = i + car + ':' + j + wheel"
 		(function() {
 			class EV5 extends XElement {}
@@ -1459,6 +1459,30 @@ var test_XElement = {
 
 	temp: function() {
 
+
+		// Test events in loop.
+		// onclick="this.result = i + car + ':' + j + wheel"
+		(function() {
+			class EV7Inner extends XElement {}
+			EV7Inner.html = `<div onclick="console.log(this)"></div>`;
+
+			class EV7Outer extends XElement {}
+			EV7Outer.html = `
+				<div data-loop="letters: letter">
+					<x-ev7 inner></x-ev7inner>					
+				</div>`;
+
+			var outer = new EV7Outer();
+			window.debugger = true;
+			outer.letters = ['A', 'B'];
+
+			// Make sure we rebind events after splice.
+			var a = outer.shadowRoot.children[0];
+			a.dispatchEvent(new Event('click'));
+
+			console.log(outer.letter);
+			console.log(a.letter);
+		})();
 	}
 
 	/*
