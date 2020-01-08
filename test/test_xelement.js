@@ -1152,9 +1152,31 @@ var test_XElement = {
 			b.shadowRoot.children[0].children[1].dispatchEvent(new Event('click'));
 			assertEq(b.result, '02:1B');
 		})();
+		
+		// Test events in loop.
+		(function() {
+			class EV7Inner extends XElement {}
+			EV7Inner.html = `<div onclick="this.val = this.letter"></div>`;
 
+			class EV7Outer extends XElement {}
+			EV7Outer.html = `
+				<div data-loop="letters: letter">
+					<x-ev7inner data-prop="letter: letter"></x-ev7inner>					
+				</div>`;
 
+			var outer = new EV7Outer();
+			window.debugger = true;
+			outer.letters = ['A', 'B'];
 
+			// Make sure we rebind events after splice.
+			var inner = outer.shadowRoot.children;
+			inner[0].dispatchEvent(new Event('click'));
+			inner[1].dispatchEvent(new Event('click'));
+
+			assert(!outer.val);
+			assertEq(inner[0].val, 'A');
+			assertEq(inner[1].val, 'B');
+		})();
 	},
 
 	dataProp: function() {
@@ -1460,29 +1482,6 @@ var test_XElement = {
 	temp: function() {
 
 
-		// Test events in loop.
-		// onclick="this.result = i + car + ':' + j + wheel"
-		(function() {
-			class EV7Inner extends XElement {}
-			EV7Inner.html = `<div onclick="console.log(this)"></div>`;
-
-			class EV7Outer extends XElement {}
-			EV7Outer.html = `
-				<div data-loop="letters: letter">
-					<x-ev7 inner></x-ev7inner>					
-				</div>`;
-
-			var outer = new EV7Outer();
-			window.debugger = true;
-			outer.letters = ['A', 'B'];
-
-			// Make sure we rebind events after splice.
-			var a = outer.shadowRoot.children[0];
-			a.dispatchEvent(new Event('click'));
-
-			console.log(outer.letter);
-			console.log(a.letter);
-		})();
 	}
 
 	/*

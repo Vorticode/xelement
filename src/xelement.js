@@ -97,11 +97,11 @@ var elEvents = new WeakMap();
  * @param eventName {string}
  * @param callback {function}
  * @param originalEventAttrib {string} */
-var addElEvent = (el, eventName, callback, originalEventAttrib) => {
+var addElEvent = (el, eventName, callback, originalEventAttrib, root) => {
 	let ee = elEvents.get(el);
 	if (!ee)
 		elEvents.set(el, ee = []);
-	ee.push([eventName, callback, originalEventAttrib]);
+	ee.push([eventName, callback, originalEventAttrib, root]);
 };
 
 
@@ -126,8 +126,8 @@ var getXName = (cls) => {
  * @param el {HTMLElement}
  * @returns {XElement} */
 var getXParent = (el) => { // will error if not in an XParent.
-	while ((el = el.parentNode).nodeType !== 11) {} // 11 is doc fragment
-	return el.host;
+	while ((el = el.parentNode) && el && el.nodeType !== 11) {} // 11 is doc fragment
+	return el ? el.host : null;
 };
 
 
@@ -196,11 +196,9 @@ var bindElEvents = (self, el, context, recurse, getAttributesFrom) => {
 		getAttributesFrom = getAttributesFrom || el;
 
 		for (let eventName of eventNames) {
-			//if (eventName==='click')
-			//	debugger;
-
 			let originalEventAttrib = getAttributesFrom.getAttribute('on' + eventName);
 			if (originalEventAttrib) {
+
 				let code = replaceVars(originalEventAttrib, context);
 
 				// If it's a simple function that exists in the class,
@@ -216,7 +214,7 @@ var bindElEvents = (self, el, context, recurse, getAttributesFrom) => {
 					eval(code);
 				}.bind(self);
 				el.addEventListener(eventName, callback);
-				addElEvent(el, eventName, callback, originalEventAttrib);
+				addElEvent(el, eventName, callback, originalEventAttrib, self);
 
 				// Remove the original version so it doesn't also fire.
 				el.removeAttribute('on' + eventName);
@@ -224,9 +222,10 @@ var bindElEvents = (self, el, context, recurse, getAttributesFrom) => {
 		}
 	}
 
-	// data-loop handles its own children.
 	if (recurse) {
 		let next = el === self && el.shadowRoot ? el.shadowRoot : el;
+
+		// data-loop handles its own children.
 		if (!next.getAttribute || !next.hasAttribute('data-loop'))
 			for (let child of next.children)
 				bindElEvents(self, child, context, true);
@@ -265,7 +264,7 @@ var unbindEl = (self, el) => {
 				let watchedEl = elWatches.get(el);
 				if (watchedEl)
 					for (let sub of watchedEl) {
-						var p = p || getXParent(self); // only getXParent when first needed.
+						var p = p || getXParent(el) || self; // only getXParent when first needed.
 						unwatch(p, sub.path_, sub.callback_);
 					}
 			}
@@ -273,9 +272,15 @@ var unbindEl = (self, el) => {
 
 	// Unbind events
 	let ee = elEvents.get(el) || [];
-	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string]
-		el.removeEventListener(item[0], item[1]);
-		el.setAttribute('on' + item[0], item[2]);
+	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string, root:XElement]
+
+		// Only unbind if it was bound from the same root.
+		// This is needed to allow onclick="" attributes on both the definition and instantiation of an element,
+		// and having their "this" bound to themselves or the parent element, respectively.
+		if (item[3] === self) {
+			el.removeEventListener(item[0], item[1]);
+			el.setAttribute('on' + item[0], item[2]);
+		}
 	}
 };
 
@@ -386,6 +391,10 @@ var initHtml = (self) => {
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
 		bindElProps(self, self);
+
+
+		// We pass root to bind all events on this element's children.
+		// We bound events on the element itself in a separate call to bindElEvents(self, self) above.
 		bindElEvents(self, root, null, true);
 	}
 };
@@ -696,13 +705,17 @@ var bindings = {
 				if (child.index_ !== i) {
 
 					// TODO: It's sloppy coding that unbindEl() operates within child, but bindEl(self, child) only operates on the child's attributes.
-					unbindEl(child);
+
+					unbindEl(self, child);
+					//unbindEl(child, child);
 
 					localContext[loopVar] = foreach + '[' + i + ']';
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
 
+					//bindElEvents(child, child, localContext);
 					bindEl(self, child, localContext);
+
 					
 					// Alt version that makes some things fail:
 					// Operates within the child.
