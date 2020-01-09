@@ -351,11 +351,17 @@ var parseLoop = (code) => {
 	*/
 };
 
-
-var addThis = (code, context, isSimple, prefix) => {
+/**
+ * Add a "this." prefix to code where we can.
+ * @param code  {string}
+ * @param context {object<string, string>}
+ * @param isStandalone {function(string):boolean=} A function to detect whether the code is a stanadlone var.
+ * @param prefix {string=} Defaults to "this"
+ * @returns {string} */
+var addThis = (code, context, isStandalone, prefix) => {
 	prefix = prefix || 'this';
-	isSimple = isSimple || isStandaloneVar;
-	if (!isSimple(code))
+	isStandalone = isStandalone || isStandaloneVar;
+	if (!isStandalone(code))
 		return code;
 
 	// If it starts with this or an item in context, do nothing.
@@ -1191,9 +1197,15 @@ var setAttribute = (self, name, value) => {
 
 
 var initHtml = (self) => {
+
 	if (!self.init_) {
 
 		self.init_ = 1;
+
+		//#IFDEV
+		if (!self.constructor.html_)
+			throw new XElementError('XElement .html property must be set to a non-empty string.');
+		//#ENDIF
 
 		// 1. Create temporary element.
 		var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
@@ -1248,6 +1260,14 @@ var initHtml = (self) => {
 		// 7. Create class properties that reference any html element with an id tag.
 		for (let node of root.querySelectorAll('[id]')) {
 			let id = node.getAttribute('id');
+
+			//#IFDEV
+			// Make sure we're not replacing an existing method.
+			if (id in self && self[id] instanceof Function)
+				throw new XElementError('Cannot set property "' + id + '" on "' + self.constructor.name +
+					'" because there is already a class method with the same name.');
+			//#ENDIF
+
 			Object.defineProperty(self, id, {
 				// Make it readonly.
 				// Using writeable: false caused errors if the getter returns a proxy instead of the proper type.
@@ -1503,13 +1523,6 @@ var bindings = {
 				ProxyObject.whenOpFinished.add(rebuildChildren);
 				return;
 			}
-
-
-
-			if (window.debugger) {
-				console.log(ProxyObject.currentOp, action, path, value);
-			}
-
 		
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
@@ -1633,6 +1646,41 @@ var bindings = {
 
 		// Set initial children
 		rebuildChildren();
+	},
+
+	// Requires Sortable.js
+	// does not support dynamic (watch) binding.
+	sortable: (self, code, el, context) => {
+		var obj = parseObj(code);
+		var result = {};
+
+		// If sorting items bound to a loop, and the variable is standaline,
+		// then update the original array after items are dragged.
+		var loopCode = el.getAttribute('data-loop');
+		if (loopCode) {
+
+			let [foreach] = parseLoop(loopCode);
+			if (isStandaloneVar(foreach)) {
+				foreach = addThis(replaceVars(foreach, context), context);
+				let path = parseVars(foreach);
+
+				result.onSort = function (event) { // Reorder the variables array when items are dragged.
+					let array = safeEval.call(self, foreach);
+					var item = array[event.oldIndex];
+					var variables = [...self.variables.slice(0, event.oldIndex), ...array.slice(event.oldIndex + 1)];
+					variables = [...variables.slice(0, event.newIndex), item, ...variables.slice(event.newIndex)];
+
+					traversePath(self, path, true, variables);
+				};
+			}
+		}
+
+		// Build arguments to sendn to Sortable.
+		for (let name in obj) {
+			let expr = addThis(replaceVars(obj[name], context), context);
+			result[name] = safeEval.call(self, expr);
+		}
+		Sortable.create(el, result);
 	},
 
 

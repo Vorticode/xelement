@@ -185,11 +185,17 @@ var parseLoop = (code) => {
 	*/
 };
 
-
-var addThis = (code, context, isSimple, prefix) => {
+/**
+ * Add a "this." prefix to code where we can.
+ * @param code  {string}
+ * @param context {object<string, string>}
+ * @param isStandalone {function(string):boolean=} A function to detect whether the code is a stanadlone var.
+ * @param prefix {string=} Defaults to "this"
+ * @returns {string} */
+var addThis = (code, context, isStandalone, prefix) => {
 	prefix = prefix || 'this';
-	isSimple = isSimple || isStandaloneVar;
-	if (!isSimple(code))
+	isStandalone = isStandalone || isStandaloneVar;
+	if (!isStandalone(code))
 		return code;
 
 	// If it starts with this or an item in context, do nothing.

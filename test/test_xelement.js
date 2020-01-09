@@ -1559,6 +1559,9 @@ var test_XElement = {
 	},
 
 	temp: function() {
+	},
+
+	temp2: function() {
 	}
 
 	/*
