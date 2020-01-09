@@ -167,10 +167,9 @@ class ProxyObject {
 								var result = Array.prototype[func].apply(self.proxy_, arguments);
 								delete ProxyObject.currentOp;
 
-								if (ProxyObject.whenOpFinished) {
-									ProxyObject.whenOpFinished();
-									delete ProxyObject.whenOpFinished;
-								}
+								for (let callback of ProxyObject.whenOpFinished)
+									callback();
+								ProxyObject.whenOpFinished = new Set();
 
 								return result;
 							}
@@ -209,6 +208,8 @@ class ProxyObject {
 		return result;
 	}
 }
+
+ProxyObject.whenOpFinished = new Set();
 
 // TODO: Could this be replaced with a weakmap from the root to the callbacks?
 // Yes, but it wouldn't be as clean.

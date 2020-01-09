@@ -889,6 +889,41 @@ var test_XElement = {
 		})();
 
 
+
+		// Two loops over same array.
+		(function () {
+			class BL14 extends XElement {}
+			BL14.html = `
+				<div>
+					<div id="loop1" data-loop="items:item">
+						<span data-text="item"></span>
+					</div>
+					<div id="loop2" data-loop="items:item">
+						<span data-text="item"></span>
+					</div>
+				</div>
+			`;
+
+			var b = new BL14();
+			b.items = [1, 2];
+			assertEq(b.loop1.children[0].innerText, '1');
+			assertEq(b.loop1.children[1].innerText, '2');
+			assertEq(b.loop1.children.length, 2);
+			assertEq(b.loop2.children[0].innerText, '1');
+			assertEq(b.loop2.children[1].innerText, '2');
+			assertEq(b.loop2.children.length, 2);
+
+			b.items.push(3);
+			assertEq(b.loop1.children[0].innerText, '1');
+			assertEq(b.loop1.children[1].innerText, '2');
+			assertEq(b.loop1.children[2].innerText, '3');
+			assertEq(b.loop1.children.length, 3);
+			assertEq(b.loop2.children[0].innerText, '1');
+			assertEq(b.loop2.children[1].innerText, '2');
+			assertEq(b.loop2.children[2].innerText, '3');
+			assertEq(b.loop1.children.length, 3);
+		})();
+
 		// TODO: Test loop over non-simple var.
 	},
 
@@ -1524,7 +1559,6 @@ var test_XElement = {
 	},
 
 	temp: function() {
-
 	}
 
 	/*

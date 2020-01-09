@@ -618,7 +618,7 @@ var bindings = {
 			// element n+1 is assigned to slot n.  splice() then sets the array's .length property at the last step.
 			// So we only rebuild the children after this happens.
 			if (ArrayMultiOps.includes(ProxyObject.currentOp)) {
-				ProxyObject.whenOpFinished = rebuildChildren;
+				ProxyObject.whenOpFinished.add(rebuildChildren);
 				return;
 			}
 

@@ -536,10 +536,9 @@ class ProxyObject {
 								var result = Array.prototype[func].apply(self.proxy_, arguments);
 								delete ProxyObject.currentOp;
 
-								if (ProxyObject.whenOpFinished) {
-									ProxyObject.whenOpFinished();
-									delete ProxyObject.whenOpFinished;
-								}
+								for (let callback of ProxyObject.whenOpFinished)
+									callback();
+								ProxyObject.whenOpFinished = new Set();
 
 								return result;
 							}
@@ -578,6 +577,8 @@ class ProxyObject {
 		return result;
 	}
 }
+
+ProxyObject.whenOpFinished = new Set();
 
 // TODO: Could this be replaced with a weakmap from the root to the callbacks?
 // Yes, but it wouldn't be as clean.
@@ -1499,7 +1500,7 @@ var bindings = {
 			// element n+1 is assigned to slot n.  splice() then sets the array's .length property at the last step.
 			// So we only rebuild the children after this happens.
 			if (ArrayMultiOps.includes(ProxyObject.currentOp)) {
-				ProxyObject.whenOpFinished = rebuildChildren;
+				ProxyObject.whenOpFinished.add(rebuildChildren);
 				return;
 			}
 
@@ -1508,6 +1509,7 @@ var bindings = {
 			if (window.debugger) {
 				console.log(ProxyObject.currentOp, action, path, value);
 			}
+
 		
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
@@ -1520,9 +1522,10 @@ var bindings = {
 					el.removeChild(el.lastChild);
 			}
 
+			//#IFDEV
 			if (!el.loopHtml_)
 				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
-
+			//#ENDIF
 
 			var newItems = removeProxies(safeEval.call(self, foreach) || []);
 			var oldItems = removeProxies(el.items_ || []);
