@@ -130,6 +130,20 @@ var test_Watch = {
 			assert(called.has('a.b2'));
 			assert(called.has('b1.parent.b2'));
 		})();
+
+		// Test finding proxied items.
+		(function() {
+			var b = {
+				items: [{name: 1}]
+			};
+			watch(b, 'items', ()=>{
+				var item = b.items[0];
+				var i = b.items.indexOf(item);
+				assertEq(i, 0);
+			});
+
+			b.items.push({name: 2});
+		})();
 	},
 
 	pop: function() {
@@ -144,7 +158,6 @@ var test_Watch = {
 
 		assert(wp.subs_); // doesn't remove the watch.  But I think that's correct behavior.
 	},
-
 
 	arrayShift: function() {
 
@@ -210,8 +223,6 @@ var test_Watch = {
 };
 
 var test_XElement = {
-
-
 
 	ids: function() {
 		class P1 extends XElement {}
@@ -1152,7 +1163,7 @@ var test_XElement = {
 			b.shadowRoot.children[0].children[1].dispatchEvent(new Event('click'));
 			assertEq(b.result, '02:1B');
 		})();
-		
+
 		// Test events in loop.
 		(function() {
 			class EV7Inner extends XElement {}
@@ -1480,7 +1491,8 @@ var test_XElement = {
 	},
 
 	temp: function() {
-
+		class A extends XElement {}
+		A.html = `<div onclick="this.val = this.letter"></div>`;
 
 	}
 

@@ -67,7 +67,7 @@ var handler = {
 
 		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
-			if (field !== 'length') {
+			//if (field !== 'length') {
 
 				// Don't allow setting proxies on underlying obj.
 				// This removes them recursivly in case of something like newVal=[Proxy(obj)].
@@ -75,7 +75,7 @@ var handler = {
 
 				let path = [...proxyObj.getPath_(root), field];
 				root.notify_('set', path, obj[field]);
-			}
+			//}
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -126,6 +126,25 @@ class ProxyObject {
 		 *  One object can belong to multiple roots.
 		 * @type {Set<ProxyRoot>} */
 		this.roots_ = new Set(roots || []);
+
+		// Modify array functions to search for unproxied values:
+		if (Array.isArray(this.proxy_)) {
+
+			// Because this.proxy_ is a Proxy, we have to replace the functions
+			// on it in this special way by using Object.defineProperty()
+			// Directly assigning this.proxy_.indexOf = ... calls the setter and leads to infinite recursion.
+			for (let func of ['indexOf', 'lastIndexOf', 'includes']) // TODO: Support more array functions.
+
+				Object.defineProperty(this.proxy_, func, {
+					get: function() {
+						// Return a new indexOf function.
+						return function (item) {
+							item = item.$removeProxy===undefined ? item : item.$removeProxy;
+							return Array.prototype[func].call(obj, item);
+						}
+					}
+				});
+		}
 	}
 
 	/**

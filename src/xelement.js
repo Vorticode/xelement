@@ -704,16 +704,12 @@ var bindings = {
 				let child = el.children[i];
 				if (child.index_ !== i) {
 
-					// TODO: It's sloppy coding that unbindEl() operates within child, but bindEl(self, child) only operates on the child's attributes.
-
 					unbindEl(self, child);
-					//unbindEl(child, child);
 
 					localContext[loopVar] = foreach + '[' + i + ']';
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
 
-					//bindElEvents(child, child, localContext);
 					bindEl(self, child, localContext);
 
 					

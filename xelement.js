@@ -495,6 +495,25 @@ class ProxyObject {
 		 *  One object can belong to multiple roots.
 		 * @type {Set<ProxyRoot>} */
 		this.roots_ = new Set(roots || []);
+
+		// Modify array functions to search for unproxied values:
+		if (Array.isArray(this.proxy_)) {
+
+			// Because this.proxy_ is a Proxy, we have to replace the functions
+			// on it in this special way by using Object.defineProperty()
+			// Directly assigning this.proxy_.indexOf = ... calls the setter and leads to infinite recursion.
+			for (let func of ['indexOf', 'lastIndexOf', 'includes']) // TODO: Support more array functions.
+
+				Object.defineProperty(this.proxy_, func, {
+					get: function() {
+						// Return a new indexOf function.
+						return function (item) {
+							item = item.$removeProxy===undefined ? item : item.$removeProxy;
+							return Array.prototype[func].call(obj, item);
+						}
+					}
+				});
+		}
 	}
 
 	/**
@@ -924,11 +943,11 @@ var elEvents = new WeakMap();
  * @param eventName {string}
  * @param callback {function}
  * @param originalEventAttrib {string} */
-var addElEvent = (el, eventName, callback, originalEventAttrib) => {
+var addElEvent = (el, eventName, callback, originalEventAttrib, root) => {
 	let ee = elEvents.get(el);
 	if (!ee)
 		elEvents.set(el, ee = []);
-	ee.push([eventName, callback, originalEventAttrib]);
+	ee.push([eventName, callback, originalEventAttrib, root]);
 };
 
 
@@ -953,8 +972,8 @@ var getXName = (cls) => {
  * @param el {HTMLElement}
  * @returns {XElement} */
 var getXParent = (el) => { // will error if not in an XParent.
-	while ((el = el.parentNode).nodeType !== 11) {} // 11 is doc fragment
-	return el.host;
+	while ((el = el.parentNode) && el && el.nodeType !== 11) {} // 11 is doc fragment
+	return el ? el.host : null;
 };
 
 
@@ -971,7 +990,7 @@ var getXParent = (el) => { // will error if not in an XParent.
 var bindEl = (self, el, context) => {
 
 	bindElProps(self, el, context);
-	bindElEvents(self, el, context, null, true);
+	bindElEvents(self, el, context, true);
 
 	// TODO: assert() to make sure element isn't bound twice.
 };
@@ -1014,18 +1033,18 @@ var bindElProps = (self, el, context) => {
  * to make them call the class methods.
  * @param self {XElement}
  * @param el {HTMLElement}
- * @param context object<string, string>
- * @param getAttributesFrom {*}
- * @param recurse {boolean=false}    */
-var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
+ * @param context {object<string, string>=}
+ * @param recurse {boolean=false}
+ * @param getAttributesFrom {HTMLElement=} */
+var bindElEvents = (self, el, context, recurse, getAttributesFrom) => {
 
 	if (el.getAttribute) { // if not document fragment
 		getAttributesFrom = getAttributesFrom || el;
 
 		for (let eventName of eventNames) {
-
 			let originalEventAttrib = getAttributesFrom.getAttribute('on' + eventName);
 			if (originalEventAttrib) {
+
 				let code = replaceVars(originalEventAttrib, context);
 
 				// If it's a simple function that exists in the class,
@@ -1041,7 +1060,7 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 					eval(code);
 				}.bind(self);
 				el.addEventListener(eventName, callback);
-				addElEvent(el, eventName, callback, originalEventAttrib);
+				addElEvent(el, eventName, callback, originalEventAttrib, self);
 
 				// Remove the original version so it doesn't also fire.
 				el.removeAttribute('on' + eventName);
@@ -1049,12 +1068,13 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 		}
 	}
 
-	// data-loop handles its own children.
 	if (recurse) {
 		let next = el === self && el.shadowRoot ? el.shadowRoot : el;
+
+		// data-loop handles its own children.
 		if (!next.getAttribute || !next.hasAttribute('data-loop'))
 			for (let child of next.children)
-				bindElEvents(self, child, context, null, true);
+				bindElEvents(self, child, context, true);
 	}
 };
 
@@ -1063,7 +1083,7 @@ var bindElEvents = (self, el, context, getAttributesFrom, recurse) => {
 
 /**
  * Unbind properties and events from the element.
- * @param self {XElement}
+ * @param self {XElement|HTMLElement}
  * @param el {HTMLElement=} Remove all bindings within root and children. Defaults to self. */
 var unbindEl = (self, el) => {
 	el = el || self;
@@ -1090,7 +1110,7 @@ var unbindEl = (self, el) => {
 				let watchedEl = elWatches.get(el);
 				if (watchedEl)
 					for (let sub of watchedEl) {
-						var p = p || getXParent(self); // only getXParent when first needed.
+						var p = p || getXParent(el) || self; // only getXParent when first needed.
 						unwatch(p, sub.path_, sub.callback_);
 					}
 			}
@@ -1098,9 +1118,15 @@ var unbindEl = (self, el) => {
 
 	// Unbind events
 	let ee = elEvents.get(el) || [];
-	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string]
-		el.removeEventListener(item[0], item[1]);
-		el.setAttribute('on' + item[0], item[2]);
+	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string, root:XElement]
+
+		// Only unbind if it was bound from the same root.
+		// This is needed to allow onclick="" attributes on both the definition and instantiation of an element,
+		// and having their "this" bound to themselves or the parent element, respectively.
+		if (item[3] === self) {
+			el.removeEventListener(item[0], item[1]);
+			el.setAttribute('on' + item[0], item[2]);
+		}
 	}
 };
 
@@ -1147,8 +1173,8 @@ var initHtml = (self) => {
 				setAttribute(self, attr.name, attr.value);
 		}
 
-		// 4. Bind events on the defintion to functions on its own element and not its container.
-		bindElEvents(self, self, null, div, false);
+		// 4. Bind events on the defintion to functions on its own element and not its container
+		bindElEvents(self, self, null, false, div);
 
 		// 5.  Add attributes from instantiation.
 		for (let name in attributes) // From instantiation
@@ -1211,7 +1237,11 @@ var initHtml = (self) => {
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
 		bindElProps(self, self);
-		bindElEvents(self, root, null, null, true);
+
+
+		// We pass root to bind all events on this element's children.
+		// We bound events on the element itself in a separate call to bindElEvents(self, self) above.
+		bindElEvents(self, root, null, true);
 	}
 };
 
@@ -1233,7 +1263,6 @@ class XElement extends HTMLElement {
 			throw error;
 		}
 		//#ENDIF
-
 		let xname = getXName(this.constructor);
 		let self = this;
 		if (customElements.get(xname))
@@ -1521,15 +1550,14 @@ var bindings = {
 				let child = el.children[i];
 				if (child.index_ !== i) {
 
-					// TODO: It's sloppy coding that unbindEl() operates within child, but bindEl(self, child) only operates on the child's attributes.
-					unbindEl(child);
+					unbindEl(self, child);
 
 					localContext[loopVar] = foreach + '[' + i + ']';
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
 
-
 					bindEl(self, child, localContext);
+
 					
 					// Alt version that makes some things fail:
 					// Operates within the child.
