@@ -612,7 +612,22 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
-		var rebuildChildren = (/*action, path, value*/) => {
+		var rebuildChildren = (action, path, value) => {
+
+			// If we splice off the first item from an array, rebuildChildren() is called every time
+			// element n+1 is assigned to slot n.  splice() then sets the array's .length property at the last step.
+			// So we only rebuild the children after this happens.
+			if (ArrayMultiOps.includes(ProxyObject.currentOp)) {
+				ProxyObject.whenOpFinished = rebuildChildren;
+				return;
+			}
+
+
+
+			if (window.debugger) {
+				console.log(ProxyObject.currentOp, action, path, value);
+			}
+
 		
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
@@ -625,9 +640,10 @@ var bindings = {
 					el.removeChild(el.lastChild);
 			}
 
+			//#IFDEV
 			if (!el.loopHtml_)
 				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
-
+			//#ENDIF
 
 			var newItems = removeProxies(safeEval.call(self, foreach) || []);
 			var oldItems = removeProxies(el.items_ || []);

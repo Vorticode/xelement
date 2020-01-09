@@ -680,14 +680,12 @@ var test_XElement = {
 			//}, 5000);
 		})();
 
-		// Test splice
+		// Test functions that modify more than one array element.
 		(function() {
 			class BL6 extends XElement {}
 			BL6.html = `
-				<div>
-					<div id="loop" data-loop="items: item">
-						<input data-val="item.name">					
-					</div>
+				<div data-loop="items: item">
+					<input data-val="item.name">					
 				</div>`;
 
 			var v = new BL6();
@@ -697,9 +695,44 @@ var test_XElement = {
 				{name: 'C'}
 			];
 
-			v.items.splice(1, 1); // remove B.
+			var children = v.shadowRoot.children;
 
-			assertEq(v.loop.children.length, 2);
+			// Reverse
+			v.items.reverse();
+			assertEq(children[0].value, 'C');
+			assertEq(children[1].value, 'B');
+			assertEq(children[2].value, 'A');
+			assertEq(children.length, 3);
+
+
+			// Sort
+			v.items.sort((a, b) => a.name.localeCompare(b.name));
+			assertEq(children[0].value, 'A');
+			assertEq(children[1].value, 'B');
+			assertEq(children[2].value, 'C');
+			assertEq(children.length, 3);
+
+			// Splice
+			v.items.splice(1, 1); // Remove B.
+			assertEq(children.length, 2);
+			assertEq(children[0].value, 'A');
+			assertEq(children[1].value, 'C');
+			assertEq(children.length, 2);
+
+
+			// Splice to add
+			v.items.splice(1, 0, {name: 'B'});
+			assertEq(children[0].value, 'A');
+			assertEq(children[1].value, 'B');
+			assertEq(children[2].value, 'C');
+			assertEq(children.length, 3);
+
+
+			// shift() to remove first item.
+			v.items.shift();
+			assertEq(children[0].value, 'B');
+			assertEq(children[1].value, 'C');
+			assertEq(children.length, 2);
 		})();
 
 
@@ -1491,8 +1524,6 @@ var test_XElement = {
 	},
 
 	temp: function() {
-		class A extends XElement {}
-		A.html = `<div onclick="this.val = this.letter"></div>`;
 
 	}
 

@@ -436,7 +436,7 @@ var handler = {
 
 		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
-			if (field !== 'length') {
+			//if (field !== 'length') {
 
 				// Don't allow setting proxies on underlying obj.
 				// This removes them recursivly in case of something like newVal=[Proxy(obj)].
@@ -444,7 +444,7 @@ var handler = {
 
 				let path = [...proxyObj.getPath_(root), field];
 				root.notify_('set', path, obj[field]);
-			}
+			//}
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -471,6 +471,8 @@ var handler = {
 	}
 };
 
+// Array operations that send multiple notifications.
+var ArrayMultiOps = ['push', 'pop', 'splice', 'shift', 'sort', 'reverse', 'unshift'];
 
 // One of these will exist for each object, regardless of how many roots it's in.
 class ProxyObject {
@@ -513,6 +515,39 @@ class ProxyObject {
 						}
 					}
 				});
+
+
+			var self = this;
+
+
+			// Need to intercept all functions like these that perform multiple operations.
+			// That way we set and clear ProxyObj.currentOp while they're happening.
+			// And rebuildChildren() can only be applied at the last one.
+
+			for (let func of ArrayMultiOps)
+				Object.defineProperty(this.proxy_, func, {
+					get: function() {
+						// Return a new indexOf function.
+						return function () {
+							if (ProxyObject.currentOp) {
+								return Array.prototype[func].apply(obj, arguments);
+							} else {
+								ProxyObject.currentOp = func;
+								var result = Array.prototype[func].apply(self.proxy_, arguments);
+								delete ProxyObject.currentOp;
+
+								if (ProxyObject.whenOpFinished) {
+									ProxyObject.whenOpFinished();
+									delete ProxyObject.whenOpFinished;
+								}
+
+								return result;
+							}
+						}
+					}
+				});
+
+
 		}
 	}
 
@@ -1458,7 +1493,21 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
-		var rebuildChildren = (/*action, path, value*/) => {
+		var rebuildChildren = (action, path, value) => {
+
+			// If we splice off the first item from an array, rebuildChildren() is called every time
+			// element n+1 is assigned to slot n.  splice() then sets the array's .length property at the last step.
+			// So we only rebuild the children after this happens.
+			if (ArrayMultiOps.includes(ProxyObject.currentOp)) {
+				ProxyObject.whenOpFinished = rebuildChildren;
+				return;
+			}
+
+
+
+			if (window.debugger) {
+				console.log(ProxyObject.currentOp, action, path, value);
+			}
 		
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
