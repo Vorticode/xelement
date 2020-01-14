@@ -130,6 +130,7 @@ class ProxyObject {
 		this.roots_ = new Set(roots || []);
 
 		// Modify array functions to search for unproxied values:
+		// TODO: .$removeProxy doesn't remove these functions from the array!
 		if (Array.isArray(this.proxy_)) {
 
 			// Because this.proxy_ is a Proxy, we have to replace the functions

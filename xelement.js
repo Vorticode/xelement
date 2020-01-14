@@ -505,6 +505,7 @@ class ProxyObject {
 		this.roots_ = new Set(roots || []);
 
 		// Modify array functions to search for unproxied values:
+		// TODO: .$removeProxy doesn't remove these functions from the array!
 		if (Array.isArray(this.proxy_)) {
 
 			// Because this.proxy_ is a Proxy, we have to replace the functions
@@ -1651,7 +1652,6 @@ var bindings = {
 	// Requires Sortable.js
 	// does not support dynamic (watch) binding.
 	sortable: (self, code, el, context) => {
-		var obj = parseObj(code);
 		var result = {};
 
 		// If sorting items bound to a loop, and the variable is standaline,
@@ -1661,24 +1661,30 @@ var bindings = {
 
 			let [foreach] = parseLoop(loopCode);
 			if (isStandaloneVar(foreach)) {
+
+				// Get the path to the array we'll update when items are dragged:
 				foreach = addThis(replaceVars(foreach, context), context);
-				let path = parseVars(foreach);
+				let path = parseVars(foreach)[0];
 
 				result.onSort = function (event) { // Reorder the variables array when items are dragged.
-					let array = safeEval.call(self, foreach);
-					var item = array[event.oldIndex];
-					var variables = [...self.variables.slice(0, event.oldIndex), ...array.slice(event.oldIndex + 1)];
-					variables = [...variables.slice(0, event.newIndex), item, ...variables.slice(event.newIndex)];
+					let originalArray = safeEval.call(self, foreach);
+					var item = originalArray[event.oldIndex];
+					var newArray = [...originalArray.slice(0, event.oldIndex), ...originalArray.slice(event.oldIndex + 1)];
+					newArray = [...newArray.slice(0, event.newIndex), item, ...newArray.slice(event.newIndex)];
 
-					traversePath(self, path, true, variables);
+					// Set value.  Watchlessly because sortable already updates the child order.
+					traversePath(self, path, true, newArray, true);
 				};
 			}
 		}
 
 		// Build arguments to sendn to Sortable.
-		for (let name in obj) {
-			let expr = addThis(replaceVars(obj[name], context), context);
-			result[name] = safeEval.call(self, expr);
+		if (code) { // we also allow a bare sortable attribute with no value.
+			var obj = parseObj(code);
+			for (let name in obj) {
+				let expr = addThis(replaceVars(obj[name], context), context);
+				result[name] = safeEval.call(self, expr);
+			}
 		}
 		Sortable.create(el, result);
 	},
