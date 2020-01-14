@@ -56,7 +56,7 @@ var isObj = (obj) => obj && typeof obj === 'object'; // Make sure it's not null,
  * @param name {string}
  * @returns {boolean} */
 var isValidAttribute = (el, name) => {
-	if ((name.startsWith('data-') || el.hasAttribute(name)) ||
+	if ((name.startsWith('data-') || name.startsWith('x-') ||el.hasAttribute(name)) ||
 		(name.startsWith('on') && eventNames.includes(name.slice(2))))
 		return true;
 

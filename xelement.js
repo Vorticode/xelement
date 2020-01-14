@@ -59,7 +59,7 @@ var isObj = (obj) => obj && typeof obj === 'object'; // Make sure it's not null,
  * @param name {string}
  * @returns {boolean} */
 var isValidAttribute = (el, name) => {
-	if ((name.startsWith('data-') || el.hasAttribute(name)) ||
+	if ((name.startsWith('data-') || name.startsWith('x-') ||el.hasAttribute(name)) ||
 		(name.startsWith('on') && eventNames.includes(name.slice(2))))
 		return true;
 
@@ -985,7 +985,8 @@ var elEvents = new WeakMap();
  * @param el {HTMLElement}
  * @param eventName {string}
  * @param callback {function}
- * @param originalEventAttrib {string} */
+ * @param originalEventAttrib {string}
+ * @param root */
 var addElEvent = (el, eventName, callback, originalEventAttrib, root) => {
 	let ee = elEvents.get(el);
 	if (!ee)
@@ -1044,16 +1045,21 @@ var bindElProps = (self, el, context) => {
 	// Seach attributes for data- bindings.
 	if (el.attributes) // shadow root has no attributes.
 		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-')) {
 
-				let attrName = attr.name.slice(5); // remove data- prefix.
 
+			let attrName = null;
+			if (attr.name.startsWith('x-'))
+				attrName = attr.name.slice(2); // remove data- prefix.
+			else if (attr.name.startsWith('data-'))
+				attrName = attr.name.slice(5); // remove data- prefix.
+
+			if (attrName) {
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
 
 				//#IFDEV
 				else
-					throw new Error (attrName);
+					throw new XElementError(attrName);
 				//#ENDIF
 			}
 		}
@@ -1063,12 +1069,12 @@ var bindElProps = (self, el, context) => {
 	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
 
 	// Data loop already binds its own children when first applied.
-	if (!el.hasAttribute('data-loop'))
+	if (!getLoopCode_(el))
 		for (let child of next.children)
 			bindElProps(self, child, context);
 };
 
-
+var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.getAttribute('data-loop'));
 
 
 /**
@@ -1115,7 +1121,7 @@ var bindElEvents = (self, el, context, recurse, getAttributesFrom) => {
 		let next = el === self && el.shadowRoot ? el.shadowRoot : el;
 
 		// data-loop handles its own children.
-		if (!next.getAttribute || !next.hasAttribute('data-loop'))
+		if (!getLoopCode_(next))
 			for (let child of next.children)
 				bindElEvents(self, child, context, true);
 	}
@@ -1142,9 +1148,9 @@ var unbindEl = (self, el) => {
 	// Unbind properties
 	if (el.attributes)
 		for (let attr of el.attributes) {
-			if (attr.name.startsWith('data-')) {
+			if (attr.name.startsWith('x-') || attr.name.startsWith('data-')) {
 
-				if (attr.name === 'data-loop' && el.loopHtml_) {
+				if ((attr.name === 'x-loop' || attr.name === 'data-loop') && el.loopHtml_) {
 					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 					delete el.loopHtml_;
 					delete el.items_;
@@ -1656,7 +1662,7 @@ var bindings = {
 
 		// If sorting items bound to a loop, and the variable is standaline,
 		// then update the original array after items are dragged.
-		var loopCode = el.getAttribute('data-loop');
+		var loopCode = getLoopCode_(el);
 		if (loopCode) {
 
 			let [foreach] = parseLoop(loopCode);

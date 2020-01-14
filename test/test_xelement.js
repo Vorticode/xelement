@@ -1559,6 +1559,26 @@ var test_XElement = {
 	},
 
 	temp: function() {
+		(function() {
+			class E3 extends XElement {}
+			E3.html = '<div x-attribs="title: titleText">E1</div>';
+
+			class E4 extends XElement {} // e2 wraps e1
+			E4.html = '<div><x-e3 id="e3" x-classes="big: isBig">E1</x-e3></div>';
+
+			var e4 = new E4();
+			console.log(e4.e3.outerHTML);
+			return;
+
+			assertEq(e4.e3.getAttribute('title'), null);
+			assertEq(e4.e3.getAttribute('class'), null);
+
+			e4.titleText = 'hello';
+			e4.e3.isBig = true;
+
+			assertEq(e4.e3.getAttribute('title'), 'hello');
+			assertEq(e4.e3.getAttribute('class'), 'big');
+		})();
 	},
 
 	temp2: function() {
