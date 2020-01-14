@@ -1497,27 +1497,27 @@ var test_XElement = {
 
 		// Double deep loop binding.
 		(function () {
-			class C extends XElement {}
-			C.html = `				
+			class BD10C extends XElement {}
+			BD10C.html = `				
 			<div>
 				<span data-text="wheel"></span>
 			</div>`;
 
-			class B extends XElement {}
-			B.html = `				
+			class BD10B extends XElement {}
+			BD10B.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
-			        <x-c data-prop="wheel: wheel"></x-c>
+			        <x-bd10c data-prop="wheel: wheel"></x-bd10c>
 				</span>
 			</div>`;
 
-			class A extends XElement {}
-			A.html = `				
+			class BD10A extends XElement {}
+			BD10A.html = `				
 			<div data-loop="cars: car">
-				<x-b data-prop="car: car"></x-b>
+				<x-bd10b data-prop="car: car"></x-bd10b>
 			</div>`;
 
-			var xa = new A();
+			var xa = new BD10A();
 			xa.cars = [{wheels: [1]}];
 
 
@@ -1529,21 +1529,21 @@ var test_XElement = {
 		// Double deep loop binding 2
 		(function () {
 
-			class B2 extends XElement {}
-			B2.html = `				
+			class BD11Inner extends XElement {}
+			BD11Inner.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
 			        <b data-text="wheel"></b>
 				</span>
 			</div>`;
 
-			class A2 extends XElement {}
-			A2.html = `				
+			class BD11 extends XElement {}
+			BD11.html = `				
 			<div data-loop="cars: car">
-				<x-b2 data-prop="car: car"></x-b2>
+				<x-bd11inner data-prop="car: car"></x-bd11inner>
 			</div>`;
 
-			var xa = new A2();
+			var xa = new BD11();
 
 			window.debug = true;
 
@@ -1556,29 +1556,48 @@ var test_XElement = {
 			assertEq(loop.children[1].textContent, '2');
 			assertEq(loop.children.length, 2);
 		})();
+
+
+
+
+		// Ensure props are unsubscribed as items are removed.
+		(function () {
+
+			class BD12B extends XElement {}
+			BD12B.html = `				
+			<div>
+			    <span id="nameText" data-text="item.name"></span>
+			</div>`;
+
+			class BD12A extends XElement {}
+			BD12A.html = `				
+			<div>
+			    <span id="loop" data-loop="a.items: item">
+			        <x-bd12b data-prop="item: item"></x-bd12b>
+				</span>
+			</div>`;
+
+			var xa = new BD12A();
+			xa.a = {items: [{name: 1}, {name: 2}]};
+
+
+			xa.a.items.pop();
+			console.log(watched.get(xa).subs_);
+
+
+			var subs = watched.get(xa).subs_;
+			assert('"a","items"' in subs);
+			assert('"a","items","0"' in subs);
+			assertEq(Object.keys(subs).length, 2);
+
+			xa.a.items.pop();
+			subs = watched.get(xa).subs_;
+			assert('"a","items"' in subs);
+			assertEq(Object.keys(subs).length, 1);
+		})();
 	},
 
 	temp: function() {
-		(function() {
-			class E3 extends XElement {}
-			E3.html = '<div x-attribs="title: titleText">E1</div>';
-
-			class E4 extends XElement {} // e2 wraps e1
-			E4.html = '<div><x-e3 id="e3" x-classes="big: isBig">E1</x-e3></div>';
-
-			var e4 = new E4();
-			console.log(e4.e3.outerHTML);
-			return;
-
-			assertEq(e4.e3.getAttribute('title'), null);
-			assertEq(e4.e3.getAttribute('class'), null);
-
-			e4.titleText = 'hello';
-			e4.e3.isBig = true;
-
-			assertEq(e4.e3.getAttribute('title'), 'hello');
-			assertEq(e4.e3.getAttribute('class'), 'big');
-		})();
 	},
 
 	temp2: function() {

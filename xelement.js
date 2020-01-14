@@ -96,8 +96,9 @@ var parentIndex = (el) => !el.parentNode ? 0 : Array.prototype.indexOf.call(el.p
  * @param obj {object}
  * @param path {string[]}
  * @param create {boolean=false} Create the path if it doesn't exist.
- * @param value {*=} If not undefined, set the object's path field to this value. */
-var traversePath = (obj, path, create, value) => {
+ * @param value {*=} If not undefined, set the object's path field to this value.
+ * @param watchless {boolean=false} If true, the value will be set without triggering any watch notifications. */
+var traversePath = (obj, path, create, value, watchless) => {
 	let i = 0;
 	for (let srcProp of path) {
 		let last = i === path.length-1;
@@ -121,8 +122,11 @@ var traversePath = (obj, path, create, value) => {
 		}
 
 		// If last item in path
-		if (last && value !== undefined)
+		if (last && value !== undefined) {
+			if (watchless)
+				obj = obj.$removeProxy || $obj;
 			obj[srcProp] = value;
+		}
 
 		// Traverse deeper along destination object.
 		obj = obj[srcProp];
@@ -1325,6 +1329,11 @@ class XElement extends HTMLElement {
 				error.message += '\nMake sure to set the .html property before instantiating the class "' + this.name + '".';
 			throw error;
 		}
+
+
+		this.queuedOps = new Set();
+		this.queueDepth = 0;
+
 		//#ENDIF
 		let xname = getXName(this.constructor);
 		let self = this;
@@ -1334,6 +1343,27 @@ class XElement extends HTMLElement {
 			customElements.whenDefined(xname).then(() => {
 				initHtml(self);
 			});
+	}
+
+	enqueue(callback) {
+		var self = this;
+		return function() {
+			if (self.queueDepth === 0)
+				return callback();
+			else
+				self.queuedOps.add(callback);
+		};
+	}
+
+	batch(callback) {
+		this.queueDepth ++;
+		callback();
+		this.queueDepth --;
+		if (this.queueDepth === 0) {
+			for (let op of this.queuedOps)
+				op();
+			this.queuedOps = new Set();
+		}
 	}
 }
 
@@ -1354,14 +1384,14 @@ var bindings = {
 		for (let name in obj) {
 			let attrExpr = addThis(replaceVars(obj[name], context), context);
 
-			let setAttr = function (/*action, path, value*/) {
+			let setAttr = self.enqueue(function (/*action, path, value*/) {
 				var result = safeEval.call(self, attrExpr);
 				if (result === false || result === null || result === undefined)
 					el.removeAttribute(name);
 				else
 					el.setAttribute(name, result + '');
 
-			}.bind(self);
+			});
 
 			// If the variables in code, change, execute the code.
 			// Then set the attribute to the value returned by the code.
@@ -1388,9 +1418,9 @@ var bindings = {
 			for (let prop in obj) {
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
-				let updateProp = (action, path, value) => {
+				let updateProp = self.enqueue((action, path, value) => {
 					el[prop] = safeEval.call(self, expr);
-				};
+				});
 
 				// Set initial values.
 				updateProp();
@@ -1409,10 +1439,14 @@ var bindings = {
 							// 2. For each function, we move the watch from the child object to the parent object.
 							for (let callback of subs[sub]) {
 								unwatch(el, subPath, callback);
-								watch(self, subPath.slice(1), function (action, path, value) {
+								let subPath2 = subPath.slice(1);
+								let updateThisProp = function(action, path, value) {
+
 									// 3. And intercept its call to make sure we pass the original path.
 									callback.apply(el, arguments);
-								});
+								};
+								watch(self, subPath2, updateThisProp);
+								addElWatch(el, subPath2, updateThisProp);
 							}
 						}
 					}
@@ -1420,8 +1454,10 @@ var bindings = {
 
 				// Add a regular watch.
 				else
-					for (let path of parseVars(expr))
+					for (let path of parseVars(expr)) {
 						watch(self, path, updateProp);
+						addElWatch(el, path, updateProp);
+					}
 			}
 		}
 	},
@@ -1438,7 +1474,7 @@ var bindings = {
 			let classExpr = addThis(replaceVars(obj[name], context), context);
 
 			// This code is called on every update.
-			let updateClass = () => {
+			let updateClass = self.enqueue(() => {
 				let result = safeEval.call(self, classExpr);
 				if (result)
 					el.classList.add(name);
@@ -1447,7 +1483,7 @@ var bindings = {
 					if (!el.classList.length) // remove attribute after last class removed.
 						el.removeAttribute('class');
 				}
-			};
+			});
 
 
 			// Create properties and watch for changes.
@@ -1468,9 +1504,9 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = (/*action, path, value*/) => {
+		let setText = self.enqueue((/*action, path, value*/) => {
 			el.textContent = safeEval.call(self, code);
-		};
+		});
 		for (let path of parseVars(code)) {
 			watch(self, path, setText);
 			addElWatch(el, path, setText);
@@ -1487,9 +1523,9 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = (/*action, path, value*/) => {
+		let setHtml = self.enqueue((/*action, path, value*/) => {
 			el.innerHTML = safeEval.call(self, code);
-		};
+		});
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setHtml);
@@ -1521,7 +1557,7 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
-		var rebuildChildren = (action, path, value) => {
+		var rebuildChildren = self.enqueue((action, path, value) => {
 
 			// If we splice off the first item from an array, rebuildChildren() is called every time
 			// element n+1 is assigned to slot n.  splice() then sets the array's .length property at the last step.
@@ -1558,6 +1594,7 @@ var bindings = {
 				el.children[i].index_ = i;
 
 			// Create a map from the old items to the elements that represent them.
+			// This will fail if anything else has been changing the children order.
 			var oldMap = new Map();
 			var newSet = new Set(newItems);
 			for (let i=oldItems.length-1; i>=0; i--) {
@@ -1640,10 +1677,9 @@ var bindings = {
 				delete child.index_;
 			}
 
-
+			// Save the items on the loop element, so we can compare them to their modified values next time the loop is rebuilt.
 			el.items_ = newItems.slice(); // copy
-		};
-
+		});
 
 
 		for (let path of parseVars(foreach)) {
@@ -1665,22 +1701,69 @@ var bindings = {
 		var loopCode = getLoopCode_(el);
 		if (loopCode) {
 
-			let [foreach] = parseLoop(loopCode);
+			let [foreach, loopVar, indexVar] = parseLoop(loopCode);
 			if (isStandaloneVar(foreach)) {
 
 				// Get the path to the array we'll update when items are dragged:
 				foreach = addThis(replaceVars(foreach, context), context);
 				let path = parseVars(foreach)[0];
 
+				var children = Array.from(el.children);
+
+
+				result.onSort = function (event) { // Reorder the variables array when items are dragged.
+					// let originalArray = safeEval.call(self, foreach);
+					// var item = originalArray[event.oldIndex];
+					// var newArray = [...originalArray.slice(0, event.oldIndex), ...originalArray.slice(event.oldIndex + 1)];
+					// newArray = [...newArray.slice(0, event.newIndex), item, ...newArray.slice(event.newIndex)];
+
+					// Shorter version:
+					let newArray = safeEval.call(self, foreach).slice();
+					let item = newArray.splice(event.oldIndex)[0];
+					newArray.splice(event.newIndex, 0, item);
+
+					// Undo reordering from drag
+					while(el.lastChild)
+						el.removeChild(el.lastChild);
+					for (let child of children)
+						el.appendChild(child);
+
+
+					// Set value.  Watchlessly because sortable already updates the child order.
+					traversePath(self, path, true, newArray);
+
+					children = Array.from(el.children);
+				};
+
+				// New way that doesn't require undoing the DOM element order only for rebuildChildren to redo it.
+				// But this breaks when dragging to sort and then deleting nodes on a ladderbuilder rung.
+				/*
 				result.onSort = function (event) { // Reorder the variables array when items are dragged.
 					let originalArray = safeEval.call(self, foreach);
 					var item = originalArray[event.oldIndex];
 					var newArray = [...originalArray.slice(0, event.oldIndex), ...originalArray.slice(event.oldIndex + 1)];
 					newArray = [...newArray.slice(0, event.newIndex), item, ...newArray.slice(event.newIndex)];
 
+					// Shorter version:
+					// let newArray = safeEval.call(self, foreach).slice();
+					// let item = newArray.splice(event.oldIndex);
+					// newArray = newArray.splice(event.newIndex, 0, item);
+
 					// Set value.  Watchlessly because sortable already updates the child order.
-					traversePath(self, path, true, newArray, true);
+					traversePath(self, path, true, newArray, false);
+
+					let localContext = {...context}; // clone
+					for (let i=0; i<el.children.length; i++) {
+						let child = el.children[i];
+						unbindEl(self, child);
+						localContext[loopVar] = foreach + '[' + i + ']';
+						if (indexVar !== undefined)
+							localContext[indexVar] = i;
+
+						bindEl(self, child, localContext);
+					}
 				};
+				*/
 			}
 		}
 
@@ -1719,7 +1802,7 @@ var bindings = {
 				traversePath(self, paths[0], true, value);
 			});
 
-		let setVal = (/*action, path, value*/) => {
+		let setVal = self.enqueue((/*action, path, value*/) => {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
@@ -1727,7 +1810,7 @@ var bindings = {
 				el.checked = result == true;
 			else
 				el.value = result;
-		};
+		});
 
 		// Update input value when object property changes.
 		for (let path of paths) {
@@ -1750,9 +1833,9 @@ var bindings = {
 		if (displayNormal === 'none')
 			displayNormal = '';
 
-		let setVisible = (/*action, path, value*/) => {
+		let setVisible = self.enqueue((/*action, path, value*/) => {
 			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
-		};
+		});
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setVisible);

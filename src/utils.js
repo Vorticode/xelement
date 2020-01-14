@@ -93,8 +93,9 @@ var parentIndex = (el) => !el.parentNode ? 0 : Array.prototype.indexOf.call(el.p
  * @param obj {object}
  * @param path {string[]}
  * @param create {boolean=false} Create the path if it doesn't exist.
- * @param value {*=} If not undefined, set the object's path field to this value. */
-var traversePath = (obj, path, create, value) => {
+ * @param value {*=} If not undefined, set the object's path field to this value.
+ * @param watchless {boolean=false} If true, the value will be set without triggering any watch notifications. */
+var traversePath = (obj, path, create, value, watchless) => {
 	let i = 0;
 	for (let srcProp of path) {
 		let last = i === path.length-1;
@@ -118,8 +119,11 @@ var traversePath = (obj, path, create, value) => {
 		}
 
 		// If last item in path
-		if (last && value !== undefined)
+		if (last && value !== undefined) {
+			if (watchless)
+				obj = obj.$removeProxy || $obj;
 			obj[srcProp] = value;
+		}
 
 		// Traverse deeper along destination object.
 		obj = obj[srcProp];
