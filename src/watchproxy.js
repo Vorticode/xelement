@@ -139,6 +139,7 @@ class ProxyObject {
 			for (let func of ['indexOf', 'lastIndexOf', 'includes']) // TODO: Support more array functions.
 
 				Object.defineProperty(this.proxy_, func, {
+					enumerable: false,
 					get: function() {
 						// Return a new indexOf function.
 						return function (item) {
@@ -158,6 +159,7 @@ class ProxyObject {
 
 			for (let func of ArrayMultiOps)
 				Object.defineProperty(this.proxy_, func, {
+					enumerable: false,
 					get: function() {
 						// Return a new indexOf function.
 						return function () {

@@ -77,11 +77,11 @@ lazy modifier for input binding, to only trigger update after change.
  * A map between elements and the callback functions subscribed to them.
  * Each value is an array of objects with path and callback function.
  * @type {WeakMap<HTMLElement, {path_:string, callback_:function}[]>} */
-var elWatches = new WeakMap();
+var watchedEls = new WeakMap();
 var addElWatch = (el, path, callback) => {
-	let we = elWatches.get(el);
+	let we = watchedEls.get(el);
 	if (!we)
-		elWatches.set(el, we = []);
+		watchedEls.set(el, we = []);
 	we.push({path_: path, callback_: callback});
 };
 
@@ -267,10 +267,10 @@ var unbindEl = (self, el) => {
 					delete el.items_;
 				}
 
-				let watchedEl = elWatches.get(el);
+				let watchedEl = watchedEls.get(el);
 				if (watchedEl)
 					for (let sub of watchedEl) {
-						var p = p || getXParent(el) || self; // only getXParent when first needed.
+						var p = self!==el ? self : p || getXParent(el) || self; // only getXParent when first needed.
 						unwatch(p, sub.path_, sub.callback_);
 					}
 			}
@@ -526,7 +526,15 @@ var bindings = {
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
 				let updateProp = self.enqueue((action, path, value) => {
-					el[prop] = safeEval.call(self, expr);
+					// Only reassign the value and trigger notfications if it's actually changed.
+					let oldVal = el[prop];
+					if (oldVal !== undefined)
+						oldVal = oldVal.$removeProxy || oldVal;
+					let newVal = safeEval.call(self, expr);
+					if (newVal !== undefined)
+						newVal = newVal.$removeProxy || newVal;
+					if (oldVal !== newVal)
+						el[prop] = newVal;
 				});
 
 				// Set initial values.
@@ -766,6 +774,7 @@ var bindings = {
 				let child = el.children[i];
 				if (child.index_ !== i) {
 
+					// TODO, if child is an xelement, this won't unbind any events within it!
 					unbindEl(self, child);
 
 					localContext[loopVar] = foreach + '[' + i + ']';
@@ -803,6 +812,15 @@ var bindings = {
 	sortable: (self, code, el, context) => {
 		var result = {};
 
+		// Build arguments to send to Sortable.
+		if (code) { // we also allow a bare sortable attribute with no value.
+			var obj = parseObj(code);
+			for (let name in obj) {
+				let expr = addThis(replaceVars(obj[name], context), context);
+				result[name] = safeEval.call(self, expr);
+			}
+		}
+
 		// If sorting items bound to a loop, and the variable is standaline,
 		// then update the original array after items are dragged.
 		var loopCode = getLoopCode_(el);
@@ -815,72 +833,46 @@ var bindings = {
 				foreach = addThis(replaceVars(foreach, context), context);
 				let path = parseVars(foreach)[0];
 
-				var children = Array.from(el.children);
+				result.onMove = function(event) {
+				//	return false;
+				};
 
+				var onAdd = result.onAdd;
+				var onUpdate = result.onUpdate;
 
-				result.onSort = function (event) { // Reorder the variables array when items are dragged.
-					// let originalArray = safeEval.call(self, foreach);
-					// var item = originalArray[event.oldIndex];
-					// var newArray = [...originalArray.slice(0, event.oldIndex), ...originalArray.slice(event.oldIndex + 1)];
-					// newArray = [...newArray.slice(0, event.newIndex), item, ...newArray.slice(event.newIndex)];
+				var moveItems = function(event) {
+					let oldSelf = getXParent(event.from);
+					let newSelf = getXParent(event.to);
+					let oldArray = safeEval.call(oldSelf, foreach).slice();
+					let newArray = oldSelf === newSelf ? oldArray : safeEval.call(newSelf, foreach).slice();
 
-					// Shorter version:
-					let newArray = safeEval.call(self, foreach).slice();
-					let item = newArray.splice(event.oldIndex)[0];
+					let item = oldArray.splice(event.oldIndex, 1)[0];
+
 					newArray.splice(event.newIndex, 0, item);
 
-					// Undo reordering from drag
-					while(el.lastChild)
-						el.removeChild(el.lastChild);
-					for (let child of children)
-						el.appendChild(child);
+					traversePath(newSelf, path, true, newArray, true);
+					rebindLoopChildren(newSelf, event.to, context, oldSelf);
 
-
-					// Set value.  Watchlessly because sortable already updates the child order.
-					traversePath(self, path, true, newArray);
-
-					children = Array.from(el.children);
-				};
-
-				// New way that doesn't require undoing the DOM element order only for rebuildChildren to redo it.
-				// But this breaks when dragging to sort and then deleting nodes on a ladderbuilder rung.
-				/*
-				result.onSort = function (event) { // Reorder the variables array when items are dragged.
-					let originalArray = safeEval.call(self, foreach);
-					var item = originalArray[event.oldIndex];
-					var newArray = [...originalArray.slice(0, event.oldIndex), ...originalArray.slice(event.oldIndex + 1)];
-					newArray = [...newArray.slice(0, event.newIndex), item, ...newArray.slice(event.newIndex)];
-
-					// Shorter version:
-					// let newArray = safeEval.call(self, foreach).slice();
-					// let item = newArray.splice(event.oldIndex);
-					// newArray = newArray.splice(event.newIndex, 0, item);
-
-					// Set value.  Watchlessly because sortable already updates the child order.
-					traversePath(self, path, true, newArray, false);
-
-					let localContext = {...context}; // clone
-					for (let i=0; i<el.children.length; i++) {
-						let child = el.children[i];
-						unbindEl(self, child);
-						localContext[loopVar] = foreach + '[' + i + ']';
-						if (indexVar !== undefined)
-							localContext[indexVar] = i;
-
-						bindEl(self, child, localContext);
+					if (newSelf !== oldSelf) {
+						traversePath(oldSelf, path, true, oldArray, true);
+						rebindLoopChildren(oldSelf, event.from, context);
 					}
 				};
-				*/
-			}
-		}
 
-		// Build arguments to sendn to Sortable.
-		if (code) { // we also allow a bare sortable attribute with no value.
-			var obj = parseObj(code);
-			for (let name in obj) {
-				let expr = addThis(replaceVars(obj[name], context), context);
-				result[name] = safeEval.call(self, expr);
+				result.onAdd = function(event) {
+					moveItems(event);
+					if (onAdd)
+						onAdd.call(self, event);
+				};
+
+				result.onUpdate = function(event) {
+					moveItems(event);
+					if (onUpdate)
+						onUpdate.call(self, event);
+				};
 			}
+			else
+				throw new XElementError("Binding sortable to non-standalone loop variable.")
 		}
 		Sortable.create(el, result);
 	},
@@ -958,6 +950,30 @@ var bindings = {
 	'if': function(self, field, el) {}, // Element is created or destroyed when data-if="code" evaluates to true or false.
 	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
+};
+
+
+// TODO: Only update changed children.  Merge from this and similar code in rebuildChildren().
+var rebindLoopChildren = function(self, el, context, oldSelf) {
+	oldSelf = oldSelf || self;
+	let [foreach, loopVar, indexVar] = parseLoop(getLoopCode_(el));
+	foreach = addThis(replaceVars(foreach, context), context);
+
+	let localContext = {...context}; // clone
+	for (let i=0; i<el.children.length; i++) {
+		let child = el.children[i];
+
+		unbindEl(oldSelf, child);
+
+		localContext[loopVar] = foreach + '[' + i + ']';
+		if (indexVar !== undefined)
+			localContext[indexVar] = i;
+
+		bindEl(self, child, localContext);
+	}
+
+	el.items_ = safeEval.call(self, foreach).slice();
+	//delete el.items_;
 };
 
 /**

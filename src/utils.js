@@ -150,7 +150,7 @@ var eventNames = Object.keys(document.__proto__.__proto__)
  * @returns {*} */
 function safeEval(expr) {
 	try {
-		return eval(expr);
+		return Function('return (' + expr + ')').call(this);
 	}
 	catch (e) { // Don't fail for null values.
 		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {

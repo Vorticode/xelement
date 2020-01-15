@@ -1626,7 +1626,7 @@ var test_XElement = {
 			setTimeout(function() {
 				console.log(proxyRoots);
 				console.log(proxyObjects);
-				console.log(elWatches);
+				console.log(watchedEls);
 			}, 4000);
 		})();
 	}

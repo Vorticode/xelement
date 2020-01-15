@@ -129,10 +129,14 @@ var parseObj = (code) => {
 	//return eval('{' + code + '}');
 
 	let result = {};
-	let pieces = code.split(/\s*;\s*/g);
+	let pieces = code.split(/\s*;\s*/); // splitting on comma will divide objects.  TODO, need to support a real parser.  JSON won't understand var names.  eval() will evaluate them.
 	for (let piece of pieces) {
-		let [key, value] = piece.split(/\s*:\s*/);
-		result[key] = value;
+		var colon = piece.indexOf(':');
+		let key = piece.slice(0, colon).trim();
+		result[key] = piece.slice(colon+1).trim();
+
+		//let [key, value] = piece.split(/\s*:\s*/); // this splits more than once.
+		//result[key] = value;
 	}
 	return result;
 };
