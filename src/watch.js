@@ -53,6 +53,8 @@ class WatchProperties {
 		this.fields_ = {}; // $removeProxy underlying fields that store the data.
 		                   // This is necessary to store the values of obj_ after defineProperty() is called.
 		this.proxy_ = watchProxy(this.fields_, this.notify_.bind(this));
+
+		/** @type {object<string, function>} A map from a path to the callback subscribed to that path. */
 		this.subs_ = {};
 	}
 
@@ -85,7 +87,7 @@ class WatchProperties {
 	/**
 	 *
 	 * @param path {string|string[]}
-	 * @param callback {function((action:string, path:string[], value:string?)} */
+	 * @param callback {function(action:string, path:string[], value:string?)} */
 	subscribe_(path, callback) {
 		if (path.startsWith) // is string
 			path = [path];
@@ -94,6 +96,12 @@ class WatchProperties {
 		// This way we don't have to worry about overriding properties created at deeper levels.
 		var self = this;
 		var field = path[0];
+
+
+
+
+
+
 		if (!(field in self.fields_)) {
 			self.fields_[field] = self.obj_[field];
 
@@ -108,8 +116,32 @@ class WatchProperties {
 			});
 		}
 
+
+
 		// Create the full path if it doesn't exist.
-		traversePath(this.fields_, path, 1); // TODO: Do we have to create it?
+		traversePath(this.fields_, path, 1);
+
+		// New!  Traverse up the path and watch each object.
+		// This ensures that Object.defineProperty() is called at every level if it hasn't been previously.
+		// But will this lead to callback() being called more than once?  It seems not.
+		let parentPath = path; // path to our subscribed field within the parent.
+		let parent = self.fields_;
+		while (parentPath.length) {
+			parent = parent[parentPath[0]]; // go up to next level.
+			parentPath = parentPath.slice(1);
+
+			// Only watch if it's a valid object
+			// This gets called over twice as often.
+			// if (isObj(parent))
+			// 	watch(parent, path2, callback);
+
+			// Only watch if it's already in proxyObjects, i.e. if it was passed in via x-prop.
+			// If this causes problems, try the code above instead.
+			let root = proxyObjects.get(parent);
+			if (root)
+				watch(parent, parentPath, callback);
+		}
+
 
 		// Add to subscriptions
 		let cpath = csv(path);
@@ -154,8 +186,10 @@ class WatchProperties {
 }
 
 
-// Keeps track of which objects we're watching.
-// That way watch() and unwatch() can work without adding any new fields to the objects they watch.
+/**
+ * Keeps track of which objects we're watching.
+ * That way watch() and unwatch() can work without adding any new fields to the objects they watch.
+ * @type {WeakMap<object, WatchProperties>} */
 var watched = new WeakMap();
 
 /**

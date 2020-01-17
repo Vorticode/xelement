@@ -39,7 +39,7 @@ bind to clipboard events
 Named slot support? - https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_templates_and_slots
 Separate out a lite version that doesn't do binding?
 	This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
-TODO:
+allow ${text} variables in nested styles?
 warning on loop element id.
 warning if binding to id attribute assigned to element.
 
@@ -525,7 +525,7 @@ var bindings = {
 			for (let prop in obj) {
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
-				let updateProp = self.enqueue((action, path, value) => {
+				let updateProp = /*self.enqueue(*/(action, path, value) => {
 					// Only reassign the value and trigger notfications if it's actually changed.
 					let oldVal = el[prop];
 					if (oldVal !== undefined)
@@ -535,7 +535,7 @@ var bindings = {
 						newVal = newVal.$removeProxy || newVal;
 					if (oldVal !== newVal)
 						el[prop] = newVal;
-				});
+				}/*)*/;
 
 				// Set initial values.
 				updateProp();
@@ -544,24 +544,30 @@ var bindings = {
 				// because normally we can only bind to object properties and not the object itself.
 				if (expr === 'this') {
 
+					//debugger;
+
 					// 1. We get the subscriptions that watch the property on el.
-					let subs = watched.get(el).subs_;
+					let watchedEl = watched.get(el);
+					if (watchedEl) { // if WatchedEl is null, the XElement doesn't subscribe to anything.
+						let subs = watchedEl.subs_;
 
-					for (let sub in subs) {
-						if (sub.startsWith('"' + prop + '"')) {
-							let subPath = JSON.parse('[' + sub + ']');
+						for (let sub in subs) {
+							if (sub.startsWith('"' + prop + '"')) {
+								let subPath = JSON.parse('[' + sub + ']');
 
-							// 2. For each function, we move the watch from the child object to the parent object.
-							for (let callback of subs[sub]) {
-								unwatch(el, subPath, callback);
-								let subPath2 = subPath.slice(1);
-								let updateThisProp = function(action, path, value) {
 
-									// 3. And intercept its call to make sure we pass the original path.
-									callback.apply(el, arguments);
-								};
-								watch(self, subPath2, updateThisProp);
-								addElWatch(el, subPath2, updateThisProp);
+								// 2. For each function, we move the watch from the child object to the parent object.
+								for (let callback of subs[sub]) {
+									unwatch(el, subPath, callback);
+									let subParentPath = subPath.slice(1);
+									let updateThisProp = function (action, path, value) {
+
+										// 3. And intercept its call to make sure we pass the original path.
+										callback.apply(el, arguments);
+									};
+									watch(self, subParentPath, updateThisProp);
+									addElWatch(el, subParentPath, updateThisProp);
+								}
 							}
 						}
 					}
@@ -619,9 +625,9 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = self.enqueue((/*action, path, value*/) => {
+		let setText = /*self.enqueue(*/(/*action, path, value*/) => {
 			el.textContent = safeEval.call(self, code);
-		});
+		}/*)*/;
 		for (let path of parseVars(code)) {
 			watch(self, path, setText);
 			addElWatch(el, path, setText);
@@ -668,6 +674,7 @@ var bindings = {
 		var [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
+		el.context_ = context;
 
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
@@ -827,53 +834,64 @@ var bindings = {
 		if (loopCode) {
 
 			let [foreach, loopVar, indexVar] = parseLoop(loopCode);
-			if (isStandaloneVar(foreach)) {
+			//#IFDEV
+			if (!isStandaloneVar(foreach))
+				throw new XElementError("Binding sortable to non-standalone loop variable.");
+			//#ENDIF
 
-				// Get the path to the array we'll update when items are dragged:
-				foreach = addThis(replaceVars(foreach, context), context);
-				let path = parseVars(foreach)[0];
+			// Get the path to the array we'll update when items are dragged:
+			foreach = addThis(replaceVars(foreach, context), context);
+			let path = parseVars(foreach)[0];
 
-				result.onMove = function(event) {
-				//	return false;
-				};
+			// Get values passed in by the user.
+			var onAdd = result.onAdd;
+			var onUpdate = result.onUpdate;
 
-				var onAdd = result.onAdd;
-				var onUpdate = result.onUpdate;
+			// Update the arrays after we drag items.
+			var moveItems = function(event) {
+				let oldSelf = getXParent(event.from);
+				let newSelf = getXParent(event.to);
 
-				var moveItems = function(event) {
-					let oldSelf = getXParent(event.from);
-					let newSelf = getXParent(event.to);
-					let oldArray = safeEval.call(oldSelf, foreach).slice();
-					let newArray = oldSelf === newSelf ? oldArray : safeEval.call(newSelf, foreach).slice();
+				let oldContext = event.from.context_;
+				let oldForeach = parseLoop(getLoopCode_(event.from))[0];
+				oldForeach = addThis(replaceVars(oldForeach, oldContext), oldContext);
+				let oldArray = safeEval.call(oldSelf, oldForeach).slice();
 
-					let item = oldArray.splice(event.oldIndex, 1)[0];
+				let newArray = oldSelf === newSelf ? oldArray : safeEval.call(newSelf, foreach).slice();
 
-					newArray.splice(event.newIndex, 0, item);
+				let item;
+				if (event.pullMode === 'clone')
+					item = oldArray[event.oldIndex];
+				else
+					item = oldArray.splice(event.oldIndex, 1)[0];
 
-					traversePath(newSelf, path, true, newArray, true);
-					rebindLoopChildren(newSelf, event.to, context, oldSelf);
+				newArray.splice(event.newIndex, 0, item);
 
-					if (newSelf !== oldSelf) {
-						traversePath(oldSelf, path, true, oldArray, true);
-						rebindLoopChildren(oldSelf, event.from, context);
-					}
-				};
+				traversePath(newSelf, path, true, newArray, true); // Set the newArray without triggering notifications.
+				rebindLoopChildren(newSelf, event.to, context, oldSelf);
 
-				result.onAdd = function(event) {
-					moveItems(event);
-					if (onAdd)
-						onAdd.call(self, event);
-				};
+				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
+					traversePath(oldSelf, path, true, oldArray, true);
+					rebindLoopChildren(oldSelf, event.from, context);
+				}
+			};
 
-				result.onUpdate = function(event) {
-					moveItems(event);
-					if (onUpdate)
-						onUpdate.call(self, event);
-				};
-			}
-			else
-				throw new XElementError("Binding sortable to non-standalone loop variable.")
+			result.onAdd = function(event) {
+				moveItems(event);
+				if (onAdd)
+					onAdd.call(self, event);
+			};
+
+			result.onUpdate = function(event) {
+				moveItems(event);
+				if (onUpdate)
+					onUpdate.call(self, event);
+			};
 		}
+
+
+
+
 		Sortable.create(el, result);
 	},
 

@@ -105,14 +105,11 @@ var handler = {
 // Array operations that send multiple notifications.
 var ArrayMultiOps = ['push', 'pop', 'splice', 'shift', 'sort', 'reverse', 'unshift'];
 
-// One of these will exist for each object, regardless of how many roots it's in.
+/**
+ * Wrapper around every instance of an object that's being watched.
+ * One of these will exist for each object, regardless of how many roots it's in. */
 class ProxyObject {
 	constructor(obj, roots) {
-
-		/**
-		 * Not used.
-		 * \@type object */
-		//this.object = obj;
 
 		/**
 		 * One shared proxy.
@@ -195,7 +192,7 @@ class ProxyObject {
 
 	/**
 	 * @param obj {object}
-	 * @param roots {object[]=} Roots to add to new or existing object.
+	 * @param roots {object[]|Set<object>=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
 	static get_(obj, roots) {
 		obj = obj.$removeProxy || obj;
@@ -214,8 +211,10 @@ class ProxyObject {
 
 ProxyObject.whenOpFinished = new Set();
 
-// TODO: Could this be replaced with a weakmap from the root to the callbacks?
-// Yes, but it wouldn't be as clean.
+/**
+ * Wrapper around an object that has its descendants being watched.
+ * We use a path to get from a ProxyRoot to an instance of a ProxyObject.
+ * One ProxyObject may belong to multiple ProxyRoots. */
 class ProxyRoot {
 	constructor(root) {
 

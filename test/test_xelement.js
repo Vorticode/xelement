@@ -225,11 +225,11 @@ var test_Watch = {
 var test_XElement = {
 
 	ids: function() {
-		class P1 extends XElement {}
-		P1.html = '<div><span id="s"></span></div>'; // attr must be lowercase.
+		class I1 extends XElement {}
+		I1.html = '<div><span id="s"></span></div>'; // attr must be lowercase.
 
 		// Make sure attribute is set from html.
-		var p = new P1();
+		var p = new I1();
 		//p.s = 2; // disallow
 		//console.log(p.s);
 
@@ -1595,40 +1595,46 @@ var test_XElement = {
 			assert('"a","items"' in subs);
 			assertEq(Object.keys(subs).length, 1);
 		})();
+
+		// Pass prop to an XElement that doesn't bind it or anything else.
+		(function() {
+			class BD13Inner extends XElement {}
+			BD13Inner.html = `<div>hi</div>`;
+
+			class BD13 extends XElement {}
+			BD13.html = `
+			<div x-loop="nodes: node">
+				<x-bd13inner x-prop="xProgram: this"></x-bd13inner>
+			</div>`;
+
+			var lb = new BD13();
+			lb.nodes = ['A', 'B', 'C'];
+		})();
+
+
+		// Test setting a property from a parent reference.  This used to fail.
+		(function() {
+			class BD14Inner extends XElement {}
+			BD14Inner.html = `
+				<div x-loop="parentA.unused: unused">
+					<div x-text="parentA.item"></div>
+				</div>`;
+
+			class BD14 extends XElement {}
+			BD14.html = `
+				<div>
+					<x-bd14inner id="b" x-prop="parentA: this"></x-bd14inner>
+				</div>`;
+
+			var lb = new BD14();
+
+			lb.unused = [1];
+			lb.item = 'A';
+			assertEq(lb.b.shadowRoot.children[0].textContent, 'A');
+		})();
 	},
 
 	temp: function() {
 	},
 
-	temp2: function() {
-	}
-
-	/*
-	memory: function() {
-		// Make sure all proxyObjects and proxyRoots are freed:
-		(function() {
-			var a = {name: 'jim'};
-
-			var count = 0;
-			watch(a, ['name'], function() {
-				count++;
-			});
-
-			a.name = 'tom';
-			assertEq(count, 1);
-
-			unwatch(a, ['name']);
-
-			a.name = 'joe';
-
-			assertEq(count, 1);
-
-			setTimeout(function() {
-				console.log(proxyRoots);
-				console.log(proxyObjects);
-				console.log(watchedEls);
-			}, 4000);
-		})();
-	}
-	*/
 };

@@ -121,7 +121,7 @@ var traversePath = (obj, path, create, value, watchless) => {
 		// If last item in path
 		if (last && value !== undefined) {
 			if (watchless)
-				obj = obj.$removeProxy || $obj;
+				obj = obj.$removeProxy || obj;
 			obj[srcProp] = value;
 		}
 
