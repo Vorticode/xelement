@@ -271,6 +271,10 @@ var proxyObjects = new WeakMap();  // Map from objects back to their roots.
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
  * @returns {Proxy} */
 var watchProxy = (root, callback) => {
+	//#IFDEV
+	if (!isObj(root))
+		throw new XElementError('Can only watch objects');
+	//#ENDIF
 	var proxyRoot = ProxyRoot.get_(root);
 	proxyRoot.callbacks_.push(callback);
 	return proxyObjects.get(root).proxy_;

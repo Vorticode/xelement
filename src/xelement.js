@@ -85,11 +85,27 @@ var addElWatch = (el, path, callback) => {
 	we.push({path_: path, callback_: callback});
 };
 
+var removeElWatch = (el, path, callback) => {
+	let we = watchedEls.get(el);
+	if (we) {
+		for (let i in we) {
+			let item = we[i];
+			if (item.path_===path && item.calback_ === callback) {
+				we.splice(i, 1);
+				break;
+			}
+		}
+	}
+};
+
 
 /**
  * A map between elements and the events assigned to them. *
  * @type {WeakMap<HTMLElement, *[]>} */
 var elEvents = new WeakMap();
+
+
+var promotedProps = new WeakMultiMap();
 
 /**
  *
@@ -132,6 +148,20 @@ var getXParent = (el) => { // will error if not in an XParent.
 };
 
 
+var getLoopParent = (el) => { // will error if not in an XParent.
+	while ((el = (el.parentNode || el.host)) && el) {
+		if (getLoopCode_(el))
+			return el;
+	}
+	return null;
+};
+
+// TODO: modify to allow getting any prop
+var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.getAttribute('data-loop'));
+
+
+
+
 /**
  * Recursively process all the data- attributes in el and its descendants.
  * @param self {XElement}
@@ -154,17 +184,15 @@ var bindEl = (self, el, context) => {
 var bindElProps = (self, el, context) => {
 
 	// Seach attributes for data- bindings.
-	if (el.attributes) // shadow root has no attributes.
+	if (el.attributes) { // shadow root has no attributes.
 		for (let attr of el.attributes) {
-
-
 			let attrName = null;
 			if (attr.name.startsWith('x-'))
 				attrName = attr.name.slice(2); // remove data- prefix.
 			else if (attr.name.startsWith('data-'))
 				attrName = attr.name.slice(5); // remove data- prefix.
 
-			if (attrName) {
+			if (attrName && attrName!=='loop') {
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
 
@@ -175,19 +203,36 @@ var bindElProps = (self, el, context) => {
 			}
 		}
 
+		// Apply loop last, making sure prop is applied first.
+		for (let attr of el.attributes) {
+			let attrName = null;
+			if (attr.name.startsWith('x-'))
+				attrName = attr.name.slice(2); // remove data- prefix.
+			else if (attr.name.startsWith('data-'))
+				attrName = attr.name.slice(5); // remove data- prefix.
+
+			if (attrName && attrName==='loop') {
+				if (bindings[attrName]) // attr.value is code.
+					bindings[attrName](self, attr.value, el, context);
+
+				//#IFDEV
+				else
+					throw new XElementError(attrName);
+				//#ENDIF
+			}
+		}
+	}
+
 	// Allow traversing from host element into its own shadowRoot
 	// But not into the shadow root of other elements.
 	let next = el===self && el.shadowRoot ? el.shadowRoot : el;
 
 	// Data loop already binds its own children when first applied.
+	// So we don't iterate into those children.
 	if (!getLoopCode_(el))
 		for (let child of next.children)
 			bindElProps(self, child, context);
 };
-
-var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.getAttribute('data-loop'));
-
-
 /**
  * We rebind event attributes because otherwise there's no way
  * to make them call the class methods.
@@ -272,6 +317,7 @@ var unbindEl = (self, el) => {
 					for (let sub of watchedEl) {
 						var p = self!==el ? self : p || getXParent(el) || self; // only getXParent when first needed.
 						unwatch(p, sub.path_, sub.callback_);
+						removeElWatch(p, sub.path_, sub.callback_);
 					}
 			}
 		}
@@ -420,6 +466,7 @@ var initHtml = (self) => {
 };
 
 /**
+ * @extends HTMLElement
  * Inherit from this class to make a custom HTML element.
  * If you extend from XElement, you can't instantiate your class unless you first set the html property.
  * This is because XElement extends from HTMLElement, and setting the .html property calls customElements.define(). */
@@ -526,39 +573,44 @@ var bindings = {
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
 				let updateProp = /*self.enqueue(*/(action, path, value) => {
-					// Only reassign the value and trigger notfications if it's actually changed.
-					let oldVal = el[prop];
-					if (oldVal !== undefined)
-						oldVal = oldVal.$removeProxy || oldVal;
+					// // Only reassign the value and trigger notfications if it's actually changed.
+					// let oldVal = el[prop];
+					// if (oldVal !== undefined)
+					// 	oldVal = oldVal.$removeProxy || oldVal;
 					let newVal = safeEval.call(self, expr);
 					if (newVal !== undefined)
-						newVal = newVal.$removeProxy || newVal;
-					if (oldVal !== newVal)
+					 	newVal = newVal.$removeProxy || newVal;
+					// if (oldVal !== newVal)
 						el[prop] = newVal;
 				}/*)*/;
 
 				// Set initial values.
 				updateProp();
 
+				/*
 				// If binding to the parent, "this", we need to take extra steps,
 				// because normally we can only bind to object properties and not the object itself.
 				if (expr === 'this') {
 
 					//debugger;
 
-					// 1. We get the subscriptions that watch the property on el.
+					// 1. We get the subscriptions that watch the property on el, the child
 					let watchedEl = watched.get(el);
-					if (watchedEl) { // if WatchedEl is null, the XElement doesn't subscribe to anything.
+					if (watchedEl) { // if WatchedEl is null, the child XElement doesn't subscribe to anything.
 						let subs = watchedEl.subs_;
 
 						for (let sub in subs) {
+
+							// If subscription starts with the destination of the prop assignment.
 							if (sub.startsWith('"' + prop + '"')) {
 								let subPath = JSON.parse('[' + sub + ']');
 
 
 								// 2. For each function, we move the watch from the child object to the parent object.
 								for (let callback of subs[sub]) {
+									removeElWatch(el, subPath, callback); // All tests pass with or without this line.
 									unwatch(el, subPath, callback);
+
 									let subParentPath = subPath.slice(1);
 									let updateThisProp = function (action, path, value) {
 
@@ -572,13 +624,88 @@ var bindings = {
 						}
 					}
 				}
+				*/
+
+
+
+
+
+
+				/*
+				1.  Somehow watch every property on "this" for changes, by adding a '' subscription
+				    and modifying the notify() calls to call it when traversing up the parent path.
+				1B. But what about properties that are only subscribed to by the child xelement?
+				    Modifying them won't trigger anything unless they're made into watches.
+
+				2.  Then loop through all the subscriptions of the child and trigger them when their
+				    Prop changes.
+
+				- or -
+
+				Instead of moving the subscriptions from the child to the parent,
+				we can simply add the same subscriptions to the parent and have them trigger notifications on the child.
+
+				But when doing this with temp4() test, subs doesn't contain parentA.item.
+
+				*/
+
+
+				// If binding to the parent, "this", we need to take extra steps,
+				// because normally we can only bind to object properties and not the object itself.
+				//debugger;
+				if (expr === 'this') {
+
+					// 1. We get the subscriptions that watch the property on el, the child
+					let watchedEl = watched.get(el);
+					if (watchedEl) { // if WatchedEl is null, the child XElement doesn't subscribe to anything.
+						let subs = watchedEl.subs_;
+
+						for (let sub in subs) {
+
+							// If subscription starts with the destination of the prop assignment.
+							// Then add a watch to parent to foward the notification to the child by calling updateProp().
+							// TODO: We need to find a way to remove these when this function is called more than once, eg with loops.
+							if (sub.startsWith('"' + prop + '"')) {
+								let subPath = JSON.parse('[' + sub + ']');
+								let subParentPath = subPath.slice(1);
+
+								let oldPromotion = promotedProps.get(el, subParentPath);
+								if (oldPromotion) {
+									unwatch(self, subParentPath, oldPromotion[1]);
+
+									removeElWatch(el, subParentPath, oldPromotion[1]);
+									promotedProps.remove(el, subParentPath, oldPromotion[1]);
+								}
+
+
+								watch(self, subParentPath, updateProp);
+
+								addElWatch(el, subParentPath, updateProp);
+								promotedProps.add(el, subParentPath, updateProp);
+							}
+						}
+					}
+				}
 
 				// Add a regular watch.
-				else
+				else {
 					for (let path of parseVars(expr)) {
+
+						let oldPromotion = promotedProps.get(el, path);
+						if (oldPromotion) {
+							unwatch(getXParent(el), path, oldPromotion[1]);
+
+							removeElWatch(el, path, oldPromotion[1]);
+							promotedProps.remove(el, path, oldPromotion[1]);
+						}
+
+
 						watch(self, path, updateProp);
+
 						addElWatch(el, path, updateProp);
+						promotedProps.add(el, path, updateProp);
 					}
+				}
 			}
 		}
 	},
@@ -679,7 +806,7 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
-		var rebuildChildren = self.enqueue((action, path, value) => {
+		var rebuildChildren = /*self.enqueue(*/(action, path, value) => {
 
 			// If we splice off the first item from an array, rebuildChildren() is called every time
 			// element n+1 is assigned to slot n.  splice() then sets the array's .length property at the last step.
@@ -769,6 +896,8 @@ var bindings = {
 			}
 
 			let localContext = {...context};
+			//el.context_ = context;
+
 			//#IFDEV
 			if (loopVar in localContext)
 				throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
@@ -788,6 +917,9 @@ var bindings = {
 					if (indexVar !== undefined)
 						localContext[indexVar] = i;
 
+					// Save the context on every loop item.
+					child.context_ = localContext;
+
 					bindEl(self, child, localContext);
 
 					
@@ -802,7 +934,47 @@ var bindings = {
 
 			// Save the items on the loop element, so we can compare them to their modified values next time the loop is rebuilt.
 			el.items_ = newItems.slice(); // copy
-		});
+
+
+
+			// Rebuilding children can show us new properties from the parent XElement we need to subscribe to.
+			// So we re-apply any watches from the parent xelement to this element.
+			let prop = self.getAttribute('x-prop') || self.getAttribute('data-prop');
+			if (prop) {
+				let xParent = getXParent(self);
+				if (xParent) {
+					let loopParent = getLoopParent(self); // TODO: use a getContext() function instead?
+					let context = (loopParent && loopParent.context_) || {};
+
+					// TODO: We need to find a way to unbind before the bindings in prop are re-applied.
+					XElement.bindings.prop(xParent, prop, self, self.context_, true);
+				}
+			}
+
+			// Recursive way:
+			// Rebind props from parent.
+			// This way
+			// Covered by tests:  RebindDataPropForLoop
+			/*
+			let xSelf = self;
+			let xParent = self;
+			while (xParent = getXParent(xParent)) {
+				if (xParent) {
+					let prop = xSelf.getAttribute('x-prop') || xSelf.getAttribute('data-prop');
+					if (prop) {
+
+						let loopParent = getLoopParent(xSelf); // TODO: use a getContext() function instead?
+						let context2 = (loopParent && loopParent.context_) || context;
+
+						XElement.bindings.prop(xParent, prop, xSelf, context2, true);
+					}
+				}
+				xSelf = xParent;
+			}
+			*/
+
+
+		}/*)*/;
 
 
 		for (let path of parseVars(foreach)) {

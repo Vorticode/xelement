@@ -16,11 +16,101 @@ var arrayEq = (array1, array2) => {
 		return false;
 
 	array2 = array2.$removeProxy || array2;
-	return (array1.$removeProxy || array1).every((value, index) => eq(value, array2[index]))
+	return (array1.$removeProxy || array1).every((value, index) => {
+		if (Array.isArray(value))
+			return arrayEq(value, array2[index]);
+		return eq(value, array2[index]);
+	})
 };
 
 var eq = (item1, item2) => {
 	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
+};
+
+
+var WeakMultiMap = function() {
+
+	let self = this;
+	self.items = new WeakMap();
+
+	// TODO: write an internal function that combines common elements of these functions
+
+
+	/**
+	 * Add an item to the map.  If it already exists, add another at the same key.
+	 * @param key
+	 * @param values */
+	self.add = function(key, ...values) {
+		let itemSet = self.items.get(key);
+		if (!itemSet)
+			self.items.set(key, [values]);
+		else
+			itemSet.push(values);
+	};
+
+	/**
+	 * Retrieve an item from the set that matches key and all values specified.
+	 * @param key
+	 * @param values
+	 * @returns {*|undefined} */
+	self.get = function(key, ...values) {
+		let itemSet = self.items.get(key);
+		if (itemSet) {
+			for (let item of itemSet) {
+				if (arrayEq(item.slice(0, values.length), values))
+					return item;
+			}
+		}
+		return undefined;
+	};
+
+	self.getAll = function(key, ...values) {
+		let result = [];
+		let itemSet = self.items.get(key);
+		if (itemSet) {
+			for (let item of itemSet) {
+				let matches = true;
+				for (let i = 0; i < values.length; i++) {
+					if (!eq(item[i], values[i])) {
+						matches = false;
+						break;
+					}
+				}
+
+				// Return the first item in the array that matches.
+				if (matches)
+					result.push(item);
+			}
+		}
+
+
+		return result;
+	};
+
+	// remove first match
+	self.remove = function(key, ...values) {
+		let itemSet = self.items.get(key);
+		if (itemSet) {
+			for (let j=0; j<itemSet.length; j++) {
+				let item = itemSet[j];
+				let matches = true;
+				for (var i = 0; i < values.length; i++) {
+					if (!eq(item[i], values[i])) {
+						matches = false;
+						break;
+					}
+				}
+
+				// Return the first item in the array that matches.
+				if (matches) {
+					itemSet.splice(j, 1);
+					return item;
+				}
+			}
+		}
+		return undefined;
+	};
+
 };
 
 

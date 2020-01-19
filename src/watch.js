@@ -121,26 +121,40 @@ class WatchProperties {
 		// Create the full path if it doesn't exist.
 		traversePath(this.fields_, path, 1);
 
-		// New!  Traverse up the path and watch each object.
+		// Traverse up the path and watch each object.
+		// This is commented out because it causes too much chaos, virally turning innocent objects into proxies.
 		// This ensures that Object.defineProperty() is called at every level if it hasn't been previously.
 		// But will this lead to callback() being called more than once?  It seems not.
+		/*
 		let parentPath = path; // path to our subscribed field within the parent.
 		let parent = self.fields_;
-		while (parentPath.length) {
+		while (parentPath.length > 1) {
 			parent = parent[parentPath[0]]; // go up to next level.
-			parentPath = parentPath.slice(1);
+			let p = parentPath;
+			parentPath = parentPath.slice(1); // remove first from array
 
-			// Only watch if it's a valid object
-			// This gets called over twice as often.
-			// if (isObj(parent))
-			// 	watch(parent, path2, callback);
+			// This works for our trivial case but doesn't handle all cases in LadderBuilder.
+			// I need to find a better condition than !traversePath.
+			//debugger;
+			if (isObj(parent) && parent[parentPath[0]] && !parent[parentPath[0]].$isProxy) {
 
-			// Only watch if it's already in proxyObjects, i.e. if it was passed in via x-prop.
-			// If this causes problems, try the code above instead.
-			let root = proxyObjects.get(parent);
-			if (root)
-				watch(parent, parentPath, callback);
+				// Old way that does it only once.  Which really only fixed a specific case rather than being a general solution.
+				// (function(parent, parentPath) {
+				// 	var d = function (action, path, value) {
+				// 		callback(action, path, value);
+				// 		unwatch(parent, parentPath, d);
+				// 	};
+				// 	watch(parent, parentPath, d);
+				// })(parent, parentPath);
+
+				watch(parent, parentPath, function(action, path, value) {
+					callback(action, p, value);
+				});
+				return;
+
+			}
 		}
+		*/
 
 
 		// Add to subscriptions

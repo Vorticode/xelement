@@ -1244,7 +1244,6 @@ var test_XElement = {
 				</div>`;
 
 			var outer = new EV7Outer();
-			window.debugger = true;
 			outer.letters = ['A', 'B'];
 
 			// Make sure we rebind events after splice.
@@ -1610,6 +1609,170 @@ var test_XElement = {
 			var lb = new BD13();
 			lb.nodes = ['A', 'B', 'C'];
 		})();
+	},
+
+	temp: function() {
+
+
+
+		// Double deep loop binding.
+		(function () {
+			class BD10C extends XElement {}
+			BD10C.html = `				
+			<div>
+				<span data-text="wheel"></span>
+			</div>`;
+
+			class BD10B extends XElement {}
+			BD10B.html = `				
+			<div>
+			    <span id="loop" data-loop="car.wheels: wheel">
+			        <x-bd10c data-prop="wheel: wheel"></x-bd10c>
+				</span>
+			</div>`;
+
+			class BD10A extends XElement {}
+			BD10A.html = `				
+			<div data-loop="cars: car">
+				<x-bd10b data-prop="car: car"></x-bd10b>
+			</div>`;
+
+			var xa = new BD10A();
+			xa.cars = [{wheels: [1]}];
+
+
+			var bloop = xa.shadowRoot.children[0].loop;
+			var c = bloop.children[0];
+			assertEq(c.shadowRoot.children[0].textContent, '1');
+		})();
+	},
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	temp2: function() {
+
+		(function() {
+			class XNode extends XElement {
+			}
+
+			XNode.html = `
+				<div>				
+					<select x-loop="xProgram.xLadderBuilder.variables: drawerVariable">
+						<option x-text="drawerVariable"></option>
+					</select>
+				</div>`;
+
+			// Below:  Looping over x-loop="xLadderBuilder.program.nodes: node" will work.
+			class XProgram extends XElement {
+			}
+
+			XProgram.html = `
+				<div>		
+					<div id="nodesContainer" x-loop="program.nodes: node">
+					    <x-node x-prop="node: node; xProgram: this"></x-node>
+					</div>
+				</div>`;
+
+			class XLadderBuilder extends XElement {
+			}
+
+			XLadderBuilder.html = `
+				<div>
+					<div x-loop="variables: i, variable">
+						<div x-text="variable"></div>
+					</div>
+					<x-program id="xProgram" x-prop="xLadderBuilder: this; program: this.program"></x-program>				
+				</div>`;
+
+			var lb = new XLadderBuilder();
+
+			lb.variables = [
+				'A', 'B', 'C'
+			];
+
+
+			lb.program = {
+				nodes: [
+					{variables: ['A']}
+				]
+			};
+			lb.variables.push('D');
+
+
+			//document.body.appendChild(lb);
+			assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children.length, 4);
+			assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children[3].textContent, 'D');
+		})();
+	},
+
+
+
+
+
+
+
+
+
+	temp3: function() {
+
+		class C extends XElement {}
+		C.html = `
+			<div>
+				<div x-text="parentB.parentA.item"></div>
+			</div>`;
+
+		class B extends XElement {}
+		B.html = `
+			<div x-loop="parentA.unused: unused">
+				<x-c x-prop="parentB: this"></x-c>
+			</div>`;
+
+		class A extends XElement {}
+		A.html = `
+			<div>
+				<x-b x-prop="parentA: this"></x-b>				
+			</div>`;
+
+
+		var lb = new A();
+
+		lb.item = 'A';
+		lb.unused = [1]; // put this first and nothing shows up at all.
+		//window.debugger = true;
+		lb.item = 'B';
+
+
+
+		document.body.appendChild(lb);
+		//console.log(lb.xProgram.shadowRoot.children[0].shadowRoot.children[0].children);
+
+	},
+
+
+
+
+
+	temp4: function() {
+
+
 
 
 		// Test setting a property from a parent reference.  This used to fail.
@@ -1630,11 +1793,133 @@ var test_XElement = {
 
 			lb.unused = [1];
 			lb.item = 'A';
+
+			console.log(lb.b.shadowRoot.children[0].textContent);
+			//assertEq(lb.b.shadowRoot.children[0].textContent, 'A');
+		})();
+	},
+
+	temp5: function() {
+
+		// @name RebindDataPropForLoop
+		// Test setting a property from a parent reference.  This used to fail.
+		(function() {
+			class BD14Inner extends XElement {}
+			BD14Inner.html = `
+				<div x-loop="parentA.unused: unused">
+					<div x-text="parentA.item"></div>
+				</div>`;
+
+			class BD14 extends XElement {}
+			BD14.html = `
+				<div>
+					<x-bd14inner id="b" x-prop="parentA: this"></x-bd14inner>
+				</div>`;
+
+			var lb = new BD14();
+
+			lb.unused = [1];
+
+			//window.debugger = true;
+			//XElement.bindings.prop(lb, 'parentA: this', lb.b, {});
+			lb.item = 'A';
+
+
 			assertEq(lb.b.shadowRoot.children[0].textContent, 'A');
 		})();
 	},
 
-	temp: function() {
+/*
+	temp6: function() {
+		(function() {
+			var a = {b: {c: 'd'} };
+			var ops = [];
+
+			var ap = watchProxy(a, function(action, path, value) {
+				console.log('a', action, path, value);
+			});
+
+			var bp = watchProxy(a.b, function(action, path, value) {
+				console.log('b', action, path, value);
+			});
+
+			// Even though b is watched, the reference to it through a is not watched.
+			// So only b gets notified.
+			bp.c = 'd2';
+		})();
 	},
 
+	temp7: function() {
+		(function() {
+			let ops = [];
+
+			var a = {b: {c: 'd'} };
+			var b = a.b;
+
+			watch(a, ['b', 'c'], function(action, path, value) {
+				console.log('a', action, path, value);
+			});
+
+			// b points to the old, non-proxied version.
+			b.c = 'd2';
+			console.log('---1');
+
+			a.b.c = 'd2';
+			console.log('---1');
+
+			watch(a.b, ['c'], function(action, path, value) {
+				console.log('b', action, path, value);
+			});
+
+			// Even though b is watched, the reference to it through a is not watched.
+
+
+			a.b.c = 'd3';
+			console.log('---2');
+			a.b = {c: 'd4'};
+			console.log('---1');
+
+		})();
+	}
+*/
+
+	temp6: function() {
+		// Double deep loop binding.
+		(function () {
+			class C extends XElement {}
+			C.html = `				
+				<div>
+					<span x-text="wheel"></span>C
+				</div>`;
+
+			class B extends XElement {}
+			B.html = `				
+				<div>
+				    <span id="loop" x-loop="car.wheels: wheel">
+				        <x-c x-prop="wheel: wheel"></x-c>
+					</span>B
+				</div>`;
+
+			class A extends XElement {}
+			A.html = `				
+				<div x-loop="cars: car">
+					<x-b x-prop="car: car"></x-b>
+				</div>`;
+
+			var a = new A();
+
+			window.debugger = true;
+
+			a.cars = [{wheels: [1]}];
+
+
+			var bloop = a.shadowRoot.children[0].loop;
+			var c = bloop.children[0];
+
+			console.log(c);
+			//assertEq(c.shadowRoot.children[0].textContent, '1');
+			document.body.append(a);
+		})();
+
+	},
 };
