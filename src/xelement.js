@@ -2,10 +2,8 @@
 Inherit from XElement to create custom HTML Components.
 
 TODO: next goals:
-indexOf and includes() on arrays fail because they compare proxied objects.
-allow sortable?
-rename data-bind to data-prop
-Make data- prefix optional.  Use "x-", ":", or no prefix?
+x-attribs="value: passthrough(loopVar)" acts strange.
+
 {{var}} in text and attributes
 Fix failing Edge tests.
 allow comments in loops.
@@ -262,6 +260,7 @@ var bindElEvents = (self, el, context, recurse, getAttributesFrom) => {
 				// 1. event, assigned to the current event.
 				// 2. this, assigned to the class instance.
 				let callback = function (event) {
+					// TODO: safeEval() won't work here because we have to have event in the scope.
 					eval(code);
 				}.bind(self);
 				el.addEventListener(eventName, callback);
@@ -346,9 +345,7 @@ var setAttribute = (self, name, value) => {
 		// As javascript code to be evaluated.
 		// TODO: Should this feature be deprecated or moved to data-properties  Overlap with data-prop?
 		if (value && value.length > 2 && value.startsWith('{') && value.endsWith('}')) {
-			(function(){ // Guard scope before calling eval.
-				value = eval(value.slice(1, -1)); // code to eval
-			}).call(self); // Import "self" as "this" variable to eval'd code.  This lets us pass attribute="${this}" in html initialization.
+			self[name] = safeEval.call(self, value.slice(1, -1)); // code to eval
 		}
 		else
 			self[name] = value;
@@ -832,10 +829,12 @@ var bindings = {
 				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
-			var newItems = removeProxies(safeEval.call(self, foreach) || []);
-			var oldItems = removeProxies(el.items_ || []);
+			var newItems = (safeEval.call(self, foreach) || []);
+			newItems = newItems.$removeProxy || newItems;
+			var oldItems = (el.items_ || []);
+			oldItems = oldItems.$removeProxy || oldItems;
 
-			if (arrayEq(oldItems, newItems))
+			if (arrayEq(oldItems, newItems, true))
 				return;
 
 			// Set temporary index on each child, so we can track how they're re-ordered.

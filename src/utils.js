@@ -11,13 +11,13 @@ class XElementError extends Error {
  * @param array1 {*[]}
  * @param array2 {*[]}
  * @returns {boolean} */
-var arrayEq = (array1, array2) => {
+var arrayEq = (array1, array2, deep) => {
 	if (array1.length !== array2.length)
 		return false;
 
 	array2 = array2.$removeProxy || array2;
 	return (array1.$removeProxy || array1).every((value, index) => {
-		if (Array.isArray(value))
+		if (deep && Array.isArray(value))
 			return arrayEq(value, array2[index]);
 		return eq(value, array2[index]);
 	})
@@ -57,7 +57,7 @@ var WeakMultiMap = function() {
 		let itemSet = self.items.get(key);
 		if (itemSet) {
 			for (let item of itemSet) {
-				if (arrayEq(item.slice(0, values.length), values))
+				if (arrayEq(item.slice(0, values.length), values, true))
 					return item;
 			}
 		}

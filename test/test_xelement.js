@@ -224,8 +224,10 @@ var test_Watch = {
 
 var test_XElement = {
 
-	ids: function() {
-		class I1 extends XElement {}
+	ids: function () {
+		class I1 extends XElement {
+		}
+
 		I1.html = '<div><span id="s"></span></div>'; // attr must be lowercase.
 
 		// Make sure attribute is set from html.
@@ -236,13 +238,15 @@ var test_XElement = {
 		// TODO: Test duplicate id's.
 	},
 
-	attributes: function() {
+	attributes: function () {
 
 
 		// Regular, non-data attributes
 		// Instantiation overrides definition attribute.
-		(function() {
-			class AT extends XElement {}
+		(function () {
+			class AT extends XElement {
+			}
+
 			AT.html = '<div title="val1"></div>';
 
 			// Make sure attribute is set from html.
@@ -258,7 +262,9 @@ var test_XElement = {
 
 		// Regular attribute
 		(function () {
-			class M1 extends XElement {}
+			class M1 extends XElement {
+			}
+
 			M1.html = '<div><span id="span" data-attribs="title: titleProp">Text</span></div>';
 			var m = new M1();
 
@@ -269,7 +275,9 @@ var test_XElement = {
 
 		// Bind to sub-property
 		(function () {
-			class M2 extends XElement {}
+			class M2 extends XElement {
+			}
+
 			M2.html = '<div><span data-attribs="title: span[0].titleProp">Text</span></div>';
 			var m = new M2();
 
@@ -292,7 +300,6 @@ var test_XElement = {
 		})();
 
 
-
 		/*
 		// Set class properties from attributes
 		// This fails because class properties are created in constructor after the super constructor calls initHtml().
@@ -309,8 +316,10 @@ var test_XElement = {
 		*/
 	},
 
-	properties: function() {
-		class P1 extends XElement {}
+	properties: function () {
+		class P1 extends XElement {
+		}
+
 		P1.html = '<div invalidattr="val1"></div>'; // attr must be lowercase.
 
 		// Make sure attribute is set from html.
@@ -319,15 +328,18 @@ var test_XElement = {
 		assertEq(p.invalidattr, 'val1');
 	},
 
-	embed: function() {
+	embed: function () {
 		// Embed
-		(function() {
-			class E1 extends XElement {}
+		(function () {
+			class E1 extends XElement {
+			}
+
 			E1.html = '<div title="E1">E1</div>';
 			var e1 = new E1();
 			assertEq(e1.shadowRoot.innerHTML, 'E1');
 
-			class E2 extends XElement {} // e2 wraps e1
+			class E2 extends XElement {
+			} // e2 wraps e1
 			E2.html = '<div><x-e1 title="E2">E1</x-e1></div>';
 
 			var e2 = new E2();
@@ -335,11 +347,14 @@ var test_XElement = {
 		})();
 
 		// Embed with binding to both parent and self.
-		(function() {
-			class E3 extends XElement {}
+		(function () {
+			class E3 extends XElement {
+			}
+
 			E3.html = '<div data-attribs="title: titleText">E1</div>';
 
-			class E4 extends XElement {} // e2 wraps e1
+			class E4 extends XElement {
+			} // e2 wraps e1
 			E4.html = '<div><x-e3 id="e3" data-classes="big: isBig">E1</x-e3></div>';
 
 			var e4 = new E4();
@@ -355,13 +370,16 @@ var test_XElement = {
 		})();
 
 
-
 		// Embed with conflicting binding to both parent and self.
-		(function() {
-			class E5 extends XElement {}
+		(function () {
+			class E5 extends XElement {
+			}
+
 			E5.html = '<div data-classes="big1: isBig">E1</div>';
 
-			class E6 extends XElement {}
+			class E6 extends XElement {
+			}
+
 			E6.html = '<div><x-e5 id="e5" data-classes="big2: isBig">E1</x-e5></div>';
 
 			// The data-classes attribute on E5's instantiation overrides the same attribute on E5's definition.
@@ -383,8 +401,10 @@ var test_XElement = {
 		})();
 
 		// Slot
-		(function() {
-			class S1 extends XElement {}
+		(function () {
+			class S1 extends XElement {
+			}
+
 			S1.html = '<div><b><slot>Fallback</slot></b></div>';
 
 			var div = document.createElement('div');
@@ -397,8 +417,10 @@ var test_XElement = {
 		})();
 
 		// Named slots
-		(function() {
-			class S2 extends XElement {}
+		(function () {
+			class S2 extends XElement {
+			}
+
 			S2.html = '<div><i><slot name="f1" id="f1">f1</slot></i><u><slot name="f2" id="f2">f2</slot></u></div>';
 
 			var div = document.createElement('div');
@@ -407,16 +429,18 @@ var test_XElement = {
 			//document.body.append(div); // for visual inspection
 
 			assertEq(s2.shadowRoot.children[0].children[0].assignedNodes()[0].outerHTML, '<b slot="f1">Hello</b>');
-			assertEq(s2.shadowRoot.children[1].children[0].assignedNodes()[0].outerHTML,'<s slot="f2">Goodbye</s>');
+			assertEq(s2.shadowRoot.children[1].children[0].assignedNodes()[0].outerHTML, '<s slot="f2">Goodbye</s>');
 
 		})();
 	},
 
-	misc: function() {
+	misc: function () {
 
 		// data-html bind
 		(function () {
-			class M3 extends XElement {}
+			class M3 extends XElement {
+			}
+
 			M3.html = '<div><span data-html="spanHtml">Text</span></div>';
 
 			var m = new M3();
@@ -427,7 +451,9 @@ var test_XElement = {
 
 		// data-text bind
 		(function () {
-			class M4 extends XElement {}
+			class M4 extends XElement {
+			}
+
 			M4.html = '<div><span data-text="spanHtml">Text</span></div>';
 
 			var m = new M4();
@@ -437,12 +463,14 @@ var test_XElement = {
 		})();
 
 		// Make sure unbinding one element doesn't unsubscribe() other watches.
-		(function() {
-			class M5 extends XElement {}
+		(function () {
+			class M5 extends XElement {
+			}
+
 			M5.html =
 				'<div>' +
-					'<span data-text="item.name"></span>' +
-					'<p data-text="item.name"></p>' +
+				'<span data-text="item.name"></span>' +
+				'<p data-text="item.name"></p>' +
 				'</div>';
 			var m = new M5();
 			m.item = {name: 1};
@@ -453,10 +481,12 @@ var test_XElement = {
 		})();
 	},
 
-	dataVal: function() {
+	dataVal: function () {
 		// data-val bind input
-		(function() {
-			class BV1 extends XElement {}
+		(function () {
+			class BV1 extends XElement {
+			}
+
 			BV1.html = '<div><input id="input" data-val="value"/></div>';
 
 			// Changing the value sets the input.value.
@@ -471,8 +501,10 @@ var test_XElement = {
 		})();
 
 		// data-val bind input checkbox
-		(function() {
-			class BV2 extends XElement {}
+		(function () {
+			class BV2 extends XElement {
+			}
+
 			BV2.html = '<div><input id="checkbox" type="checkbox" data-val="value"/></div>';
 
 			// Changing the value sets the input.value.
@@ -501,13 +533,15 @@ var test_XElement = {
 		})();
 
 		// data-val bind select
-		(function() {
-			class BV3 extends XElement {}
+		(function () {
+			class BV3 extends XElement {
+			}
+
 			BV3.html =
 				'<div>' +
 				'<select id="select" data-val="value">' +
-					'<option value="0">No</option>' +
-					'<option value="1">Yes</option>' +
+				'<option value="0">No</option>' +
+				'<option value="1">Yes</option>' +
 				'</select>' +
 				'</div>';
 
@@ -523,10 +557,12 @@ var test_XElement = {
 		})();
 	},
 
-	dataClasses: function() {
+	dataClasses: function () {
 
-		(function() {
-			class C1 extends XElement {}
+		(function () {
+			class C1 extends XElement {
+			}
+
 			C1.html = `
 				<div>
 					<span id="span" data-classes="a: firstClass; b: object.secondClass"></span>
@@ -551,8 +587,10 @@ var test_XElement = {
 
 
 		// Test with existing class, evaluated code.
-		(function() {
-			class C1 extends XElement {}
+		(function () {
+			class C1 extends XElement {
+			}
+
 			C1.html = `
 				<div>
 					<span id="span" data-classes="a: this.num1 + this.num2 === 12" class="b"></span>
@@ -569,13 +607,15 @@ var test_XElement = {
 		})();
 	},
 
-	dataLoop: function() {
+	dataLoop: function () {
 		// Simple loop
 		(function () {
-			class BL1 extends XElement {}
+			class BL1 extends XElement {
+			}
+
 			BL1.html =
 				'<div data-loop="items:item">' +
-					'<span data-text="item"></span>' +
+				'<span data-text="item"></span>' +
 				'</div>';
 
 			var b = new BL1();
@@ -598,7 +638,9 @@ var test_XElement = {
 
 		// Loop with sub-properties, whitespace around nodes
 		(function () {
-			class BL2 extends XElement {}
+			class BL2 extends XElement {
+			}
+
 			BL2.html =
 				'<div data-loop="items:item">' +
 				'   <span data-text="item.a"></span>    ' +
@@ -611,12 +653,14 @@ var test_XElement = {
 
 		// Loop with input val binding to children.
 		(function () {
-			class BL3 extends XElement {}
+			class BL3 extends XElement {
+			}
+
 			BL3.html =
 				'<div>' +
-					'<div data-loop="items:item" id="loop">' +
-						'<input data-val="item.a"/>' +
-					'</div>' +
+				'<div data-loop="items:item" id="loop">' +
+				'<input data-val="item.a"/>' +
+				'</div>' +
 				'</div>';
 
 			var b = new BL3();
@@ -630,15 +674,19 @@ var test_XElement = {
 
 		// Loop on nested XElement with val binding.
 		(function () {
-			class BL4 extends XElement {}
+			class BL4 extends XElement {
+			}
+
 			BL4.html =
 				'<div>' +
-					'<div data-loop="items:item" id="loop">' +
-						'<input data-val="item.val"/>' +
-					'</div>' +
+				'<div data-loop="items:item" id="loop">' +
+				'<input data-val="item.val"/>' +
+				'</div>' +
 				'</div>';
 
-			class BL5 extends XElement {}
+			class BL5 extends XElement {
+			}
+
 			BL5.html = `
 				<div>
 					<x-bl4 id="bl4"></x-bl4>
@@ -646,7 +694,7 @@ var test_XElement = {
 
 			var bl5 = new BL5();
 			var bl4 = bl5.bl4;
-			bl4.items = [{val: 1}, {val:2}];
+			bl4.items = [{val: 1}, {val: 2}];
 			assertEq(bl4.loop.children[0].value, '1');
 			assertEq(bl4.loop.children[1].value, '2');
 
@@ -656,8 +704,10 @@ var test_XElement = {
 		})();
 
 		// Make sure items within loop are unbound and unwatched.
-		(function() {
-			class BL5 extends XElement {}
+		(function () {
+			class BL5 extends XElement {
+			}
+
 			BL5.html = `
 				<div>
 					<div id="loop" data-loop="items: item">
@@ -681,8 +731,10 @@ var test_XElement = {
 		})();
 
 		// Test functions that modify more than one array element.
-		(function() {
-			class BL6 extends XElement {}
+		(function () {
+			class BL6 extends XElement {
+			}
+
 			BL6.html = `
 				<div data-loop="items: item">
 					<input data-val="item.name">					
@@ -737,8 +789,10 @@ var test_XElement = {
 
 
 		// Reassign whole loop variable multiple times to make sure we don't lose the subscription.
-		(function() {
-			class BL7 extends XElement {}
+		(function () {
+			class BL7 extends XElement {
+			}
+
 			BL7.html = `
 			<div>
 				<div id="loop" data-loop="items: item">
@@ -774,8 +828,10 @@ var test_XElement = {
 		})();
 
 		// bound data is not a direct child of loop (this used to fail due to a bug in getContext()).
-		(function() {
-			class BL8 extends XElement {}
+		(function () {
+			class BL8 extends XElement {
+			}
+
 			BL8.html = `
 				<div data-loop="items: item">
 					<div>
@@ -791,8 +847,10 @@ var test_XElement = {
 
 
 		// Loop with index.
-		(function() {
-			class BL9 extends XElement {}
+		(function () {
+			class BL9 extends XElement {
+			}
+
 			BL9.html = `
 				<div data-loop="items: i, item">
 					<span data-text="i"></span>
@@ -806,7 +864,9 @@ var test_XElement = {
 
 		// Make sure loop items property unsubscribe as they're removed.  This used to fail.
 		(function () {
-			class BL10 extends XElement {}
+			class BL10 extends XElement {
+			}
+
 			BL10.html =
 				'<div data-loop="items:item">' +
 				'<span data-text="item.name"></span>' +
@@ -832,7 +892,9 @@ var test_XElement = {
 		// Loop over var that doesn't initially exist.
 		(function () {
 
-			class BL11 extends XElement {}
+			class BL11 extends XElement {
+			}
+
 			BL11.html = `				
 				<div data-loop="parts.wheels: wheel">
 				    <span></span>
@@ -843,14 +905,18 @@ var test_XElement = {
 		})();
 
 		// Async
-		(function() {
-			class Wheel12 extends XElement {}
+		(function () {
+			class Wheel12 extends XElement {
+			}
+
 			Wheel12.html = `				
 			<div>
 			    <b>Wheel</b>
 			</div>`;
 
-			class Car12 extends XElement {}
+			class Car12 extends XElement {
+			}
+
 			Car12.html = `				
 			<div data-loop="wheels: wheel">
 			    <x-wheel12 data-attribs="title: wheel"></x-wheel12>
@@ -858,7 +924,7 @@ var test_XElement = {
 			var c = new Car12();
 			c.wheels = [];
 			c.wheels.push(1);
-			setTimeout(function() {
+			setTimeout(function () {
 				c.wheels.push(1);
 
 				// This used to fail when done asynchronously, back when we used connectedCallback()
@@ -867,11 +933,14 @@ var test_XElement = {
 		})();
 
 
-
 		// Splice to rearrange loop with identical items
-		(function () {class BL1 extends XElement {}
+		(function () {
+			class BL1 extends XElement {
+			}
 
-			class BL13 extends XElement {}
+			class BL13 extends XElement {
+			}
+
 			BL13.html = `				
 				<div data-loop="wheels: wheel">
 				    <span data-text="wheel"></span>
@@ -889,10 +958,11 @@ var test_XElement = {
 		})();
 
 
-
 		// Two loops over same array.
 		(function () {
-			class BL14 extends XElement {}
+			class BL14 extends XElement {
+			}
+
 			BL14.html = `
 				<div>
 					<div id="loop1" data-loop="items:item">
@@ -927,12 +997,14 @@ var test_XElement = {
 		// TODO: Test loop over non-simple var.
 	},
 
-	dataLoopNested: function() {
+	dataLoopNested: function () {
 
 		// Nested loop over two separate properties
-		(function() {
+		(function () {
 
-			class BL30 extends XElement {}
+			class BL30 extends XElement {
+			}
+
 			BL30.html = `
 				<div data-loop="numbers:number">
 					<div data-loop="letters:letter">
@@ -977,13 +1049,15 @@ var test_XElement = {
 		})();
 
 		// Nested loop over sub properties.
-		(function() {
-			class BL31 extends XElement {}
+		(function () {
+			class BL31 extends XElement {
+			}
+
 			BL31.html =
 				'<div data-loop="families:family">' +
-					'<div data-loop="family.species:species">' +
-						'<span data-text="family.name+\':\'+species">Hi</span>' +
-					'</div>' +
+				'<div data-loop="family.species:species">' +
+				'<span data-text="family.name+\':\'+species">Hi</span>' +
+				'</div>' +
 				'</div>';
 
 			var b = new BL31();
@@ -1000,19 +1074,21 @@ var test_XElement = {
 
 			assertEq(b.shadowRoot.innerHTML,
 				'<div data-loop="family.species:species">' +
-					'<span data-text="family.name+\':\'+species">equids:horse</span>' +
-					'<span data-text="family.name+\':\'+species">equids:donkey</span>' +
-					'<span data-text="family.name+\':\'+species">equids:zebra</span>' +
+				'<span data-text="family.name+\':\'+species">equids:horse</span>' +
+				'<span data-text="family.name+\':\'+species">equids:donkey</span>' +
+				'<span data-text="family.name+\':\'+species">equids:zebra</span>' +
 				'</div>' +
-					'<div data-loop="family.species:species">' +
-					'<span data-text="family.name+\':\'+species">cats:lion</span>' +
-					'<span data-text="family.name+\':\'+species">cats:tiger</span>' +
+				'<div data-loop="family.species:species">' +
+				'<span data-text="family.name+\':\'+species">cats:lion</span>' +
+				'<span data-text="family.name+\':\'+species">cats:tiger</span>' +
 				'</div>');
 		})();
 
 		// Nested loop with index.
-		(function() {
-			class BL32 extends XElement {}
+		(function () {
+			class BL32 extends XElement {
+			}
+
 			BL32.html = `
 				<div data-loop="items: i, item">
 					<p data-loop="items: j, item2">
@@ -1028,8 +1104,10 @@ var test_XElement = {
 		})();
 
 		// Nested loop with duplicate loopVar.
-		(function() {
-			class BL33 extends XElement {}
+		(function () {
+			class BL33 extends XElement {
+			}
+
 			BL33.html = `
 				<div data-loop="items: i, item">
 					<div data-loop="items: i2, item">
@@ -1050,8 +1128,10 @@ var test_XElement = {
 		})();
 
 		// Nested loop with duplicate index.
-		(function() {
-			class BL34 extends XElement {}
+		(function () {
+			class BL34 extends XElement {
+			}
+
 			BL34.html = `
 				<div data-loop="items: i, item">
 					<div data-loop="items: i, item2">
@@ -1072,29 +1152,33 @@ var test_XElement = {
 		})();
 	},
 
-	events:  function() {
+	events: function () {
 		(function () {
 			class EV1 extends XElement {
 				click(e) {
 					this.event = e;
 					this.target = e.target;
 				}
+
 				click2() {
 					this.itWorked2 = true;
 				}
+
 				click3() {
 					this.itWorked3 = true;
 				}
+
 				click4() {
 					this.itWorked4 = true;
 				}
 			}
+
 			EV1.html =
 				'<div>' +
-					'<span id="bt1" onclick="click(event)">Button</span>' +
-					'<span id="bt2" onclick="click2()">Button</span>' +
-					'<span id="bt3" onclick="this.click3()">Button</span>' +
-					'<span id="bt4" onclick="var a=1; this.click4(); var b=2;">Button</span>' +
+				'<span id="bt1" onclick="click(event)">Button</span>' +
+				'<span id="bt2" onclick="click2()">Button</span>' +
+				'<span id="bt3" onclick="this.click3()">Button</span>' +
+				'<span id="bt4" onclick="var a=1; this.click4(); var b=2;">Button</span>' +
 				'</div>';
 
 			var e = new EV1();
@@ -1118,8 +1202,10 @@ var test_XElement = {
 		})();
 
 		// Make sure events can access the loop context.
-		(function() {
-			class EV2 extends XElement {}
+		(function () {
+			class EV2 extends XElement {
+			}
+
 			EV2.html = `
 				<div data-loop="items: i, item">
 					<span onclick="this.result = i + item"></span>
@@ -1136,12 +1222,13 @@ var test_XElement = {
 		})();
 
 		// Event attribute on definition and instantiation:
-		(function() {
+		(function () {
 			class EV3Inner extends XElement {
 				inner() {
 					this.clicked = true;
 				}
 			}
+
 			EV3Inner.html = `<div onclick="this.inner()"></div>`;
 
 			class EV3Outer extends XElement {
@@ -1149,6 +1236,7 @@ var test_XElement = {
 					this.clicked = true;
 				}
 			}
+
 			EV3Outer.html = '<div><x-ev3inner id="inner" onclick="this.outer()"></x-ev3inner></div>';
 
 			var outer = new EV3Outer();
@@ -1160,8 +1248,10 @@ var test_XElement = {
 		})();
 
 		// Make sure we don't try to call the function on the inner element.
-		(function() {
-			class EV4Inner extends XElement {}
+		(function () {
+			class EV4Inner extends XElement {
+			}
+
 			EV4Inner.html = `<div>hi</div>`;
 
 			class EV4Outer extends XElement {
@@ -1169,6 +1259,7 @@ var test_XElement = {
 					this.clicked = true;
 				}
 			}
+
 			EV4Outer.html = '<div><x-ev4inner id="inner" onclick="this.outer()"></x-ev4inner></div>';
 
 			var outer = new EV4Outer();
@@ -1179,8 +1270,10 @@ var test_XElement = {
 
 		// Test events in loop.
 		// onclick="this.result = i + car + ':' + j + wheel"
-		(function() {
-			class EV5 extends XElement {}
+		(function () {
+			class EV5 extends XElement {
+			}
+
 			EV5.html = `
 				<div data-loop="letters: letter">
 					<span onclick="this.result = letter"></span>					
@@ -1197,8 +1290,10 @@ var test_XElement = {
 
 		// Test events in double loop (used to fail)
 		// onclick="this.result = i + car + ':' + j + wheel"
-		(function() {
-			class EV6 extends XElement {}
+		(function () {
+			class EV6 extends XElement {
+			}
+
 			EV6.html = `
 				<div data-loop="numbers: n, number">
 					<div data-loop="letters: l, letter">
@@ -1233,11 +1328,15 @@ var test_XElement = {
 		})();
 
 		// Test events in loop.
-		(function() {
-			class EV7Inner extends XElement {}
+		(function () {
+			class EV7Inner extends XElement {
+			}
+
 			EV7Inner.html = `<div onclick="this.val = this.letter"></div>`;
 
-			class EV7Outer extends XElement {}
+			class EV7Outer extends XElement {
+			}
+
 			EV7Outer.html = `
 				<div data-loop="letters: letter">
 					<x-ev7inner data-prop="letter: letter"></x-ev7inner>					
@@ -1257,18 +1356,22 @@ var test_XElement = {
 		})();
 	},
 
-	dataProp: function() {
+	dataProp: function () {
 
 		(function () {
 
 			// Make sure only the right side of data-prop has replaceVars/addThis applied.
-			class Bd1Wheel extends XElement {}
+			class Bd1Wheel extends XElement {
+			}
+
 			Bd1Wheel.html = `				
 			<div>
 			    <b data-text="wheel"></b>
 			</div>`;
 
-			class Bd1Car extends XElement {}
+			class Bd1Car extends XElement {
+			}
+
 			Bd1Car.html = `				
 			<div data-loop="wheels: wheel">
 			    <x-bd1wheel data-prop="wheel: wheel"></x-bd1wheel>
@@ -1284,13 +1387,17 @@ var test_XElement = {
 
 		// Watched self-assignment
 		(function () {
-			class Bd2Wheel extends XElement {}
+			class Bd2Wheel extends XElement {
+			}
+
 			Bd2Wheel.html = `				
 			<div>
 			    <b data-text="car.name"></b>
 			</div>`;
 
-			class Bd2Car extends XElement {}
+			class Bd2Car extends XElement {
+			}
+
 			Bd2Car.html = `				
 			<div>
 			    <x-bd2wheel id="wheel" data-prop="car: car"></x-bd2wheel>
@@ -1303,7 +1410,9 @@ var test_XElement = {
 
 		// Make sure we can share a list between two XElements.  This used to fail.
 		(function () {
-			class BD3Inner extends XElement {}
+			class BD3Inner extends XElement {
+			}
+
 			BD3Inner.html = `
 			<div>
 				<div id="loop"  data-loop="items: item">					
@@ -1312,7 +1421,9 @@ var test_XElement = {
 			</div>`;
 
 
-			class BD3Outer extends XElement {}
+			class BD3Outer extends XElement {
+			}
+
 			BD3Outer.html = `
 			<div>
 				<div id="loop" data-loop="t2.items: item">
@@ -1332,7 +1443,9 @@ var test_XElement = {
 		// At one point, instantiating T() would cause watchlessSet() to try to overwrite sub,
 		// giving a property not writable error.
 		(function () {
-			class BD4Inner extends XElement {}
+			class BD4Inner extends XElement {
+			}
+
 			BD4Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1341,7 +1454,9 @@ var test_XElement = {
 			</div>`;
 
 
-			class BD4Outer extends XElement {}
+			class BD4Outer extends XElement {
+			}
+
 			BD4Outer.html = `
 			<div>
 				<x-bd4inner id="sub" data-prop="t1: this"></x-bd4inner>
@@ -1352,7 +1467,9 @@ var test_XElement = {
 
 		// Bind directly to "this"
 		(function () {
-			class BD5Inner extends XElement {}
+			class BD5Inner extends XElement {
+			}
+
 			BD5Inner.html = `
 				<div>
 					<div id="loop" data-loop="t1.items: item">					
@@ -1360,7 +1477,9 @@ var test_XElement = {
 					</div>
 				</div>`;
 
-			class BD5Outer extends XElement {}
+			class BD5Outer extends XElement {
+			}
+
 			BD5Outer.html = `
 				<div>
 					<x-bd5inner id="t2" data-prop="t1: this"></x-bd5inner>
@@ -1375,7 +1494,9 @@ var test_XElement = {
 		// Same as above, but loop is used twice.
 		// This used to fail because the proxy instead of the original object was being watched the second time.
 		(function () {
-			class BD6Inner extends XElement {}
+			class BD6Inner extends XElement {
+			}
+
 			BD6Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1383,7 +1504,9 @@ var test_XElement = {
 				</div>
 			</div>`;
 
-			class BD6Outer extends XElement {}
+			class BD6Outer extends XElement {
+			}
+
 			BD6Outer.html = `
 			<div>
 				<div id="loop" data-loop="items: item">					
@@ -1401,7 +1524,9 @@ var test_XElement = {
 
 		// Make sure multiple subsribers are updated when an input changes.
 		(function () {
-			class BD7Inner extends XElement {}
+			class BD7Inner extends XElement {
+			}
+
 			BD7Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1409,7 +1534,9 @@ var test_XElement = {
 				</div>
 			</div>`;
 
-			class BD7Outer extends XElement {}
+			class BD7Outer extends XElement {
+			}
+
 			BD7Outer.html = `
 			<div>
 				<div id="loop" data-loop="items: item">					
@@ -1435,7 +1562,9 @@ var test_XElement = {
 		// Three level bind
 		(function () {
 
-			class BD8C extends XElement {}
+			class BD8C extends XElement {
+			}
+
 			BD8C.html = `				
 			<div>
 			    <span id="names" data-loop="c.names: name">
@@ -1443,13 +1572,17 @@ var test_XElement = {
 				</span>
 			</div>`;
 
-			class BD8B extends XElement {}
+			class BD8B extends XElement {
+			}
+
 			BD8B.html = `				
 			<div>
 			    <x-bd8c id="xc" data-prop="c: this.b.c"></x-bd8c>
 			</div>`;
 
-			class BD8A extends XElement {}
+			class BD8A extends XElement {
+			}
+
 			BD8A.html = `				
 			<div>
 			    <x-bd8b id="xb" data-prop="b: this.a.b"></x-bd8b>
@@ -1471,13 +1604,17 @@ var test_XElement = {
 		// Data bind to loop item.
 		(function () {
 
-			class BD9B extends XElement {}
+			class BD9B extends XElement {
+			}
+
 			BD9B.html = `				
 			<div>
 			    <span id="nameText" data-text="item.name"></span>
 			</div>`;
 
-			class BD9A extends XElement {}
+			class BD9A extends XElement {
+			}
+
 			BD9A.html = `				
 			<div>
 			    <span id="loop" data-loop="a.items: item">
@@ -1493,16 +1630,19 @@ var test_XElement = {
 		})();
 
 
-
 		// Double deep loop binding.
 		(function () {
-			class BD10C extends XElement {}
+			class BD10C extends XElement {
+			}
+
 			BD10C.html = `				
 			<div>
 				<span data-text="wheel"></span>
 			</div>`;
 
-			class BD10B extends XElement {}
+			class BD10B extends XElement {
+			}
+
 			BD10B.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
@@ -1510,7 +1650,9 @@ var test_XElement = {
 				</span>
 			</div>`;
 
-			class BD10A extends XElement {}
+			class BD10A extends XElement {
+			}
+
 			BD10A.html = `				
 			<div data-loop="cars: car">
 				<x-bd10b data-prop="car: car"></x-bd10b>
@@ -1528,7 +1670,9 @@ var test_XElement = {
 		// Double deep loop binding 2
 		(function () {
 
-			class BD11Inner extends XElement {}
+			class BD11Inner extends XElement {
+			}
+
 			BD11Inner.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
@@ -1536,7 +1680,9 @@ var test_XElement = {
 				</span>
 			</div>`;
 
-			class BD11 extends XElement {}
+			class BD11 extends XElement {
+			}
+
 			BD11.html = `				
 			<div data-loop="cars: car">
 				<x-bd11inner data-prop="car: car"></x-bd11inner>
@@ -1557,18 +1703,20 @@ var test_XElement = {
 		})();
 
 
-
-
 		// Ensure props are unsubscribed as items are removed.
 		(function () {
 
-			class BD12B extends XElement {}
+			class BD12B extends XElement {
+			}
+
 			BD12B.html = `				
 			<div>
 			    <span id="nameText" data-text="item.name"></span>
 			</div>`;
 
-			class BD12A extends XElement {}
+			class BD12A extends XElement {
+			}
+
 			BD12A.html = `				
 			<div>
 			    <span id="loop" data-loop="a.items: item">
@@ -1596,11 +1744,15 @@ var test_XElement = {
 		})();
 
 		// Pass prop to an XElement that doesn't bind it or anything else.
-		(function() {
-			class BD13Inner extends XElement {}
+		(function () {
+			class BD13Inner extends XElement {
+			}
+
 			BD13Inner.html = `<div>hi</div>`;
 
-			class BD13 extends XElement {}
+			class BD13 extends XElement {
+			}
+
 			BD13.html = `
 			<div x-loop="nodes: node">
 				<x-bd13inner x-prop="xProgram: this"></x-bd13inner>
@@ -1609,67 +1761,37 @@ var test_XElement = {
 			var lb = new BD13();
 			lb.nodes = ['A', 'B', 'C'];
 		})();
-	},
-
-	temp: function() {
 
 
-
-		// Double deep loop binding.
+		// Test setting a property from a parent reference.  This used to fail.
 		(function () {
-			class BD10C extends XElement {}
-			BD10C.html = `				
-			<div>
-				<span data-text="wheel"></span>
-			</div>`;
+			class BD14Inner extends XElement {
+			}
 
-			class BD10B extends XElement {}
-			BD10B.html = `				
-			<div>
-			    <span id="loop" data-loop="car.wheels: wheel">
-			        <x-bd10c data-prop="wheel: wheel"></x-bd10c>
-				</span>
-			</div>`;
+			BD14Inner.html = `
+				<div x-loop="parentA.unused: unused">
+					<div x-text="parentA.item"></div>
+				</div>`;
 
-			class BD10A extends XElement {}
-			BD10A.html = `				
-			<div data-loop="cars: car">
-				<x-bd10b data-prop="car: car"></x-bd10b>
-			</div>`;
+			class BD14 extends XElement {
+			}
 
-			var xa = new BD10A();
-			xa.cars = [{wheels: [1]}];
+			BD14.html = `
+				<div>
+					<x-bd14inner id="b" x-prop="parentA: this"></x-bd14inner>
+				</div>`;
 
+			var lb = new BD14();
 
-			var bloop = xa.shadowRoot.children[0].loop;
-			var c = bloop.children[0];
-			assertEq(c.shadowRoot.children[0].textContent, '1');
+			lb.unused = [1];
+			lb.item = 'A';
+
+			//console.log(lb.b.shadowRoot.children[0].textContent);
+			assertEq(lb.b.shadowRoot.children[0].textContent, 'A');
 		})();
-	},
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	temp2: function() {
-
-		(function() {
+		// Ditto, but with a more complex case.
+		(function () {
 			class XNode extends XElement {
 			}
 
@@ -1716,210 +1838,14 @@ var test_XElement = {
 			};
 			lb.variables.push('D');
 
-
-			//document.body.appendChild(lb);
 			assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children.length, 4);
 			assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children[3].textContent, 'D');
 		})();
 	},
 
-
-
-
-
-
-
-
-
-	temp3: function() {
-
-		class C extends XElement {}
-		C.html = `
-			<div>
-				<div x-text="parentB.parentA.item"></div>
-			</div>`;
-
-		class B extends XElement {}
-		B.html = `
-			<div x-loop="parentA.unused: unused">
-				<x-c x-prop="parentB: this"></x-c>
-			</div>`;
-
-		class A extends XElement {}
-		A.html = `
-			<div>
-				<x-b x-prop="parentA: this"></x-b>				
-			</div>`;
-
-
-		var lb = new A();
-
-		lb.item = 'A';
-		lb.unused = [1]; // put this first and nothing shows up at all.
-		//window.debugger = true;
-		lb.item = 'B';
-
-
-
-		document.body.appendChild(lb);
-		//console.log(lb.xProgram.shadowRoot.children[0].shadowRoot.children[0].children);
-
-	},
-
-
-
-
-
-	temp4: function() {
-
-
-
-
-		// Test setting a property from a parent reference.  This used to fail.
-		(function() {
-			class BD14Inner extends XElement {}
-			BD14Inner.html = `
-				<div x-loop="parentA.unused: unused">
-					<div x-text="parentA.item"></div>
-				</div>`;
-
-			class BD14 extends XElement {}
-			BD14.html = `
-				<div>
-					<x-bd14inner id="b" x-prop="parentA: this"></x-bd14inner>
-				</div>`;
-
-			var lb = new BD14();
-
-			lb.unused = [1];
-			lb.item = 'A';
-
-			console.log(lb.b.shadowRoot.children[0].textContent);
-			//assertEq(lb.b.shadowRoot.children[0].textContent, 'A');
-		})();
-	},
-
-	temp5: function() {
-
-		// @name RebindDataPropForLoop
-		// Test setting a property from a parent reference.  This used to fail.
-		(function() {
-			class BD14Inner extends XElement {}
-			BD14Inner.html = `
-				<div x-loop="parentA.unused: unused">
-					<div x-text="parentA.item"></div>
-				</div>`;
-
-			class BD14 extends XElement {}
-			BD14.html = `
-				<div>
-					<x-bd14inner id="b" x-prop="parentA: this"></x-bd14inner>
-				</div>`;
-
-			var lb = new BD14();
-
-			lb.unused = [1];
-
-			//window.debugger = true;
-			//XElement.bindings.prop(lb, 'parentA: this', lb.b, {});
-			lb.item = 'A';
-
-
-			assertEq(lb.b.shadowRoot.children[0].textContent, 'A');
-		})();
-	},
-
-/*
-	temp6: function() {
-		(function() {
-			var a = {b: {c: 'd'} };
-			var ops = [];
-
-			var ap = watchProxy(a, function(action, path, value) {
-				console.log('a', action, path, value);
-			});
-
-			var bp = watchProxy(a.b, function(action, path, value) {
-				console.log('b', action, path, value);
-			});
-
-			// Even though b is watched, the reference to it through a is not watched.
-			// So only b gets notified.
-			bp.c = 'd2';
-		})();
-	},
-
-	temp7: function() {
-		(function() {
-			let ops = [];
-
-			var a = {b: {c: 'd'} };
-			var b = a.b;
-
-			watch(a, ['b', 'c'], function(action, path, value) {
-				console.log('a', action, path, value);
-			});
-
-			// b points to the old, non-proxied version.
-			b.c = 'd2';
-			console.log('---1');
-
-			a.b.c = 'd2';
-			console.log('---1');
-
-			watch(a.b, ['c'], function(action, path, value) {
-				console.log('b', action, path, value);
-			});
-
-			// Even though b is watched, the reference to it through a is not watched.
-
-
-			a.b.c = 'd3';
-			console.log('---2');
-			a.b = {c: 'd4'};
-			console.log('---1');
-
-		})();
+	temp: function () {
+		
 	}
-*/
 
-	temp6: function() {
-		// Double deep loop binding.
-		(function () {
-			class C extends XElement {}
-			C.html = `				
-				<div>
-					<span x-text="wheel"></span>C
-				</div>`;
+}
 
-			class B extends XElement {}
-			B.html = `				
-				<div>
-				    <span id="loop" x-loop="car.wheels: wheel">
-				        <x-c x-prop="wheel: wheel"></x-c>
-					</span>B
-				</div>`;
-
-			class A extends XElement {}
-			A.html = `				
-				<div x-loop="cars: car">
-					<x-b x-prop="car: car"></x-b>
-				</div>`;
-
-			var a = new A();
-
-			window.debugger = true;
-
-			a.cars = [{wheels: [1]}];
-
-
-			var bloop = a.shadowRoot.children[0].loop;
-			var c = bloop.children[0];
-
-			console.log(c);
-			//assertEq(c.shadowRoot.children[0].textContent, '1');
-			document.body.append(a);
-		})();
-
-	},
-};
