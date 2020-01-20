@@ -2,9 +2,9 @@
 Inherit from XElement to create custom HTML Components.
 
 TODO: next goals:
-x-attribs="value: passthrough(loopVar)" acts strange.
+parseVars("this.passthrough(x)") doesn't find x.
 
-{{var}} in text and attributes
+{{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
 allow comments in loops.
 x-elements in loops get fully initialized then replaced.
@@ -154,7 +154,7 @@ var getLoopParent = (el) => { // will error if not in an XParent.
 	return null;
 };
 
-// TODO: modify to allow getting any prop
+// TODO: modify to allow getting any prop?
 var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.getAttribute('data-loop'));
 
 
@@ -480,12 +480,11 @@ class XElement extends HTMLElement {
 				error.message += '\nMake sure to set the .html property before instantiating the class "' + this.name + '".';
 			throw error;
 		}
-
+		//#ENDIF
 
 		this.queuedOps = new Set();
 		this.queueDepth = 0;
-
-		//#ENDIF
+		
 		let xname = getXName(this.constructor);
 		let self = this;
 		if (customElements.get(xname))
@@ -518,6 +517,41 @@ class XElement extends HTMLElement {
 	}
 }
 
+
+let queuedOps = new Set();
+let queueDepth = 0;
+
+/*
+XElement.enqueue = function(callback) {
+	return function() {
+		if (queueDepth === 0)
+			return callback();
+		else
+			queuedOps.add(callback);
+	};
+};
+*/
+
+XElement.batch = function(callback) {
+	return function() {
+		if (queueDepth)
+			queuedOps.add(callback);
+		else {
+			queueDepth++;
+
+			let result = callback(arguments[0], arguments[1], arguments[2], arguments[3]);
+
+			queueDepth--;
+			if (queueDepth === 0) {
+				for (let op of queuedOps)
+					op();
+				queuedOps = new Set();
+			}
+
+			return result;
+		}
+	}
+};
 
 
 // TODO: write a function to replace common code among these.
@@ -571,11 +605,11 @@ var bindings = {
 				let expr = addThis(replaceVars(obj[prop], context), context);
 				let updateProp = /*self.enqueue(*/(action, path, value) => {
 					// // Only reassign the value and trigger notfications if it's actually changed.
-					// let oldVal = el[prop];
-					// if (oldVal !== undefined)
-					// 	oldVal = oldVal.$removeProxy || oldVal;
+					//let oldVal = el[prop];
+					//if (isObj(oldVal))
+					//	oldVal = oldVal.$removeProxy || oldVal;
 					let newVal = safeEval.call(self, expr);
-					if (newVal !== undefined)
+					if (isObj(newVal))
 					 	newVal = newVal.$removeProxy || newVal;
 					// if (oldVal !== newVal)
 						el[prop] = newVal;
@@ -834,6 +868,7 @@ var bindings = {
 			var oldItems = (el.items_ || []);
 			oldItems = oldItems.$removeProxy || oldItems;
 
+			// Do nothing if the array hasn't changed.
 			if (arrayEq(oldItems, newItems, true))
 				return;
 
@@ -877,16 +912,17 @@ var bindings = {
 					// Create a new one if needed.
 					// TODO: createEl() binds nexted x-elements before we're ready for them to be bound.
 					// E.g. below we set the localContext for loop variables.
-					if (isNew)
+					if (isNew) {
 						newChild = createEl(el.loopHtml_);
 
+					}
 					// This can either insert the new one or move an old one to this position.
 					el.insertBefore(newChild, oldChild);
 				}
 			}
 
 			// If there are identical items in the array, some extras can be left at the end.
-			for (let i=oldItems.length-1; i>=newItems.length; i--) {
+			for (let i=el.children.length-1; i>=newItems.length; i--) {
 				let child = el.children[i];
 				if (child) {
 					unbindEl(child);
@@ -895,7 +931,6 @@ var bindings = {
 			}
 
 			let localContext = {...context};
-			//el.context_ = context;
 
 			//#IFDEV
 			if (loopVar in localContext)
@@ -917,16 +952,10 @@ var bindings = {
 						localContext[indexVar] = i;
 
 					// Save the context on every loop item.
+					// This is necessary for updating the x-prop watch below.
 					child.context_ = localContext;
 
 					bindEl(self, child, localContext);
-
-					
-					// Alt version that makes some things fail:
-					// Operates within the child.
-					//bindEl(child, child, localContext);
-					// Operates on the child's attributes within self.  E.g. data-prop
-					//bindEl(self, child, localContext);
 				}
 				delete child.index_;
 			}

@@ -1745,14 +1745,10 @@ var test_XElement = {
 
 		// Pass prop to an XElement that doesn't bind it or anything else.
 		(function () {
-			class BD13Inner extends XElement {
-			}
-
+			class BD13Inner extends XElement {}
 			BD13Inner.html = `<div>hi</div>`;
 
-			class BD13 extends XElement {
-			}
-
+			class BD13 extends XElement {}
 			BD13.html = `
 			<div x-loop="nodes: node">
 				<x-bd13inner x-prop="xProgram: this"></x-bd13inner>
@@ -1765,17 +1761,13 @@ var test_XElement = {
 
 		// Test setting a property from a parent reference.  This used to fail.
 		(function () {
-			class BD14Inner extends XElement {
-			}
-
+			class BD14Inner extends XElement {}
 			BD14Inner.html = `
 				<div x-loop="parentA.unused: unused">
 					<div x-text="parentA.item"></div>
 				</div>`;
 
-			class BD14 extends XElement {
-			}
-
+			class BD14 extends XElement {}
 			BD14.html = `
 				<div>
 					<x-bd14inner id="b" x-prop="parentA: this"></x-bd14inner>
@@ -1792,9 +1784,7 @@ var test_XElement = {
 
 		// Ditto, but with a more complex case.
 		(function () {
-			class XNode extends XElement {
-			}
-
+			class XNode extends XElement {}
 			XNode.html = `
 				<div>				
 					<select x-loop="xProgram.xLadderBuilder.variables: drawerVariable">
@@ -1803,9 +1793,7 @@ var test_XElement = {
 				</div>`;
 
 			// Below:  Looping over x-loop="xLadderBuilder.program.nodes: node" will work.
-			class XProgram extends XElement {
-			}
-
+			class XProgram extends XElement {}
 			XProgram.html = `
 				<div>		
 					<div id="nodesContainer" x-loop="program.nodes: node">
@@ -1813,9 +1801,7 @@ var test_XElement = {
 					</div>
 				</div>`;
 
-			class XLadderBuilder extends XElement {
-			}
-
+			class XLadderBuilder extends XElement {}
 			XLadderBuilder.html = `
 				<div>
 					<div x-loop="variables: i, variable">
@@ -1826,10 +1812,7 @@ var test_XElement = {
 
 			var lb = new XLadderBuilder();
 
-			lb.variables = [
-				'A', 'B', 'C'
-			];
-
+			lb.variables = ['A', 'B', 'C'];
 
 			lb.program = {
 				nodes: [
@@ -1844,7 +1827,39 @@ var test_XElement = {
 	},
 
 	temp: function () {
-		
+		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
+		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
+		window.count = 0;
+
+		window.passthrough = function(item) {
+			if (window.debug2)
+				window.count++;
+			return item;
+		};
+
+		class B extends XElement{}
+		B.html = `
+			<div x-loop="a.items: item">
+				<span x-text="item + passthrough('')"></span>			
+			</div>`;
+
+		class A extends XElement{}
+		A.html = `
+			<div>
+				<x-b x-prop="a: this"></x-b>		
+			</div>`;
+
+		var a = new A();
+		document.body.appendChild(a);
+		a.items = [1, 2, 3];
+
+		window.count = 0;
+		window.debug2 = true;
+
+		//XElement.batch(function() {
+			a.items.shift();
+		//})();
+		console.log(window.count);
 	}
 
 }
