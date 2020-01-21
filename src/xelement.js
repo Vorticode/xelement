@@ -212,7 +212,8 @@ var getPropSubscribers = function(el, props, context) {
 		if (code) {
 			code = replaceVars(code, context);
 			let codeObj = parseObj(code);
-			for (let item of codeObj) {
+			for (let key in codeObj) {
+				let item = codeObj[key];
 				let paths = parseVars(item);
 				for (let path of paths) {
 					if (props.includes(path[0]) && path[1])
@@ -329,6 +330,9 @@ var bindElProps = (self, el, context) => {
 		for (let child of next.children)
 			bindElProps(self, child, context);
 };
+
+
+
 /**
  * We rebind event attributes because otherwise there's no way
  * to make them call the class methods.
@@ -548,6 +552,8 @@ var initHtml = (self) => {
 				node.removeAttribute('id');
 		}
 
+		self.propSubscriptions = Array.from(getPropSubscribers(self));
+
 
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
@@ -694,6 +700,7 @@ var bindings = {
 	 * @param el {HTMLElement} An XElement that's a child of self, that has a data-prop attribute.
 	 * @param context {object<string, string>} */
 	prop: (self, code, el, context) => {
+
 		// allow binding only on XElement
 		if (self !== el && el instanceof XElement) {
 
@@ -717,9 +724,6 @@ var bindings = {
 						el[prop] = newVal;
 				}/*)*/;
 
-				// Set initial values.
-				updateProp();
-
 
 				// We handle data-prop="item: this" in a special way.
 				// We can't subscribe directly to the this object.
@@ -729,8 +733,8 @@ var bindings = {
 				// <x-item x-prop="parent: this"><span x-text="parent.a"></x-prop>
 				// Then we watch this.a on x-item's parent and update the x-item's parent.a when it changes.
 				if (expr === 'this') {
-					let subs = getPropSubscribers(el);
-					for (let sub of subs) {
+					//let subs = getPropSubscribers(el);
+					for (let sub of el.propSubscriptions) {
 						watch(self, sub, updateProp);
 						addElWatch(el, sub, updateProp);
 					}
@@ -743,6 +747,11 @@ var bindings = {
 						addElWatch(el, path, updateProp);
 					}
 				}
+
+
+
+				// Set initial values.
+				updateProp();
 			}
 		}
 	},
@@ -833,38 +842,42 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	loop: (self, code, el, context) => {
 
+		// Make sure loop isn't being bound to a parent element in addition to the child XElement.
+		if (el instanceof XElement && el !== self)
+			return;
+
 		context = {...context}; // copy, because we add to it as we descend.
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
-		el.context_ = context;
+		el.context_ = context;  // is this used?
 
 		// Allow loop attrib to be applied above shadowroot.
-		el = el.shadowRoot || el;
+		let root = el.shadowRoot || el;
 
 		var rebuildChildren = /*XElement.batch(*/(action, path, value) => {
 
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
-			if (!el.loopHtml_) {
-				el.loopHtml_ = el.innerHTML.trim();
+			if (!root.loopHtml_) {
+				root.loopHtml_ = root.innerHTML.trim();
 
 				// Remove children before calling rebuildChildren()
 				// That way we don't unbind elements that were never bound.
-				while (el.lastChild)
-					el.removeChild(el.lastChild);
+				while (root.lastChild)
+					root.removeChild(root.lastChild);
 			}
 
 			//#IFDEV
-			if (!el.loopHtml_)
+			if (!root.loopHtml_)
 				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
 			var newItems = (safeEval.call(self, foreach) || []);
 			newItems = newItems.$removeProxy || newItems;
-			var oldItems = (el.items_ || []);
+			var oldItems = (root.items_ || []);
 			oldItems = oldItems.$removeProxy || oldItems;
 
 			// Do nothing if the array hasn't changed.
@@ -872,8 +885,8 @@ var bindings = {
 				return;
 
 			// Set temporary index on each child, so we can track how they're re-ordered.
-			for (let i in Array.from(el.children))
-				el.children[i].index_ = i;
+			for (let i in Array.from(root.children))
+				root.children[i].index_ = i;
 
 			// Create a map from the old items to the elements that represent them.
 			// This will fail if anything else has been changing the children order.
@@ -881,12 +894,12 @@ var bindings = {
 			var newSet = new Set(newItems);
 			for (let i=oldItems.length-1; i>=0; i--) {
 				let oldItem = oldItems[i];
-				let child = el.children[i];
+				let child = root.children[i];
 
 				// And remove any elements that are no longer present.
 				if (!newSet.has(oldItem)) {
 					unbindEl(child);
-					el.removeChild(child);
+					root.removeChild(child);
 				}
 
 				// Create a list of items we want to keep, indexed by their value.
@@ -901,7 +914,7 @@ var bindings = {
 
 			// Loop through newItems, creating and moving children as needed.
 			for (let i=0; i<newItems.length; i++) {
-				let oldChild = el.children[i];
+				let oldChild = root.children[i];
 				let newChild = (oldMap.get(newItems[i]) || []).pop(); // last on, first off b/c above we iterate in reverse.
 				let isNew = !newChild;
 
@@ -912,20 +925,20 @@ var bindings = {
 					// TODO: createEl() binds nexted x-elements before we're ready for them to be bound.
 					// E.g. below we set the localContext for loop variables.
 					if (isNew) {
-						newChild = createEl(el.loopHtml_);
+						newChild = createEl(root.loopHtml_);
 
 					}
 					// This can either insert the new one or move an old one to this position.
-					el.insertBefore(newChild, oldChild);
+					root.insertBefore(newChild, oldChild);
 				}
 			}
 
 			// If there are identical items in the array, some extras can be left at the end.
-			for (let i=el.children.length-1; i>=newItems.length; i--) {
-				let child = el.children[i];
+			for (let i=root.children.length-1; i>=newItems.length; i--) {
+				let child = root.children[i];
 				if (child) {
 					unbindEl(child);
-					el.removeChild(child);
+					root.removeChild(child);
 				}
 			}
 
@@ -939,8 +952,8 @@ var bindings = {
 			//#ENDIF
 
 			// Rebind events on any elements that had their index change.
-			for (let i in Array.from(el.children)) {
-				let child = el.children[i];
+			for (let i in Array.from(root.children)) {
+				let child = root.children[i];
 				if (child.index_ !== i) {
 
 					// TODO, if child is an xelement, this won't unbind any events within it!
@@ -961,14 +974,14 @@ var bindings = {
 			}
 
 			// Save the items on the loop element, so we can compare them to their modified values next time the loop is rebuilt.
-			el.items_ = newItems.slice(); // copy
+			root.items_ = newItems.slice(); // copy TODO: Should this be el not root?
 
 		}/*)*/;
 
 
 		for (let path of parseVars(foreach)) {
 			watch(self, path, rebuildChildren);
-			addElWatch(el, path, rebuildChildren);
+			addElWatch(root, path, rebuildChildren); // TODO: Should this be el not root?
 		}
 
 		// Set initial children

@@ -173,8 +173,13 @@ var test_Watch = {
 		assertEq(o.a.length, 1);
 		assertEq(o.a[0], 1);
 
-		assertEq(JSON.stringify(ops[0]), '["set",["a","0"],1]');
-		assertEq(JSON.stringify(ops[1]), '["delete",["a","1"]]');
+		// Make sure we only have one op
+		assertEq(JSON.stringify(ops[0]), '["set",["a","length"],1]');
+		assertEq(ops.length, 1);
+
+		// Old, from when we notified of every sub-operation:
+		//assertEq(JSON.stringify(ops[0]), '["set",["a","0"],1]');
+		//assertEq(JSON.stringify(ops[1]), '["delete",["a","1"]]');
 	},
 
 	unsubscribe: function() {
@@ -1729,8 +1734,6 @@ var test_XElement = {
 
 
 			xa.a.items.pop();
-			console.log(watched.get(xa).subs_);
-
 
 			var subs = watched.get(xa).subs_;
 			assert('"a","items"' in subs);
@@ -1824,9 +1827,36 @@ var test_XElement = {
 			assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children.length, 4);
 			assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children[3].textContent, 'D');
 		})();
+
+
+
+		// Make sure we don't also bind loop to outer element.  This used to fail.
+		(function() {
+			class BD15Inner extends XElement {
+				constructor() {
+					super();
+					this.items = [1, 2, 3];
+				}
+			}
+
+			BD15Inner.html = `
+				<div x-loop="items: item">
+					<span x-text="item"></span>
+				</div>`;
+
+			class BD15 extends XElement {}
+			BD15.html = `
+				<div>
+					<x-bd15inner id="b"></x-bd15inner>				
+				</div>`;
+
+			var a = new BD15();
+			assertEq(a.b.shadowRoot.children[0].textContent, '1');
+		})();
 	},
 
 	temp: function () {
+		// Test how many times text redraw happens.
 		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
 		window.count = 0;
@@ -1850,7 +1880,7 @@ var test_XElement = {
 			</div>`;
 
 		var a = new A();
-		document.body.appendChild(a);
+		//document.body.appendChild(a);
 		a.items = [1, 2, 3];
 
 		window.count = 0;
@@ -1860,20 +1890,9 @@ var test_XElement = {
 			a.items.shift();
 		//})();
 		console.log(window.count);
-	},
-
-	temp2: function() {
-		// Test finding proxied items.
-		(function() {
-			var b = {
-				items: [{name: 1}]
-			};
-			watch(b, ['items', '0', 'name'], (action, path, value)=>{
-				console.log(action, path, value);
-			});
-
-			b.items[0] = b.items[0];
-		})();
 	}
+
+
+	
 };
 
