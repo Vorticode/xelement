@@ -1860,7 +1860,20 @@ var test_XElement = {
 			a.items.shift();
 		//})();
 		console.log(window.count);
-	}
+	},
 
-}
+	temp2: function() {
+		// Test finding proxied items.
+		(function() {
+			var b = {
+				items: [{name: 1}]
+			};
+			watch(b, ['items', '0', 'name'], (action, path, value)=>{
+				console.log(action, path, value);
+			});
+
+			b.items[0] = b.items[0];
+		})();
+	}
+};
 

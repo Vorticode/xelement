@@ -5,9 +5,13 @@ TODO: next goals:
 function to get all properties subscribed to a data-prop before other initialization.
 move existing prop binding to after context exists.
 fix cache function and try it again with safeEval()
+Modify splice and other array funcs to intercept/notify only once, without needing special code in data-loop.
+	We can do this by wrapping the functions, operating on the underlying obj,
+	then reassign its value to trigger the notification at the end.
 
 
 parseVars("this.passthrough(x)") doesn't find x.
+parseVars("item + passthrough('')") finds "passthrough" as a variable.
 
 {{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
@@ -162,7 +166,96 @@ var getLoopParent = (el) => { // will error if not in an XParent.
 // TODO: modify to allow getting any prop?
 var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.getAttribute('data-loop'));
 
+var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) || el.getAttribute('data-' + name));
 
+/**
+ * Given element el with x-props="item: this", find all first-level subscriptions to item.
+ * That is if el has itself or descendants that bind to:
+ *    item.a, item.a[0], item.a.c, and item.b, this function will return ['a', 'b'] because they are the first level subscribers.
+ * Must be called on an XElement before bindEl() removes the loop children.
+ * Code similar to this is used in other places.  It'd be nice to make it shared.
+ * @param el {HTMLElement}
+ * @param props {string[]=}
+ * @param context {object<string, string>=}
+ * @returns {Set} */
+var getPropSubscribers = function(el, props, context) {
+
+	context = context || {};
+	let result = new Set();
+
+	if (!props) {
+		let propCode = getXAttrib(el, 'prop');
+		if (propCode) {
+			let items = parseObj(propCode);
+			props = Object.keys(items);
+		}
+		else // no props
+			return result;
+	}
+
+	let simpleAttribs = ['text', 'html', 'val', 'visible'];
+	for (let attrib of simpleAttribs) {
+		let code = getXAttrib(el, attrib);
+		if (code) {
+			code = replaceVars(code, context);
+			let paths = parseVars(code);
+			for (let path of paths) {
+				if (props.includes(path[0]) && path[1])
+					result.add(path[1]);
+			}
+		}
+	}
+
+	let objAttribs = ['attribs', 'classes', 'sortable'];
+	for (let attrib of objAttribs) {
+		let code = getXAttrib(el, attrib);
+		if (code) {
+			code = replaceVars(code, context);
+			let codeObj = parseObj(code);
+			for (let item of codeObj) {
+				let paths = parseVars(item);
+				for (let path of paths) {
+					if (props.includes(path[0]) && path[1])
+						result.add(path[1]);
+				}
+			}
+		}
+	}
+
+	let loop = getXAttrib(el, 'loop');
+	if (loop) {
+		var [foreach, loopVar, indexVar] = parseLoop(loop);
+		foreach = replaceVars(foreach, context);
+		let paths = parseVars(foreach);
+		for (let path of paths) {
+			if (props.includes(path[0]) && path[1])
+				result.add(path[1]);
+		}
+	}
+
+
+	// Recurse through children.
+	let parent = el.shadowRoot || el;
+
+	for (let i=0; i<parent.children.length; i++) {
+
+		let child = parent.children[i];
+		let localContext = {...context};
+
+		// Create loop context
+		if (foreach) {
+			localContext[loopVar] = foreach + '[' + i + ']';
+			if (indexVar !== undefined)
+				localContext[indexVar] = i;
+		}
+
+
+		let items = getPropSubscribers(child, props, localContext);
+		result = new Set([...result, ...items]); // merge sets
+	}
+
+	return result;
+}
 
 
 /**
@@ -596,9 +689,9 @@ var bindings = {
 
 
 	/**
-	 * @param self {XElement}
+	 * @param self {XElement} A parent XElement
 	 * @param code {string}
-	 * @param el {HTMLElement}
+	 * @param el {HTMLElement} An XElement that's a child of self, that has a data-prop attribute.
 	 * @param context {object<string, string>} */
 	prop: (self, code, el, context) => {
 		// allow binding only on XElement
@@ -627,123 +720,27 @@ var bindings = {
 				// Set initial values.
 				updateProp();
 
-				/*
-				// If binding to the parent, "this", we need to take extra steps,
-				// because normally we can only bind to object properties and not the object itself.
+
+				// We handle data-prop="item: this" in a special way.
+				// We can't subscribe directly to the this object.
+				// So instead we traverse into el and find the names of all data bindings to item.
+				// Then we subscribe to those properties on the parent element and forward them to item.
+				// E.g. if we have
+				// <x-item x-prop="parent: this"><span x-text="parent.a"></x-prop>
+				// Then we watch this.a on x-item's parent and update the x-item's parent.a when it changes.
 				if (expr === 'this') {
-
-					//debugger;
-
-					// 1. We get the subscriptions that watch the property on el, the child
-					let watchedEl = watched.get(el);
-					if (watchedEl) { // if WatchedEl is null, the child XElement doesn't subscribe to anything.
-						let subs = watchedEl.subs_;
-
-						for (let sub in subs) {
-
-							// If subscription starts with the destination of the prop assignment.
-							if (sub.startsWith('"' + prop + '"')) {
-								let subPath = JSON.parse('[' + sub + ']');
-
-
-								// 2. For each function, we move the watch from the child object to the parent object.
-								for (let callback of subs[sub]) {
-									removeElWatch(el, subPath, callback); // All tests pass with or without this line.
-									unwatch(el, subPath, callback);
-
-									let subParentPath = subPath.slice(1);
-									let updateThisProp = function (action, path, value) {
-
-										// 3. And intercept its call to make sure we pass the original path.
-										callback.apply(el, arguments);
-									};
-									watch(self, subParentPath, updateThisProp);
-									addElWatch(el, subParentPath, updateThisProp);
-								}
-							}
-						}
-					}
-				}
-				*/
-
-
-
-
-
-
-				/*
-				1.  Somehow watch every property on "this" for changes, by adding a '' subscription
-				    and modifying the notify() calls to call it when traversing up the parent path.
-				1B. But what about properties that are only subscribed to by the child xelement?
-				    Modifying them won't trigger anything unless they're made into watches.
-
-				2.  Then loop through all the subscriptions of the child and trigger them when their
-				    Prop changes.
-
-				- or -
-
-				Instead of moving the subscriptions from the child to the parent,
-				we can simply add the same subscriptions to the parent and have them trigger notifications on the child.
-
-				But when doing this with temp4() test, subs doesn't contain parentA.item.
-
-				*/
-
-
-				// If binding to the parent, "this", we need to take extra steps,
-				// because normally we can only bind to object properties and not the object itself.
-				//debugger;
-				if (expr === 'this') {
-
-					// 1. We get the subscriptions that watch the property on el, the child
-					let watchedEl = watched.get(el);
-					if (watchedEl) { // if WatchedEl is null, the child XElement doesn't subscribe to anything.
-						let subs = watchedEl.subs_;
-
-						for (let sub in subs) {
-
-							// If subscription starts with the destination of the prop assignment.
-							// Then add a watch to parent to foward the notification to the child by calling updateProp().
-							// TODO: We need to find a way to remove these when this function is called more than once, eg with loops.
-							if (sub.startsWith('"' + prop + '"')) {
-								let subPath = JSON.parse('[' + sub + ']');
-								let subParentPath = subPath.slice(1);
-
-								let oldPromotion = promotedProps.get(el, subParentPath);
-								if (oldPromotion) {
-									unwatch(self, subParentPath, oldPromotion[1]);
-
-									removeElWatch(el, subParentPath, oldPromotion[1]);
-									promotedProps.remove(el, subParentPath, oldPromotion[1]);
-								}
-
-
-								watch(self, subParentPath, updateProp);
-
-								addElWatch(el, subParentPath, updateProp);
-								promotedProps.add(el, subParentPath, updateProp);
-							}
-						}
+					let subs = getPropSubscribers(el);
+					for (let sub of subs) {
+						watch(self, sub, updateProp);
+						addElWatch(el, sub, updateProp);
 					}
 				}
 
 				// Add a regular watch.
 				else {
 					for (let path of parseVars(expr)) {
-
-						let oldPromotion = promotedProps.get(el, path);
-						if (oldPromotion) {
-							unwatch(getXParent(el), path, oldPromotion[1]);
-
-							removeElWatch(el, path, oldPromotion[1]);
-							promotedProps.remove(el, path, oldPromotion[1]);
-						}
-
-
 						watch(self, path, updateProp);
-
 						addElWatch(el, path, updateProp);
-						promotedProps.add(el, path, updateProp);
 					}
 				}
 			}
@@ -793,6 +790,7 @@ var bindings = {
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setText = /*self.enqueue(*/(/*action, path, value*/) => {
+
 			el.textContent = safeEval.call(self, code);
 		}/*)*/;
 		for (let path of parseVars(code)) {
@@ -846,16 +844,8 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		el = el.shadowRoot || el;
 
-		var rebuildChildren = /*self.enqueue(*/(action, path, value) => {
+		var rebuildChildren = /*XElement.batch(*/(action, path, value) => {
 
-			// If we splice off the first item from an array, rebuildChildren() is called every time
-			// element n+1 is assigned to slot n.  splice() then sets the array's .length property at the last step.
-			// So we only rebuild the children after this happens.
-			if (ArrayMultiOps.includes(ProxyObject.currentOp)) {
-				ProxyObject.whenOpFinished.add(rebuildChildren);
-				return;
-			}
-		
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
 			if (!el.loopHtml_) {
@@ -962,6 +952,7 @@ var bindings = {
 
 					// Save the context on every loop item.
 					// This is necessary for updating the x-prop watch below.
+					// TODO: That code is removed, so we no longer need this line.
 					child.context_ = localContext;
 
 					bindEl(self, child, localContext);
@@ -971,45 +962,6 @@ var bindings = {
 
 			// Save the items on the loop element, so we can compare them to their modified values next time the loop is rebuilt.
 			el.items_ = newItems.slice(); // copy
-
-
-
-			// Rebuilding children can show us new properties from the parent XElement we need to subscribe to.
-			// So we re-apply any watches from the parent xelement to this element.
-			let prop = self.getAttribute('x-prop') || self.getAttribute('data-prop');
-			if (prop) {
-				let xParent = getXParent(self);
-				if (xParent) {
-					let loopParent = getLoopParent(self); // TODO: use a getContext() function instead?
-					let context = (loopParent && loopParent.context_) || {};
-
-					// TODO: We need to find a way to unbind before the bindings in prop are re-applied.
-					XElement.bindings.prop(xParent, prop, self, self.context_, true);
-				}
-			}
-
-			// Recursive way:
-			// Rebind props from parent.
-			// This way
-			// Covered by tests:  RebindDataPropForLoop
-			/*
-			let xSelf = self;
-			let xParent = self;
-			while (xParent = getXParent(xParent)) {
-				if (xParent) {
-					let prop = xSelf.getAttribute('x-prop') || xSelf.getAttribute('data-prop');
-					if (prop) {
-
-						let loopParent = getLoopParent(xSelf); // TODO: use a getContext() function instead?
-						let context2 = (loopParent && loopParent.context_) || context;
-
-						XElement.bindings.prop(xParent, prop, xSelf, context2, true);
-					}
-				}
-				xSelf = xParent;
-			}
-			*/
-
 
 		}/*)*/;
 

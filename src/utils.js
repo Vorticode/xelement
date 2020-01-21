@@ -241,7 +241,7 @@ var Cache = function() {
 			self.map.set(key, result = val());
 		}
 		return result;
-	}
+	};
 
 	this.remove = function(key) {
 		// TODO

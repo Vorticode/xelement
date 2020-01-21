@@ -102,9 +102,6 @@ var handler = {
 	}
 };
 
-// Array operations that send multiple notifications.
-var ArrayMultiOps = ['push', 'pop', 'splice', 'shift', 'sort', 'reverse', 'unshift'];
-
 /**
  * Wrapper around every instance of an object that's being watched.
  * One of these will exist for each object, regardless of how many roots it's in. */
@@ -153,26 +150,20 @@ class ProxyObject {
 			// Need to intercept all functions like these that perform multiple operations.
 			// That way we set and clear ProxyObj.currentOp while they're happening.
 			// And rebuildChildren() can only be applied at the last one.
-
-			for (let func of ArrayMultiOps)
+			for (let func of ['push', 'pop', 'splice', 'shift', 'sort', 'reverse', 'unshift'])
 				Object.defineProperty(this.proxy_, func, {
 					enumerable: false,
 					get: function() {
 						// Return a new indexOf function.
 						return function () {
-							if (ProxyObject.currentOp) {
-								return Array.prototype[func].apply(obj, arguments);
-							} else {
-								ProxyObject.currentOp = func;
-								var result = Array.prototype[func].apply(self.proxy_, arguments);
-								delete ProxyObject.currentOp;
 
-								for (let callback of ProxyObject.whenOpFinished)
-									callback();
-								ProxyObject.whenOpFinished = new Set();
+							// Apply array operations on the underlying watched object, so we don't notify a jillion times.
+							let result =  Array.prototype[func].apply(obj, arguments);
 
-								return result;
-							}
+							// Trigger a single notfication change.
+							self.proxy_.length = self.proxy_.length + 0;
+
+							return result;
 						}
 					}
 				});
@@ -209,7 +200,6 @@ class ProxyObject {
 	}
 }
 
-ProxyObject.whenOpFinished = new Set();
 
 /**
  * Wrapper around an object that has its descendants being watched.
