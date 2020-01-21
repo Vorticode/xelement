@@ -113,6 +113,7 @@ var replaceVars = (code, replacements) => {
 				code = code.slice(0, path.index_[0]) + replacements[oldVar] + code.slice(path.index_[0] + oldVar.length);
 		}
 
+		console.log(code);
 	return code;
 };
 

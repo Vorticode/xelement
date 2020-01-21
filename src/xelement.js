@@ -183,14 +183,39 @@ var getPropSubscribers = function(el, props, context) {
 	context = context || {};
 	let result = new Set();
 
-	if (!props) {
+
+	if (el instanceof XElement) {
+
 		let propCode = getXAttrib(el, 'prop');
-		if (propCode) {
-			let items = parseObj(propCode);
-			props = Object.keys(items);
+		// Getting data-prop for the first time from the top level element.
+		if (!props) {
+			if (propCode) {
+				let items = parseObj(propCode);
+				props = Object.keys(items);
+			}
+			else // no props
+				return result;
 		}
-		else // no props
-			return result;
+
+		// Getting props from a child xelement so we can descent into it and also look for subscriptions
+		// This is needed to make Test:  SecondLevelPropForward work.
+		else if (propCode){
+			let items = parseObj(propCode);
+			for (let key in items) {
+				context[key] = items[key];
+			}
+
+
+			//for (let key in items)
+			/*
+			{
+				for (let key2 in context) {
+
+					context[key2] = replaceVars(context[key2], context);
+
+				}
+			}*/
+		}
 	}
 
 	let simpleAttribs = ['text', 'html', 'val', 'visible'];
@@ -552,6 +577,7 @@ var initHtml = (self) => {
 				node.removeAttribute('id');
 		}
 
+		// This is set before data binding so that we can search loop children before bindings.loop() removes them.
 		self.propSubscriptions = Array.from(getPropSubscribers(self));
 
 

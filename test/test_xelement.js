@@ -322,13 +322,13 @@ var test_XElement = {
 	},
 
 	properties: function () {
-		class P1 extends XElement {
+		class P1R extends XElement {
 		}
 
-		P1.html = '<div invalidattr="val1"></div>'; // attr must be lowercase.
+		P1R.html = '<div invalidattr="val1"></div>'; // attr must be lowercase.
 
 		// Make sure attribute is set from html.
-		var p = new P1();
+		var p = new PR1();
 		assert(!p.hasAttribute('invalidattr'));
 		assertEq(p.invalidattr, 'val1');
 	},
@@ -1890,9 +1890,184 @@ var test_XElement = {
 			a.items.shift();
 		//})();
 		console.log(window.count);
-	}
+	},
 
 
-	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	temp2: function() {
+
+		// Test:  SecondLevelPropForward.
+		// Make sure second-level subscriptions are forwarded.
+		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
+		(function() {
+
+			class C extends XElement {}
+			C.html = `
+			<div>
+				<span id="text" x-text="parentB.parentA.variable"></span>								
+			</div>`;
+
+			class B extends XElement {}
+			B.html = `
+			<div>
+			    <x-c id="c" x-prop="parentB: this"></x-c>	
+			</div>`;
+
+			class A extends XElement {}
+			A.html = `
+			<div>				
+				<x-b id="b" x-prop="parentA: this"></x-b>						
+			</div>`;
+
+			var a = new A();
+			a.variable = 'A';
+
+			assertEq(a.b.c.text.textContent, 'A');
+		})();
+	},
+
+
+
+
+
+	temp2B: function() {
+
+		// Test:  ThirdLevelPropForward.
+		// Make sure second-level subscriptions are forwarded.
+		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
+		(function() {
+
+			class D extends XElement {}
+			D.html = `
+			<div>
+				<span id="text" x-text="parentC.parentB.parentA.variable"></span>								
+			</div>`;
+
+			class C extends XElement {}
+			C.html = `
+			<div>
+			    <x-d id="d" x-prop="parentC: this"></x-d>
+			</div>`;
+
+			class B extends XElement {}
+			B.html = `
+			<div>
+				<x-c id="c" x-prop="parentB: this"></x-c>
+				<!--<span x-text="parentA.variable"></span>-->
+			</div>`;
+
+			class A extends XElement {}
+			A.html = `
+			<div>				
+				<x-b id="b" x-prop="parentA: this"></x-b>						
+			</div>`;
+
+			var a = new A();
+			a.variable = 'A';
+			document.body.appendChild(a);
+
+			//assertEq(a.b.c.d.text.textContent, 'A');
+		})();
+	},
+
+
+
+
+
+
+
+
+
+	// I made this copy to later test removing the <div x-loop="program.functions: func">.
+	temp3: function() {
+
+
+
+		class XNode extends XElement {}
+		XNode.html = `
+			<div>
+				<select x-loop="xRung.xFunc.xProgram.xLadderBuilder.variables: v">
+					<option x-text="v"></option>
+				</select>
+			</div>`;
+
+		class XRung extends XElement {}
+		XRung.html = `
+			<div>
+				<x-node x-prop="xRung: this"></x-node>
+				
+				<!---->
+				<select x-loop="xFunc.xProgram.xLadderBuilder.variables: v">
+					<option x-text="v"></option>
+				</select>
+				
+			</div>`;
+
+		class XFunc extends XElement {}
+		XFunc.html = `
+			<div>1
+			    <x-rung x-prop="rung: func.rungs[0]; xFunc: this"></x-rung>				
+			</div>`;
+
+		class XProgram extends XElement {}
+		XProgram.html = `
+			<div>
+				<!-- Deleting this x-loop div makes it fail. -->
+				<div x-loop="program.functions: func">
+				    <x-func x-prop="func: program.functions[0]; xProgram: this"></x-func>
+				</div>		
+			</div>`;
+
+		class XLadderBuilder extends XElement {
+
+			constructor() {
+				super();
+				this.variables = ['A', 'B', 'C'];
+
+				this.program =  {
+					functions: [
+						{
+							rungs: [
+								{
+									nodes: [1]
+								}
+							]
+						}
+					],
+					rungs: [
+						{
+							nodes: [1]
+						}
+					],
+					nodes: [1]
+				};
+
+				//this.xVariableDrawer.variables.push('D');
+			}
+
+		}
+		XLadderBuilder.html = `
+			<div>
+				<x-program id="xProgram" x-prop="xLadderBuilder: this; program: this.program"></x-program>				
+			</div>`;
+
+		var lb = new XLadderBuilder();
+		document.body.appendChild(lb);
+	},
 };
 

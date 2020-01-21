@@ -394,6 +394,7 @@ var replaceVars = (code, replacements) => {
 				code = code.slice(0, path.index_[0]) + replacements[oldVar] + code.slice(path.index_[0] + oldVar.length);
 		}
 
+		console.log(code);
 	return code;
 };
 
@@ -1234,14 +1235,39 @@ var getPropSubscribers = function(el, props, context) {
 	context = context || {};
 	let result = new Set();
 
-	if (!props) {
+
+	if (el instanceof XElement) {
+
 		let propCode = getXAttrib(el, 'prop');
-		if (propCode) {
-			let items = parseObj(propCode);
-			props = Object.keys(items);
+		// Getting data-prop for the first time from the top level element.
+		if (!props) {
+			if (propCode) {
+				let items = parseObj(propCode);
+				props = Object.keys(items);
+			}
+			else // no props
+				return result;
 		}
-		else // no props
-			return result;
+
+		// Getting props from a child xelement so we can descent into it and also look for subscriptions
+		// This is needed to make Test:  SecondLevelPropForward work.
+		else if (propCode){
+			let items = parseObj(propCode);
+			for (let key in items) {
+				context[key] = items[key];
+			}
+
+
+			//for (let key in items)
+			/*
+			{
+				for (let key2 in context) {
+
+					context[key2] = replaceVars(context[key2], context);
+
+				}
+			}*/
+		}
 	}
 
 	let simpleAttribs = ['text', 'html', 'val', 'visible'];
@@ -1510,8 +1536,6 @@ var setAttribute = (self, name, value) => {
 };
 
 
-var noBind = 0;
-
 var initHtml = (self) => {
 
 	if (!self.init_) {
@@ -1524,9 +1548,7 @@ var initHtml = (self) => {
 		//#ENDIF
 
 		// 1. Create temporary element.
-		noBind ++;
 		var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
-		noBind --;
 
 		// 2. Remove and save attributes from instantiation.
 		var attributes = {};
@@ -1607,7 +1629,8 @@ var initHtml = (self) => {
 				node.removeAttribute('id');
 		}
 
-		self.subscribedProps = Array.from(getPropSubscribers(self));
+		// This is set before data binding so that we can search loop children before bindings.loop() removes them.
+		self.propSubscriptions = Array.from(getPropSubscribers(self));
 
 
 		// 8. Bind all data- and event attributes
@@ -1789,7 +1812,7 @@ var bindings = {
 				// Then we watch this.a on x-item's parent and update the x-item's parent.a when it changes.
 				if (expr === 'this') {
 					//let subs = getPropSubscribers(el);
-					for (let sub of el.subscribedProps) {
+					for (let sub of el.propSubscriptions) {
 						watch(self, sub, updateProp);
 						addElWatch(el, sub, updateProp);
 					}
@@ -1913,9 +1936,6 @@ var bindings = {
 		let root = el.shadowRoot || el;
 
 		var rebuildChildren = /*XElement.batch(*/(action, path, value) => {
-
-			// if (noBind > 0)
-			// 	return;
 
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
