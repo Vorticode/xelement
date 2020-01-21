@@ -2,6 +2,11 @@
 Inherit from XElement to create custom HTML Components.
 
 TODO: next goals:
+function to get all properties subscribed to a data-prop before other initialization.
+move existing prop binding to after context exists.
+fix cache function and try it again with safeEval()
+
+
 parseVars("this.passthrough(x)") doesn't find x.
 
 {{var}} in text and attributes, and stylesheets?
@@ -611,6 +616,10 @@ var bindings = {
 					let newVal = safeEval.call(self, expr);
 					if (isObj(newVal))
 					 	newVal = newVal.$removeProxy || newVal;
+
+					// This check will cause things to fail because sometimes the objects might be the same,
+					// but a value within them has changed.  Thus we still need to do the assignment to
+					// trigger the watchers.
 					// if (oldVal !== newVal)
 						el[prop] = newVal;
 				}/*)*/;

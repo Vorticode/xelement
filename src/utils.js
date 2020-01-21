@@ -231,7 +231,24 @@ var eventNames = Object.keys(document.__proto__.__proto__)
 	.map(   (x) => x.slice(2));
 
 
+var Cache = function() {
+	var self = this;
+	this.map = new Map();
 
+	this.get = function(key, val) {
+		let result = self.map.get(key);
+		if (!result) {
+			self.map.set(key, result = val());
+		}
+		return result;
+	}
+
+	this.remove = function(key) {
+		// TODO
+	};
+};
+
+var safeEvalCache = new Cache();
 
 
 /**
@@ -240,7 +257,11 @@ var eventNames = Object.keys(document.__proto__.__proto__)
  * @returns {*} */
 function safeEval(expr) {
 	try {
-		return Function('return (' + expr + ')').call(this);
+		//return Function('return (' + expr + ')').call(this);
+		let lazyEval = function() {
+			return Function('return (' + expr + ')');
+		};
+		return safeEvalCache.get(expr, lazyEval).call(this);
 	}
 	catch (e) { // Don't fail for null values.
 		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
