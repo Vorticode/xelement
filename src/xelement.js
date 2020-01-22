@@ -182,24 +182,18 @@ var getPropSubscribers = function(el, props, context) {
 
 	context = context || [];
 	let result = new Set();
-	var isFirst = !props;
 
-
-	if (el instanceof XElement) {
-
+	if (!props && el instanceof XElement) {
 		var propCode = getXAttrib(el, 'prop');
 		// Getting data-prop for the first time from the top level element.
-		if (!props) {
-			if (propCode) {
-				let items = parseObj(propCode);
-				props = Object.keys(items);
-			}
-			else // no props
-				return result;
+		if (propCode) {
+			let items = parseObj(propCode);
+			props = Object.keys(items);
 		}
-
-
+		else // no props
+			return result;
 	}
+
 
 	let simpleAttribs = ['text', 'html', 'val', 'visible'];
 	for (let attrib of simpleAttribs) {
@@ -248,9 +242,13 @@ var getPropSubscribers = function(el, props, context) {
 	// Recurse through children.
 	let parent = el.shadowRoot || el;
 
-	for (let i=0; i<parent.children.length; i++) {
+	// .loopChildren are the children that are removed  on loop init.
+	// This is covered by the ThirdLevelPropForwardLoop test.
+	let children = parent.loopChildren || parent.children;
 
-		let child = parent.children[i];
+	for (let i=0; i<children.length; i++) {
+
+		let child = children[i];
 		let localContext = {};
 
 		// Create loop context
@@ -262,10 +260,12 @@ var getPropSubscribers = function(el, props, context) {
 
 		// Getting props from a child xelement so we can descent into it and also look for subscriptions
 		// This is needed to make Test:  SecondLevelPropForward work.
-		if (propCode && !isFirst) {
-			let items = parseObj(propCode);
-			for (let key in items) {
-				localContext[key] = items[key];
+		if (child instanceof XElement) {
+			propCode = getXAttrib(child, 'prop');
+			if (propCode) {
+				let items = parseObj(propCode);
+				for (let key in items)
+					localContext[key] = items[key];
 			}
 		}
 
@@ -863,6 +863,7 @@ var bindings = {
 			// We store it here because innerHTML is lost if we unbind and rebind.
 			if (!root.loopHtml_) {
 				root.loopHtml_ = root.innerHTML.trim();
+				root.loopChildren = Array.from(root.children);
 
 				// Remove children before calling rebuildChildren()
 				// That way we don't unbind elements that were never bound.

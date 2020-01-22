@@ -8,17 +8,45 @@ var test_ParseVar = {
 
 	replaceVar: function() {
 
-		// Make sure indices work with brackets and other stuff.
-		var result = replaceVars("this.cats[0]+':'+item", {"item": "this.items[0]"});
-		assertEq(result, "this.cats[0]+':'+this.items[0]");
+		(function() {
 
-		// Make sure indices are correct when there are function calls.
-		result = replaceVars("this.b.functionCall() + item", {"item": "this.items[0]"});
-		assertEq(result, "this.b.functionCall() + this.items[0]");
+			// Make sure indices work with brackets and other stuff.
+			var result = replaceVars("this.cats[0]+':'+item", {"item": "this.items[0]"});
+			assertEq(result, "this.cats[0]+':'+this.items[0]");
 
-		// Test replacing multiple vars of different lengths:
-		result = replaceVars(" cat + item", {"item": "this.items[0]", "cat": "this.cats[0]"});
-		assertEq(result, " this.cats[0] + this.items[0]");
+			// Make sure indices are correct when there are function calls.
+			result = replaceVars("this.b.functionCall() + item", {"item": "this.items[0]"});
+			assertEq(result, "this.b.functionCall() + this.items[0]");
+
+			// Test replacing multiple vars of different lengths:
+			result = replaceVars(" cat + item", {"item": "this.items[0]", "cat": "this.cats[0]"});
+			assertEq(result, " this.cats[0] + this.items[0]");
+		})();
+
+		// Test array of contexts
+		(function() {
+			let context = [
+				{parentC: 'this'},
+				{parentB: 'this'},
+				{parentA: 'this'}
+			];
+			let code = 'parentC.parentB.parentA.variables';
+			let code2 = replaceVars(code, context);
+			assertEq(code2, 'variables');
+		})();
+
+		// Test array of contexts in reverse
+		(function() {
+			let context = [ // same as above but in reverse order
+				{parentA: 'this'},
+				{parentB: 'this'},
+				{parentC: 'this'}
+			];
+			let code = 'parentC.parentB.parentA.variables';
+
+			let code2 = replaceVars(code, context);
+			assertEq(code2, 'parentB.parentA.variables');
+		})();
 	},
 
 	addThis: function() {
@@ -1853,6 +1881,114 @@ var test_XElement = {
 			var a = new BD15();
 			assertEq(a.b.shadowRoot.children[0].textContent, '1');
 		})();
+
+
+
+		// Test:  SecondLevelPropForward.
+		// Make sure second-level subscriptions are forwarded.
+		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
+		(function() {
+
+			class C_P16 extends XElement {}
+			C_P16.html = `
+			<div>
+				<span id="text" x-text="parentB.parentA.variable"></span>								
+			</div>`;
+
+			class B_P16 extends XElement {}
+			B_P16.html = `
+			<div>
+			    <x-c_p16 id="c" x-prop="parentB: this"></x-c_p16>	
+			</div>`;
+
+			class A_P16 extends XElement {}
+			A_P16.html = `
+			<div>				
+				<x-b_p16 id="b" x-prop="parentA: this"></x-b_p16>						
+			</div>`;
+
+			var a = new A_P16();
+			a.variable = 'A';
+
+			assertEq(a.b.c.text.textContent, 'A');
+		})();
+
+
+
+		// Test:  ThirdLevelPropForward.
+		// Make sure third-level subscriptions are forwarded.
+		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
+		(function() {
+
+			class D_P17 extends XElement {}
+			D_P17.html = `
+			<div>
+				<span id="text" x-text="parentC.parentB.parentA.variable"></span>								
+			</div>`;
+
+			class C_P17 extends XElement {}
+			C_P17.html = `
+			<div>
+			    <x-d_p17 id="d" x-prop="parentC: this"></x-d_p17>
+			</div>`;
+
+			class B_P17 extends XElement {}
+			B_P17.html = `
+			<div>
+				<x-c_p17 id="c" x-prop="parentB: this"></x-c_p17>
+				<!--<span x-text="parentA.variable"></span>-->
+			</div>`;
+
+			class A_P17 extends XElement {}
+			A_P17.html = `
+			<div>				
+				<x-b_p17 id="b" x-prop="parentA: this"></x-b_p17>						
+			</div>`;
+
+			var a = new A_P17();
+			a.variable = 'A';
+
+			assertEq(a.b.c.d.text.textContent, 'A');
+		})();
+
+
+
+		// Test:  ThirdLevelPropForwardLoop
+		// Same as above, but with a loop to make sure we traverse into the .loopChildren property.
+		(function() {
+
+			class D_P18 extends XElement {}
+			D_P18.html = `
+			<div>
+				<span id="text" x-text="parentC.parentB.parentA.variable"></span>								
+			</div>`;
+
+			class C_P18 extends XElement {} // [below] parentB.list isn't set until after initialization.
+			C_P18.html = `
+			<div>
+				<div id="loop" x-loop="parentB.parentA.list: unused">
+			        <x-d_p18 x-prop="parentC: this"></x-d_p18>
+			    </div>
+			</div>`;
+
+			class B_P18 extends XElement {}
+			B_P18.html = `
+			<div>
+				<x-c_p18 id="c" x-prop="parentB: this"></x-c_p18>
+			</div>`;
+
+			class A_P18 extends XElement {}
+			A_P18.html = `
+			<div>
+				<x-b_p18 id="b" x-prop="parentA: this"></x-b_p18>				
+			</div>`;
+
+			var a = new A_P18();
+			a.variable = 'A';
+			a.list = [1];
+
+			assertEq(a.b.c.loop.children[0].text.textContent, 'A');
+		})();
 	},
 
 	redraw_benchmark: function () {
@@ -1908,94 +2044,8 @@ var test_XElement = {
 
 
 
-
-	temp2: function() {
-
-		// Test:  SecondLevelPropForward.
-		// Make sure second-level subscriptions are forwarded.
-		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
-		(function() {
-
-			class C_P16 extends XElement {}
-			C_P16.html = `
-			<div>
-				<span id="text" x-text="parentB.parentA.variable"></span>								
-			</div>`;
-
-			class B_P16 extends XElement {}
-			B_P16.html = `
-			<div>
-			    <x-c_p16 id="c" x-prop="parentB: this"></x-c_p16>	
-			</div>`;
-
-			class A_P16 extends XElement {}
-			A_P16.html = `
-			<div>				
-				<x-b_p16 id="b" x-prop="parentA: this"></x-b_p16>						
-			</div>`;
-
-			var a = new A_P16();
-			a.variable = 'A';
-
-			assertEq(a.b.c.text.textContent, 'A');
-		})();
-	},
-
-
-
-
-
-	temp2B: function() {
-
-		// Test:  ThirdLevelPropForward.
-		// Make sure second-level subscriptions are forwarded.
-		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
-		(function() {
-
-			class D_P17 extends XElement {}
-			D_P17.html = `
-			<div>
-				<span id="text" x-text="parentC.parentB.parentA.variable"></span>								
-			</div>`;
-
-			class C_P17 extends XElement {}
-			C_P17.html = `
-			<div>
-			    <x-d_p17 id="d" x-prop="parentC: this"></x-d_p17>
-			</div>`;
-
-			class B_P17 extends XElement {}
-			B_P17.html = `
-			<div>
-				<x-c_p17 id="c" x-prop="parentB: this"></x-c_p17>
-				<!--<span x-text="parentA.variable"></span>-->
-			</div>`;
-
-			class A_P17 extends XElement {}
-			A_P17.html = `
-			<div>				
-				<x-b_p17 id="b" x-prop="parentA: this"></x-b_p17>						
-			</div>`;
-
-			var a = new A_P17();
-			a.variable = 'A';
-
-			assertEq(a.b.c.d.text.textContent, 'A');
-		})();
-	},
-
-
-
-
-
-
-
-
-
 	// I made this copy to later test removing the <div x-loop="program.functions: func">.
-	temp3: function() {
-
-
+	temp2: function() {
 
 		class XNode extends XElement {}
 		XNode.html = `
@@ -2061,26 +2111,5 @@ var test_XElement = {
 		document.body.appendChild(lb);
 	},
 
-
-
-	temp4: function() {
-
-		// TODO: Also test this in reverse, it should only do one of them.
-		let context = [
-			{parentC: 'this'},
-			{parentB: 'this'},
-			{parentA: 'this'}
-		];
-		//          /      /       /       /         /
-		let code = 'parentC.parentB.parentA.variables';
-		// let paths = parseVars(code);
-		// console.log(paths);
-
-		let code2 = replaceVars(code, context);
-		console.log(code2);
-		assertEq(code2, 'variables');
-
-
-	}
 };
 
