@@ -308,26 +308,7 @@ var bindElProps = (self, el, context) => {
 			else if (attr.name.startsWith('data-'))
 				attrName = attr.name.slice(5); // remove data- prefix.
 
-			if (attrName && attrName!=='loop') {
-				if (bindings[attrName]) // attr.value is code.
-					bindings[attrName](self, attr.value, el, context);
-
-				//#IFDEV
-				else
-					throw new XElementError(attrName);
-				//#ENDIF
-			}
-		}
-
-		// Apply loop last, making sure prop is applied first.
-		for (let attr of el.attributes) {
-			let attrName = null;
-			if (attr.name.startsWith('x-'))
-				attrName = attr.name.slice(2); // remove data- prefix.
-			else if (attr.name.startsWith('data-'))
-				attrName = attr.name.slice(5); // remove data- prefix.
-
-			if (attrName && attrName==='loop') {
+			if (attrName) {
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
 

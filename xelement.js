@@ -1253,7 +1253,7 @@ var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) 
  * Code similar to this is used in other places.  It'd be nice to make it shared.
  * @param el {HTMLElement}
  * @param props {string[]=}
- * @param context {object<string, string>=}
+ * @param context {object<string, string>[]=}
  * @returns {Set} */
 var getPropSubscribers = function(el, props, context) {
 
@@ -1385,26 +1385,7 @@ var bindElProps = (self, el, context) => {
 			else if (attr.name.startsWith('data-'))
 				attrName = attr.name.slice(5); // remove data- prefix.
 
-			if (attrName && attrName!=='loop') {
-				if (bindings[attrName]) // attr.value is code.
-					bindings[attrName](self, attr.value, el, context);
-
-				//#IFDEV
-				else
-					throw new XElementError(attrName);
-				//#ENDIF
-			}
-		}
-
-		// Apply loop last, making sure prop is applied first.
-		for (let attr of el.attributes) {
-			let attrName = null;
-			if (attr.name.startsWith('x-'))
-				attrName = attr.name.slice(2); // remove data- prefix.
-			else if (attr.name.startsWith('data-'))
-				attrName = attr.name.slice(5); // remove data- prefix.
-
-			if (attrName && attrName==='loop') {
+			if (attrName) {
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
 
@@ -1650,8 +1631,6 @@ var initHtml = (self) => {
 
 		// This is set before data binding so that we can search loop children before bindings.loop() removes them.
 		self.propSubscriptions = Array.from(getPropSubscribers(self));
-		console.log(self.propSubscriptions);
-
 
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
