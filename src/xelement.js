@@ -643,7 +643,7 @@ var bindings = {
 		for (let name in obj) {
 			let attrExpr = addThis(replaceVars(obj[name], context), context);
 
-			let setAttr = /*elf.enqueue(*/function (/*action, path, value*/) {
+			let setAttr = /*XElement.batch(*/function (/*action, path, value*/) {
 				var result = safeEval.call(self, attrExpr);
 				if (result === false || result === null || result === undefined)
 					el.removeAttribute(name);
@@ -687,7 +687,7 @@ var bindings = {
 				//#ENDIF
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
-				let updateProp = /*self.enqueue(*/(action, path, value) => {
+				let updateProp = /*XElement.batch(*/(action, path, value) => {
 					// // Only reassign the value and trigger notfications if it's actually changed.
 					//let oldVal = el[prop];
 					//if (isObj(oldVal))
@@ -700,7 +700,9 @@ var bindings = {
 					// but a value within them has changed.  Thus we still need to do the assignment to
 					// trigger the watchers.
 					// if (oldVal !== newVal)
+					//XElement.batch(function() {
 						el[prop] = newVal;
+					//})();
 				}/*)*/;
 
 
@@ -747,7 +749,7 @@ var bindings = {
 			let classExpr = addThis(replaceVars(obj[name], context), context);
 
 			// This code is called on every update.
-			let updateClass = /*self.enqueue(*/() => {
+			let updateClass = /*XElement.batch*/() => {
 				let result = safeEval.call(self, classExpr);
 				if (result)
 					el.classList.add(name);
@@ -777,8 +779,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = /*self.enqueue(*/(/*action, path, value*/) => {
-
+		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
 			el.textContent = safeEval.call(self, code);
 		}/*)*/;
 		for (let path of parseVars(code)) {
@@ -797,7 +798,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = /*self.enqueue(*/(/*action, path, value*/) => {
+		let setHtml = /*XElement.batch(*/(/*action, path, value*/) => {
 			el.innerHTML = safeEval.call(self, code);
 		}/*)*/;
 
@@ -1092,7 +1093,7 @@ var bindings = {
 				traversePath(self, paths[0], true, value);
 			});
 
-		let setVal = /*self.enqueue(*/(/*action, path, value*/) => {
+		let setVal = /*XElement.batch*/(/*action, path, value*/) => {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
@@ -1123,7 +1124,7 @@ var bindings = {
 		if (displayNormal === 'none')
 			displayNormal = '';
 
-		let setVisible = /*self.enqueue(*/(/*action, path, value*/) => {
+		let setVisible = /*XElement.batch*/(/*action, path, value*/) => {
 			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
 		}/*)*/;
 

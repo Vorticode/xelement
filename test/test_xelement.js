@@ -2003,7 +2003,7 @@ var test_XElement = {
 
 
 
-
+/*
 
 	// Doesn't work, events don't trigger sortable.
 	sortable: function() {
@@ -2146,7 +2146,7 @@ var test_XElement = {
 
 		window.passthrough = function(item) {
 			if (window.init) {
-				console.log(item);
+				//console.log(item);
 				window.count++;
 			}
 			return ''
@@ -2285,5 +2285,6 @@ var test_XElement = {
 		document.body.appendChild(lb);
 	},
 
+*/
 };
 
