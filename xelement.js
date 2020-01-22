@@ -215,7 +215,9 @@ var traversePath = (obj, path, create, value, watchless) => {
 		if (last && value !== undefined) {
 			if (watchless)
 				obj = obj.$removeProxy || obj;
+			obj.$disableWatch= true;
 			obj[srcProp] = value;
+			delete obj.$disableWatch;
 		}
 
 		// Traverse deeper along destination object.
@@ -536,6 +538,13 @@ var handler = {
 			return obj;
 		if (field==='$roots')
 			return ProxyObject.get_(obj).roots_;
+		if (field==='$trigger') {
+			let proxyObj = ProxyObject.get_(obj);
+			for (let root of proxyObj.roots_)
+				root.notify_('set', [], obj);
+			return proxyObj.roots_;
+		}
+
 
 
 		let result = obj[field];
@@ -554,8 +563,8 @@ var handler = {
 			// Get (or create) the single unique instances of obj shared among all roots.
 			// Keeping a shared copy lets us have multiple watchers on the same object,
 			// and notify one when another changes the value.
-			var proxyObj = ProxyObject.get_(obj);
-			var proxyResult = ProxyObject.get_(result, proxyObj.roots_);
+			let proxyObj = ProxyObject.get_(obj);
+			let proxyResult = ProxyObject.get_(result, proxyObj.roots_);
 
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
@@ -889,11 +898,6 @@ class WatchProperties {
 		var self = this;
 		var field = path[0];
 
-
-
-
-
-
 		if (!(field in self.fields_)) {
 			self.fields_[field] = self.obj_[field];
 
@@ -904,7 +908,13 @@ class WatchProperties {
 				enumerable: 1,
 				configurable: 1,
 				get: () => self.proxy_[field],
-				set: (val) => self.proxy_[field] = val
+				//set: (val) => self.obj_.$disableWatch ? self.proxy_.$removeProxy[field] = val : self.proxy_[field] = val
+				set: function(val) {
+					if (self.obj_.$disableWatch) // used by traversePath to watchlessly set.
+						self.proxy_.$removeProxy[field] = val;
+					else
+						self.proxy_[field] = val;
+				}
 			});
 		}
 
@@ -1079,27 +1089,19 @@ var watchlessSet = (obj, path, val) => {
 Inherit from XElement to create custom HTML Components.
 
 TODO: next goals:
-function to get all properties subscribed to a data-prop before other initialization.
-move existing prop binding to after context exists.
-fix cache function and try it again with safeEval()
-Modify splice and other array funcs to intercept/notify only once, without needing special code in data-loop.
-	We can do this by wrapping the functions, operating on the underlying obj,
-	then reassign its value to trigger the notification at the end.
-
-
+Remove .context_ assignments to loop el and child in bindings.loop()
+Document all properties that bindings.loop() sets on elements.
 parseVars("this.passthrough(x)") doesn't find x.
 parseVars("item + passthrough('')") finds "passthrough" as a variable.
 
 {{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
 allow comments in loops.
-x-elements in loops get fully initialized then replaced.
+x-elements in loops get fully initialized then replaced.  Is this still true?
 
 
 
 
-warning on data-prop wrong order.
-TODO
 Make shadowdom optional.
 
 implement other binding functions.
@@ -1114,9 +1116,9 @@ When a change occurs, create a Set of functions to call, then later call them al
 	That way we remove some duplicate updates.
 Auto bind to this in complex expressions if the class property already exists and the var is otherwise undefined?
 improve minifcation.
-Expose bindings prop in minified version.
+Expose bindings prop in minified version to allow plugins.
 non-ascii variable names.
-throttle, debounce? data-val only trigger on change.  Via :attributes?
+throttle, debounce? data-val only trigger on change.  E.g. x-val:debounce(100)=""  x-visible:fade(100)=""
 Auto two-way bind for simple variables?
 bind to <input type="file">
 bind to clipboard events
@@ -1188,8 +1190,6 @@ var removeElWatch = (el, path, callback) => {
  * @type {WeakMap<HTMLElement, *[]>} */
 var elEvents = new WeakMap();
 
-
-var promotedProps = new WeakMultiMap();
 
 /**
  *
@@ -1645,6 +1645,7 @@ var initHtml = (self) => {
 
 /**
  * @extends HTMLElement
+ * @extends Node
  * Inherit from this class to make a custom HTML element.
  * If you extend from XElement, you can't instantiate your class unless you first set the html property.
  * This is because XElement extends from HTMLElement, and setting the .html property calls customElements.define(). */
@@ -1662,9 +1663,6 @@ class XElement extends HTMLElement {
 			throw error;
 		}
 		//#ENDIF
-
-		this.queuedOps = new Set();
-		this.queueDepth = 0;
 		
 		let xname = getXName(this.constructor);
 		let self = this;
@@ -1674,27 +1672,6 @@ class XElement extends HTMLElement {
 			customElements.whenDefined(xname).then(() => {
 				initHtml(self);
 			});
-	}
-
-	enqueue(callback) {
-		var self = this;
-		return function() {
-			if (self.queueDepth === 0)
-				return callback();
-			else
-				self.queuedOps.add(callback);
-		};
-	}
-
-	batch(callback) {
-		this.queueDepth ++;
-		callback();
-		this.queueDepth --;
-		if (this.queueDepth === 0) {
-			for (let op of this.queuedOps)
-				op();
-			this.queuedOps = new Set();
-		}
 	}
 }
 
@@ -1750,14 +1727,13 @@ var bindings = {
 		for (let name in obj) {
 			let attrExpr = addThis(replaceVars(obj[name], context), context);
 
-			let setAttr = self.enqueue(function (/*action, path, value*/) {
+			let setAttr = /*elf.enqueue(*/function (/*action, path, value*/) {
 				var result = safeEval.call(self, attrExpr);
 				if (result === false || result === null || result === undefined)
 					el.removeAttribute(name);
 				else
 					el.setAttribute(name, result + '');
-
-			});
+			}/*)*/;
 
 			// If the variables in code, change, execute the code.
 			// Then set the attribute to the value returned by the code.
@@ -1778,11 +1754,21 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	prop: (self, code, el, context) => {
 
+		//#IFDEV
+		if (!(el instanceof XElement))
+			throw new XElementError('The data-prop and x-prop attributes can only be used on XElements in ' + code);
+		//#ENDIF
+
 		// allow binding only on XElement
 		if (self !== el && el instanceof XElement) {
 
 			var obj = parseObj(code);
 			for (let prop in obj) {
+
+				//#IFDEV
+				if (prop === 'this')
+					throw new XElementError('Cannot use data-propx or x-prop to bind to "this" as a destination in ' + code);
+				//#ENDIF
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
 				let updateProp = /*self.enqueue(*/(action, path, value) => {
@@ -1845,7 +1831,7 @@ var bindings = {
 			let classExpr = addThis(replaceVars(obj[name], context), context);
 
 			// This code is called on every update.
-			let updateClass = self.enqueue(() => {
+			let updateClass = /*self.enqueue(*/() => {
 				let result = safeEval.call(self, classExpr);
 				if (result)
 					el.classList.add(name);
@@ -1854,7 +1840,7 @@ var bindings = {
 					if (!el.classList.length) // remove attribute after last class removed.
 						el.removeAttribute('class');
 				}
-			});
+			}/*)*/;
 
 
 			// Create properties and watch for changes.
@@ -1895,9 +1881,9 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = self.enqueue((/*action, path, value*/) => {
+		let setHtml = /*self.enqueue(*/(/*action, path, value*/) => {
 			el.innerHTML = safeEval.call(self, code);
-		});
+		}/*)*/;
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setHtml);
@@ -1939,6 +1925,13 @@ var bindings = {
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
 			if (!root.loopHtml_) {
+
+				//#IFDEV
+				if (root.children.length !== 1)
+					throw new XElementError('x-loop="' + code + '" must have exactly one child html element.  ' +
+						'This restriction may be removed in the future.');
+				//#ENDIF
+
 				root.loopHtml_ = root.innerHTML.trim();
 				root.loopChildren = Array.from(root.children);
 
@@ -1950,7 +1943,7 @@ var bindings = {
 
 			//#IFDEV
 			if (!root.loopHtml_)
-				throw new XElementError('Loop "' + code + '" rebuildChildren() called before bindEl().');
+				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
 			var newItems = (safeEval.call(self, foreach) || []);
@@ -1961,6 +1954,7 @@ var bindings = {
 			// Do nothing if the array hasn't changed.
 			if (arrayEq(oldItems, newItems, true))
 				return;
+			console.log(el);
 
 			// Set temporary index on each child, so we can track how they're re-ordered.
 			for (let i in Array.from(root.children))
@@ -2101,6 +2095,9 @@ var bindings = {
 
 			// Update the arrays after we drag items.
 			var moveItems = function(event) {
+				console.log(event);
+
+
 				let oldSelf = getXParent(event.from);
 				let newSelf = getXParent(event.to);
 
@@ -2119,13 +2116,24 @@ var bindings = {
 
 				newArray.splice(event.newIndex, 0, item);
 
-				traversePath(newSelf, path, true, newArray, true); // Set the newArray without triggering notifications.
-				rebindLoopChildren(newSelf, event.to, context, oldSelf);
 
+				// Set the newArray without triggering notifications.
+				// Because a notification will cause data-loop's rebuildChildren() to be called
+				// And Sortable has already rearranged the elements.
+				//debugger;
+				let array = traversePath(newSelf, path, true, newArray, true);
+				rebindLoopChildren(newSelf, event.to, [context], oldSelf); // But we still need to unbind and rebind them in their currnet positions.
+				array.$trigger; // This won't trigger rebuilding our own children because their order already matches.
+
+
+				// If origin was a different loop:
 				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
-					traversePath(oldSelf, path, true, oldArray, true);
-					rebindLoopChildren(oldSelf, event.from, context);
+					let array = traversePath(oldSelf, path, true, oldArray, true);
+					rebindLoopChildren(oldSelf, event.from, [context]);
+					array.$trigger;
 				}
+
+
 			};
 
 			result.onAdd = function(event) {
@@ -2171,7 +2179,7 @@ var bindings = {
 				traversePath(self, paths[0], true, value);
 			});
 
-		let setVal = self.enqueue((/*action, path, value*/) => {
+		let setVal = /*self.enqueue(*/(/*action, path, value*/) => {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
@@ -2179,7 +2187,7 @@ var bindings = {
 				el.checked = result == true;
 			else
 				el.value = result;
-		});
+		}/*)*/;
 
 		// Update input value when object property changes.
 		for (let path of paths) {
@@ -2202,9 +2210,9 @@ var bindings = {
 		if (displayNormal === 'none')
 			displayNormal = '';
 
-		let setVisible = self.enqueue((/*action, path, value*/) => {
+		let setVisible = /*self.enqueue(*/(/*action, path, value*/) => {
 			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
-		});
+		}/*)*/;
 
 		for (let path of parseVars(code)) {
 			watch(self, path, setVisible);
@@ -2218,18 +2226,23 @@ var bindings = {
 	/*
 	'style': function(self, field, el) {}, // Can point to an object to use for the style.
 	'if': function(self, field, el) {}, // Element is created or destroyed when data-if="code" evaluates to true or false.
-	'sortable': // TODO use sortable.js and data-sortable="{sortableOptionsAsJSON}"
 	*/
 };
 
 
-// TODO: Only update changed children.  Merge from this and similar code in rebuildChildren().
+/**
+ * Unbind and rebind every child of element el with data-loop attribute.
+ * TODO: Only update changed children.  Merge from this and similar code in rebuildChildren().
+ * @param self {XElement}
+ * @param el {HTMLElement}
+ * @param context {object<string, string>[]}
+ * @param oldSelf {XElement=} Will be different than self if the items were moved from one list to another. */
 var rebindLoopChildren = function(self, el, context, oldSelf) {
 	oldSelf = oldSelf || self;
 	let [foreach, loopVar, indexVar] = parseLoop(getLoopCode_(el));
 	foreach = addThis(replaceVars(foreach, context), context);
 
-	let localContext = {...context}; // clone
+	let localContext = {};
 	for (let i=0; i<el.children.length; i++) {
 		let child = el.children[i];
 
@@ -2239,7 +2252,7 @@ var rebindLoopChildren = function(self, el, context, oldSelf) {
 		if (indexVar !== undefined)
 			localContext[indexVar] = i;
 
-		bindEl(self, child, localContext);
+		bindEl(self, child, [localContext, ...context]);
 	}
 
 	el.items_ = safeEval.call(self, foreach).slice();

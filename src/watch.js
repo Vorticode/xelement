@@ -97,11 +97,6 @@ class WatchProperties {
 		var self = this;
 		var field = path[0];
 
-
-
-
-
-
 		if (!(field in self.fields_)) {
 			self.fields_[field] = self.obj_[field];
 
@@ -112,7 +107,13 @@ class WatchProperties {
 				enumerable: 1,
 				configurable: 1,
 				get: () => self.proxy_[field],
-				set: (val) => self.proxy_[field] = val
+				//set: (val) => self.obj_.$disableWatch ? self.proxy_.$removeProxy[field] = val : self.proxy_[field] = val
+				set: function(val) {
+					if (self.obj_.$disableWatch) // used by traversePath to watchlessly set.
+						self.proxy_.$removeProxy[field] = val;
+					else
+						self.proxy_[field] = val;
+				}
 			});
 		}
 

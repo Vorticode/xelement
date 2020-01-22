@@ -212,7 +212,9 @@ var traversePath = (obj, path, create, value, watchless) => {
 		if (last && value !== undefined) {
 			if (watchless)
 				obj = obj.$removeProxy || obj;
+			obj.$disableWatch= true;
 			obj[srcProp] = value;
+			delete obj.$disableWatch;
 		}
 
 		// Traverse deeper along destination object.

@@ -1991,7 +1991,119 @@ var test_XElement = {
 		})();
 	},
 
-	redraw_benchmark: function () {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	// Doesn't work, events don't trigger sortable.
+	sortable: function() {
+
+		(function() {
+
+
+			class A extends XElement{}
+			A.html = `
+				<div>
+					<div id="list1" x-loop="items: item" x-sortable>
+						<p data-text="item"></p>
+					</div>	
+					<div id="list2" x-loop="items: item">
+						<p data-text="item"></p>
+					</div>	
+				</div>`;
+
+			let a = new A();
+
+			a.items = ['A', 'B', 'C'];
+
+			document.body.appendChild(a);
+
+			console.log(a.shadowRoot.innerHTML);
+
+
+			const createBubbledEvent = (type, props = {}) => {
+				const event = new Event(type, { bubbles: true });
+				Object.assign(event, props);
+				return event;
+			};
+
+			const startingNode = a.list1;
+			const endingNode = a.list1;
+			startingNode.dispatchEvent(
+				createBubbledEvent("dragstart", { clientX: 0, clientY: 0 })
+			);
+			endingNode.dispatchEvent(
+				createBubbledEvent("drop", { clientX: 10, clientY: 1 })
+			);
+
+
+			console.log(a.items);
+			console.log(a.shadowRoot.innerHTML);
+
+		})();
+	},
+
+
+	sortable2: function() {
+
+		(function() {
+			class D extends XElement{}
+			D.html = `
+				<div>
+					<div id="list" x-loop="parentC.parentB.parentA.items: item">
+						<p data-text="item"></p>
+					</div>	
+				</div>`;
+
+			class C extends XElement{}
+			C.html = `
+				<div>
+					<x-d x-prop="parentC: this"></x-d>
+				</div>`;
+
+			class B extends XElement{}
+			B.html = `
+				<div>
+					<x-c x-prop="parentB: this"></x-c>
+				</div>`;
+
+			class A extends XElement{}
+			A.html = `
+				<div>
+					<div id="list" x-loop="items: item" x-sortable>
+						<p data-text="item"></p>
+					</div>
+					<x-b x-prop="parentA: this"></x-b>
+				</div>`;
+
+			let a = new A();
+
+			a.items = ['A', 'B', 'C'];
+
+			document.body.appendChild(a);
+
+		})();
+	},
+
+
+
+
+
+
+
+
+
+	redraw_benchmark: function() {
 		// Test how many times text redraw happens.
 		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
@@ -2029,16 +2141,78 @@ var test_XElement = {
 	},
 
 
+	redraw_benchmark2: function() {
+		window.count = 0;
+
+		window.passthrough = function(item) {
+			if (window.init) {
+				console.log(item);
+				window.count++;
+			}
+			return ''
+		};
+
+		class B extends XElement{}
+		B.html = `
+			<div x-loop="a.items: item">
+				<span x-text="item + passthrough(item)"></span>			
+			</div>`;
+
+		class A extends XElement{}
+		A.html = `
+			<div>
+				<x-b x-prop="a: this"></x-b>		
+			</div>`;
+
+		var a = new A();
+		//document.body.appendChild(a);
+		a.items = [0, 1, 2, 3, 4, 5, 6, 7];
+
+		window.count = 0;
+		window.init = true;
+
+		a.items[0] = '1b';
+		console.log(window.count);
+	},
+
+	redraw_benchmark2B: function() {
+		window.count = 0;
+
+		window.passthrough = function(item) {
+			if (window.init) {
+				console.log(item);
+				window.count++;
+			}
+			return ''
+		};
 
 
+		class A extends XElement{}
+		A.html = `
+			<div>
+				<div id="loop" x-loop="items: item">
+					<span x-text="item + passthrough(item)"></span>			
+				</div>
+			</div>`;
+
+		var a = new A();
+		//document.body.appendChild(a);
+		a.items = [0, 1, 2, 3, 4, 5, 6, 7];
+
+		window.count = 0;
+		window.init = true;
+
+		a.items[0] = '1b';
+		console.log(window.count);
+		console.log(a.loop.innerHTML);
+	},
 
 
-
-
-
-
-
-
+	temp: function() {
+		let code = 'nop(item)';
+		let paths = parseVars(code);
+		console.log(paths);
+	},
 
 
 

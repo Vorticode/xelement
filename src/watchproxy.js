@@ -16,6 +16,13 @@ var handler = {
 			return obj;
 		if (field==='$roots')
 			return ProxyObject.get_(obj).roots_;
+		if (field==='$trigger') {
+			let proxyObj = ProxyObject.get_(obj);
+			for (let root of proxyObj.roots_)
+				root.notify_('set', [], obj);
+			return proxyObj.roots_;
+		}
+
 
 
 		let result = obj[field];
@@ -34,8 +41,8 @@ var handler = {
 			// Get (or create) the single unique instances of obj shared among all roots.
 			// Keeping a shared copy lets us have multiple watchers on the same object,
 			// and notify one when another changes the value.
-			var proxyObj = ProxyObject.get_(obj);
-			var proxyResult = ProxyObject.get_(result, proxyObj.roots_);
+			let proxyObj = ProxyObject.get_(obj);
+			let proxyResult = ProxyObject.get_(result, proxyObj.roots_);
 
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
