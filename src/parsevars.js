@@ -61,12 +61,13 @@ var parseVars = (code, includeThis, allowCall) => {
 			// Add the start of the match.
 			index += matches.index;
 
+
 			code = code.slice(regex.lastIndex); // advance forward in parsing code.
 			regex.lastIndex = 0; // reset the regex.
 
 			// Don't grab functions or common functions properties as vars unless they are within brackets.
 			// matches[1] is the match for a .variable and not something in brackets.
-			// TODO: allow some nonvars if in brackets.
+			// TODO: allow some nonvars if in brackets?
 			keepGoing = (allowCall || !matches[0].endsWith('(')) && !nonVars.includes(matches[1]);
 			if (keepGoing) {
 
@@ -77,7 +78,10 @@ var parseVars = (code, includeThis, allowCall) => {
 				// Add varible property to current path
 				if (includeThis || item !== 'this') {
 					currentVar.push(item);
-					currentVar.index_.push(index);
+					currentVar.index_.push({
+						start: index,
+						end: index+item.length
+					});
 				}
 
 				regex = varPropRegex; // switch to reading subsequent parts of the variable.
@@ -99,21 +103,42 @@ var parseVars = (code, includeThis, allowCall) => {
 	return result;
 };
 
-/**
- * TODO: this function should leave alone anything after a :
- * @param code {string}
- * @param replacements {object<string, string>}
- * @returns {string} */
-var replaceVars = (code, replacements) => {
+var replaceVarsOld = (code, replacements) => {
 	var paths = parseVars(code, 1);
 	for (let path of paths.reverse()) // We loop in reverse so the replacement indices don't get messed up.
 		for (let oldVar in replacements) {
 			if (path.length >= 1 && path[0] === oldVar)
 				// replacements[oldVar] is newVar.
-				code = code.slice(0, path.index_[0]) + replacements[oldVar] + code.slice(path.index_[0] + oldVar.length);
+				code = code.slice(0, path.index_[0].start) + replacements[oldVar] + code.slice(path.index_[0].start + oldVar.length);
 		}
+	return code;
+};
 
-		console.log(code);
+/**
+ * TODO: this function should leave alone anything after a :
+ *
+ * If a replacement value is "this", it'll be trimmed off the beginning.
+ * @param code {string}
+ * @param replacements {object<string, string>}
+ * @returns {string} */
+var replaceVars = (code, replacements) => {
+	if (!Array.isArray(replacements))
+		replacements = [replacements];
+
+	for (let replacement of replacements)
+		for (let oldVar in replacement) {
+			var paths = parseVars(code, 1);
+			for (let path of paths.reverse()) { // We loop in reverse so the replacement indices don't get messed up.
+
+				if (path.length >= 1 && path[0] === oldVar) {
+					let newVal = replacement[oldVar];
+					if (newVal === 'this')
+						code = path[1] + (path.length > 2 ? code.slice(path.index_[2].start) : '');
+					else
+						code = code.slice(0, path.index_[0].start) + replacement[oldVar] + code.slice(path.index_[0].end);
+				}
+			}
+		}
 	return code;
 };
 

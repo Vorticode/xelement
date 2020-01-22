@@ -176,17 +176,18 @@ var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) 
  * Code similar to this is used in other places.  It'd be nice to make it shared.
  * @param el {HTMLElement}
  * @param props {string[]=}
- * @param context {object<string, string>=}
+ * @param context {object<string, string>[]=}
  * @returns {Set} */
 var getPropSubscribers = function(el, props, context) {
 
-	context = context || {};
+	context = context || [];
 	let result = new Set();
+	var isFirst = !props;
 
 
 	if (el instanceof XElement) {
 
-		let propCode = getXAttrib(el, 'prop');
+		var propCode = getXAttrib(el, 'prop');
 		// Getting data-prop for the first time from the top level element.
 		if (!props) {
 			if (propCode) {
@@ -197,25 +198,7 @@ var getPropSubscribers = function(el, props, context) {
 				return result;
 		}
 
-		// Getting props from a child xelement so we can descent into it and also look for subscriptions
-		// This is needed to make Test:  SecondLevelPropForward work.
-		else if (propCode){
-			let items = parseObj(propCode);
-			for (let key in items) {
-				context[key] = items[key];
-			}
 
-
-			//for (let key in items)
-			/*
-			{
-				for (let key2 in context) {
-
-					context[key2] = replaceVars(context[key2], context);
-
-				}
-			}*/
-		}
 	}
 
 	let simpleAttribs = ['text', 'html', 'val', 'visible'];
@@ -225,6 +208,8 @@ var getPropSubscribers = function(el, props, context) {
 			code = replaceVars(code, context);
 			let paths = parseVars(code);
 			for (let path of paths) {
+
+				// path[0] is the name of the bound prop and path[1] is the field we subscribet on it:
 				if (props.includes(path[0]) && path[1])
 					result.add(path[1]);
 			}
@@ -266,7 +251,7 @@ var getPropSubscribers = function(el, props, context) {
 	for (let i=0; i<parent.children.length; i++) {
 
 		let child = parent.children[i];
-		let localContext = {...context};
+		let localContext = {};
 
 		// Create loop context
 		if (foreach) {
@@ -275,8 +260,17 @@ var getPropSubscribers = function(el, props, context) {
 				localContext[indexVar] = i;
 		}
 
+		// Getting props from a child xelement so we can descent into it and also look for subscriptions
+		// This is needed to make Test:  SecondLevelPropForward work.
+		if (propCode && !isFirst) {
+			let items = parseObj(propCode);
+			for (let key in items) {
+				localContext[key] = items[key];
+			}
+		}
 
-		let items = getPropSubscribers(child, props, localContext);
+
+		let items = getPropSubscribers(child, props, [localContext, ...context]);
 		result = new Set([...result, ...items]); // merge sets
 	}
 
@@ -579,7 +573,6 @@ var initHtml = (self) => {
 
 		// This is set before data binding so that we can search loop children before bindings.loop() removes them.
 		self.propSubscriptions = Array.from(getPropSubscribers(self));
-
 
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?

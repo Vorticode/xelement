@@ -322,10 +322,10 @@ var test_XElement = {
 	},
 
 	properties: function () {
-		class P1R extends XElement {
+		class PR1 extends XElement {
 		}
 
-		P1R.html = '<div invalidattr="val1"></div>'; // attr must be lowercase.
+		PR1.html = '<div invalidattr="val1"></div>'; // attr must be lowercase.
 
 		// Make sure attribute is set from html.
 		var p = new PR1();
@@ -1855,7 +1855,7 @@ var test_XElement = {
 		})();
 	},
 
-	temp: function () {
+	redraw_benchmark: function () {
 		// Test how many times text redraw happens.
 		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
@@ -1916,25 +1916,25 @@ var test_XElement = {
 		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
 		(function() {
 
-			class C extends XElement {}
-			C.html = `
+			class C_P16 extends XElement {}
+			C_P16.html = `
 			<div>
 				<span id="text" x-text="parentB.parentA.variable"></span>								
 			</div>`;
 
-			class B extends XElement {}
-			B.html = `
+			class B_P16 extends XElement {}
+			B_P16.html = `
 			<div>
-			    <x-c id="c" x-prop="parentB: this"></x-c>	
+			    <x-c_p16 id="c" x-prop="parentB: this"></x-c_p16>	
 			</div>`;
 
-			class A extends XElement {}
-			A.html = `
+			class A_P16 extends XElement {}
+			A_P16.html = `
 			<div>				
-				<x-b id="b" x-prop="parentA: this"></x-b>						
+				<x-b_p16 id="b" x-prop="parentA: this"></x-b_p16>						
 			</div>`;
 
-			var a = new A();
+			var a = new A_P16();
 			a.variable = 'A';
 
 			assertEq(a.b.c.text.textContent, 'A');
@@ -1952,36 +1952,35 @@ var test_XElement = {
 		// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
 		(function() {
 
-			class D extends XElement {}
-			D.html = `
+			class D_P17 extends XElement {}
+			D_P17.html = `
 			<div>
 				<span id="text" x-text="parentC.parentB.parentA.variable"></span>								
 			</div>`;
 
-			class C extends XElement {}
-			C.html = `
+			class C_P17 extends XElement {}
+			C_P17.html = `
 			<div>
-			    <x-d id="d" x-prop="parentC: this"></x-d>
+			    <x-d_p17 id="d" x-prop="parentC: this"></x-d_p17>
 			</div>`;
 
-			class B extends XElement {}
-			B.html = `
+			class B_P17 extends XElement {}
+			B_P17.html = `
 			<div>
-				<x-c id="c" x-prop="parentB: this"></x-c>
+				<x-c_p17 id="c" x-prop="parentB: this"></x-c_p17>
 				<!--<span x-text="parentA.variable"></span>-->
 			</div>`;
 
-			class A extends XElement {}
-			A.html = `
+			class A_P17 extends XElement {}
+			A_P17.html = `
 			<div>				
-				<x-b id="b" x-prop="parentA: this"></x-b>						
+				<x-b_p17 id="b" x-prop="parentA: this"></x-b_p17>						
 			</div>`;
 
-			var a = new A();
+			var a = new A_P17();
 			a.variable = 'A';
-			document.body.appendChild(a);
 
-			//assertEq(a.b.c.d.text.textContent, 'A');
+			assertEq(a.b.c.d.text.textContent, 'A');
 		})();
 	},
 
@@ -2009,18 +2008,12 @@ var test_XElement = {
 		class XRung extends XElement {}
 		XRung.html = `
 			<div>
-				<x-node x-prop="xRung: this"></x-node>
-				
-				<!---->
-				<select x-loop="xFunc.xProgram.xLadderBuilder.variables: v">
-					<option x-text="v"></option>
-				</select>
-				
+				<x-node x-prop="xRung: this"></x-node>				
 			</div>`;
 
 		class XFunc extends XElement {}
 		XFunc.html = `
-			<div>1
+			<div>
 			    <x-rung x-prop="rung: func.rungs[0]; xFunc: this"></x-rung>				
 			</div>`;
 
@@ -2028,9 +2021,7 @@ var test_XElement = {
 		XProgram.html = `
 			<div>
 				<!-- Deleting this x-loop div makes it fail. -->
-				<div x-loop="program.functions: func">
-				    <x-func x-prop="func: program.functions[0]; xProgram: this"></x-func>
-				</div>		
+				<x-func x-prop="func: program.functions[0]; xProgram: this"></x-func>					
 			</div>`;
 
 		class XLadderBuilder extends XElement {
@@ -2069,5 +2060,27 @@ var test_XElement = {
 		var lb = new XLadderBuilder();
 		document.body.appendChild(lb);
 	},
+
+
+
+	temp4: function() {
+
+		// TODO: Also test this in reverse, it should only do one of them.
+		let context = [
+			{parentC: 'this'},
+			{parentB: 'this'},
+			{parentA: 'this'}
+		];
+		//          /      /       /       /         /
+		let code = 'parentC.parentB.parentA.variables';
+		// let paths = parseVars(code);
+		// console.log(paths);
+
+		let code2 = replaceVars(code, context);
+		console.log(code2);
+		assertEq(code2, 'variables');
+
+
+	}
 };
 
