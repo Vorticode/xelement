@@ -38,7 +38,7 @@ var removeProxies = (obj, visited) => {
 
 			// If a proxy was removed from the property.
 			if (v !== t) {
-				if (Object.getOwnPropertyDescriptor(obj, name).writable)
+				if (Object.getOwnPropertyDescriptor(obj, name).writable) // we never set writable=true when we defineProperty.
 					obj[name] = v;
 				else {
 					// It's a defined property.  Set it on the underlying object.
@@ -112,6 +112,7 @@ class WatchProperties {
 						callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 			}
 
+		// Old way:
 		// for (let name in this.subs_)
 		// 	if (name.startsWith(cpath))
 		// 		for (let callback of this.subs_[name])

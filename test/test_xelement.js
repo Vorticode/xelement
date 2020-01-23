@@ -1989,6 +1989,210 @@ var test_XElement = {
 		})();
 	},
 
+	redraw: function() {
+		// Test how many times text redraw happens.
+		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
+		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
+		(function() {
+			class B extends XElement {
+				constructor() {
+					super();
+					this.redraw = 0;
+				}
+
+				passthrough(item) {
+					if (init)
+						this.redraw++;
+					return item;
+				}
+			}
+
+			B.html = `
+				<div x-loop="a.items: item">
+					<span x-text="item + this.passthrough('')"></span>			
+				</div>`;
+
+			class A extends XElement {}
+			A.html = `
+				<div>
+					<x-b id="b" x-prop="a: this"></x-b>		
+				</div>`;
+
+			var a = new A();
+			a.items = [1, 2, 3];
+
+			var init = true;
+			a.items.shift();
+			//console.log(a.b.redraw);
+
+			// Should
+			assertEq(a.b.redraw, 2);
+		})();
+	},
+
+	redraw2: function() {
+		// Test how many times text redraw happens.
+		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
+		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
+		(function() {
+			class A extends XElement {
+				constructor() {
+					super();
+					this.redraw = 0;
+				}
+
+				passthrough(item) {
+					if (init)
+						this.redraw++;
+					return item;
+				}
+			}
+			A.html = `
+				<div>
+					<div x-loop="items: item">
+						<span x-text="item + this.passthrough('')"></span>			
+					</div>
+				</div>`;
+
+			var a = new A();
+			a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+			window.init = true;
+			var init = true;
+			a.items[0] = 'A2';
+			console.log(a.redraw);
+
+			//assertEq(a.b.redraw, 1);
+		})();
+	},
+
+	redraw3: function() {
+		// Test how many times text redraw happens.
+		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
+		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
+		(function() {
+			class B extends XElement {
+				constructor() {
+					super();
+					this.redraw = 0;
+				}
+
+				passthrough(item) {
+					if (init)
+						this.redraw++;
+					return item;
+				}
+			}
+
+			B.html = `
+				`;
+
+			class A extends XElement {
+				constructor() {
+					super();
+					this.redraw = 0;
+				}
+
+				passthrough(item) {
+					if (init)
+						this.redraw++;
+					return item;
+				}
+			}
+			A.html = `
+				<div>
+					<div x-loop="items: item">
+						<span x-text="item + this.passthrough('')"></span>			
+					</div>
+				</div>`;
+
+			var a = new A();
+			a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+			var init = true;
+			a.items[0] = 'A2';
+			console.log(a.redraw);
+
+			//assertEq(a.b.redraw, 1);
+		})();
+	},
+
+
+
+
+
+
+
+	/*
+
+	// I made this copy to later test removing the <div x-loop="program.functions: func">.
+	lb: function() {
+
+		class XNode extends XElement {}
+		XNode.html = `
+			<div>
+				<select x-loop="xRung.xFunc.xProgram.xLadderBuilder.variables: v">
+					<option x-text="v"></option>
+				</select>
+			</div>`;
+
+		class XRung extends XElement {}
+		XRung.html = `
+			<div>
+				<x-node x-prop="xRung: this"></x-node>				
+			</div>`;
+
+		class XFunc extends XElement {}
+		XFunc.html = `
+			<div>
+			    <x-rung x-prop="rung: func.rungs[0]; xFunc: this"></x-rung>				
+			</div>`;
+
+		class XProgram extends XElement {}
+		XProgram.html = `
+			<div>
+				<!-- Deleting this x-loop div makes it fail. -->
+				<x-func x-prop="func: program.functions[0]; xProgram: this"></x-func>					
+			</div>`;
+
+		class XLadderBuilder extends XElement {
+
+			constructor() {
+				super();
+				this.variables = ['A', 'B', 'C'];
+
+				this.program =  {
+					functions: [
+						{
+							rungs: [
+								{
+									nodes: [1]
+								}
+							]
+						}
+					],
+					rungs: [
+						{
+							nodes: [1]
+						}
+					],
+					nodes: [1]
+				};
+
+				//this.xVariableDrawer.variables.push('D');
+			}
+
+		}
+		XLadderBuilder.html = `
+			<div>
+				<x-program id="xProgram" x-prop="xLadderBuilder: this; program: this.program"></x-program>				
+			</div>`;
+
+		var lb = new XLadderBuilder();
+		document.body.appendChild(lb);
+	},
+
+
 
 
 	temp: function() {
@@ -2039,16 +2243,8 @@ var test_XElement = {
 		debugger;
 		a.items = [{name: '1'}];
 		assertEq(a.b.loop.children.length, 1);
-	}
+	},
 
-
-
-
-
-
-
-
-/*
 
 	// Doesn't work, events don't trigger sortable.
 	sortable: function() {
@@ -2148,42 +2344,7 @@ var test_XElement = {
 
 
 
-	redraw_benchmark: function() {
-		// Test how many times text redraw happens.
-		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
-		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
-		window.count = 0;
 
-		window.passthrough = function(item) {
-			if (window.debug2)
-				window.count++;
-			return item;
-		};
-
-		class B extends XElement{}
-		B.html = `
-			<div x-loop="a.items: item">
-				<span x-text="item + passthrough('')"></span>			
-			</div>`;
-
-		class A extends XElement{}
-		A.html = `
-			<div>
-				<x-b x-prop="a: this"></x-b>		
-			</div>`;
-
-		var a = new A();
-		//document.body.appendChild(a);
-		a.items = [1, 2, 3];
-
-		window.count = 0;
-		window.debug2 = true;
-
-		//XElement.batch(function() {
-			a.items.shift();
-		//})();
-		console.log(window.count);
-	},
 
 
 	redraw_benchmark2: function() {
@@ -2261,75 +2422,7 @@ var test_XElement = {
 
 
 
-
-
-	// I made this copy to later test removing the <div x-loop="program.functions: func">.
-	temp2: function() {
-
-		class XNode extends XElement {}
-		XNode.html = `
-			<div>
-				<select x-loop="xRung.xFunc.xProgram.xLadderBuilder.variables: v">
-					<option x-text="v"></option>
-				</select>
-			</div>`;
-
-		class XRung extends XElement {}
-		XRung.html = `
-			<div>
-				<x-node x-prop="xRung: this"></x-node>				
-			</div>`;
-
-		class XFunc extends XElement {}
-		XFunc.html = `
-			<div>
-			    <x-rung x-prop="rung: func.rungs[0]; xFunc: this"></x-rung>				
-			</div>`;
-
-		class XProgram extends XElement {}
-		XProgram.html = `
-			<div>
-				<!-- Deleting this x-loop div makes it fail. -->
-				<x-func x-prop="func: program.functions[0]; xProgram: this"></x-func>					
-			</div>`;
-
-		class XLadderBuilder extends XElement {
-
-			constructor() {
-				super();
-				this.variables = ['A', 'B', 'C'];
-
-				this.program =  {
-					functions: [
-						{
-							rungs: [
-								{
-									nodes: [1]
-								}
-							]
-						}
-					],
-					rungs: [
-						{
-							nodes: [1]
-						}
-					],
-					nodes: [1]
-				};
-
-				//this.xVariableDrawer.variables.push('D');
-			}
-
-		}
-		XLadderBuilder.html = `
-			<div>
-				<x-program id="xProgram" x-prop="xLadderBuilder: this; program: this.program"></x-program>				
-			</div>`;
-
-		var lb = new XLadderBuilder();
-		document.body.appendChild(lb);
-	},
-
 */
+
 };
 

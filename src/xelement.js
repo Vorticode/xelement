@@ -787,6 +787,8 @@ var bindings = {
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
+			//if (window.init)
+			//	debugger;
 			el.textContent = safeEval.call(self, code);
 		}/*)*/;
 		for (let path of parseVars(code)) {
@@ -880,7 +882,7 @@ var bindings = {
 				return;
 
 			// Set temporary index on each child, so we can track how they're re-ordered.
-			for (let i in Array.from(root.children))
+			for (let i=0; i< root.children.length; i++)
 				root.children[i].index_ = i;
 
 			// Create a map from the old items to the elements that represent them.
@@ -947,7 +949,7 @@ var bindings = {
 			//#ENDIF
 
 			// Rebind events on any elements that had their index change.
-			for (let i in Array.from(root.children)) {
+			for (let i=0; i< root.children.length; i++) {
 				let child = root.children[i];
 				if (child.index_ !== i) {
 

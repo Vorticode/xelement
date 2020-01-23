@@ -25,6 +25,10 @@ function assertNeq(val1, val2) {
 		throw new AssertError(val1 + ' === ' + val2);
 }
 
+function assertLte(val1, val2) {
+	if (val1 > val2)
+		throw new AssertError(val1 + ' > ' + val2);
+}
 
 var Mock = {
 
