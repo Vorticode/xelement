@@ -638,7 +638,6 @@ var test_XElement = {
 			//document.body.appendChild(b);
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span><span data-text="item">2</span>');
 
-			window.init = true;
 			b.items.pop();
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span>');
 
@@ -1354,27 +1353,23 @@ var test_XElement = {
 		(function () {
 
 			// Make sure only the right side of data-prop has replaceVars/addThis applied.
-			class Bd1Wheel extends XElement {
-			}
-
-			Bd1Wheel.html = `				
+			class B_P1 extends XElement {}
+			B_P1.html = `				
 			<div>
-			    <b data-text="wheel"></b>
+			    <b id="text" data-text="item"></b>
 			</div>`;
 
-			class Bd1Car extends XElement {
-			}
-
-			Bd1Car.html = `				
-			<div data-loop="wheels: wheel">
-			    <x-bd1wheel data-prop="wheel: wheel"></x-bd1wheel>
+			class A_P1 extends XElement {}
+			A_P1.html = `				
+			<div data-loop="items: item">
+			    <x-b_p1 data-prop="item: item"></x-b_p1>
 			</div>`;
 
-			var c = new Bd1Car();
-			c.wheels = [];
-			c.wheels.push(1);
+			var a = new A_P1();
+			a.items = [];
+			a.items.push('A');
 
-			assertEq(c.shadowRoot.children[0].shadowRoot.children[0].textContent, '1');
+			assertEq(a.shadowRoot.children[0].text.textContent, 'A');
 
 		})();
 
@@ -1460,25 +1455,23 @@ var test_XElement = {
 
 		// Bind directly to "this"
 		(function () {
-			class BD5Inner extends XElement {}
-			BD5Inner.html = `
+			class B_P5 extends XElement {}
+			B_P5.html = `
 				<div>
 					<div id="loop" data-loop="t1.items: item">					
 						<div data-text="item.name"></div>
 					</div>
 				</div>`;
 
-			class BD5Outer extends XElement {
-			}
-
-			BD5Outer.html = `
+			class A_P5 extends XElement {}
+			A_P5.html = `
 				<div>
-					<x-bd5inner id="t2" data-prop="t1: this"></x-bd5inner>
+					<x-b_p5 id="b" data-prop="t1: this"></x-b_p5>
 				</div>`;
 
-			var t = new BD5Outer();
-			t.items = [{name: '1'}];
-			assertEq(t.t2.loop.children.length, 1);
+			var a = new A_P5();
+			a.items = [{name: '1'}];
+			assertEq(a.b.loop.children.length, 1);
 		})();
 
 
@@ -1578,9 +1571,9 @@ var test_XElement = {
 			var a = {b: {c: {names: [1, 2, 3]}}};
 			xa.a = a;
 
-			assertEq(xa.a.$removeProxy, a);
-			assertEq(xa.xb.b.$removeProxy, a.b);
-			assertEq(xa.xb.xc.c.$removeProxy, a.b.c);
+			// assertEq(xa.a.$removeProxy, a);
+			// assertEq(xa.xb.b.$removeProxy, a.b);
+			// assertEq(xa.xb.xc.c.$removeProxy, a.b.c);
 			assertEq(xa.xb.xc.names.children[0].textContent, '1');
 
 		})();
@@ -1699,7 +1692,7 @@ var test_XElement = {
 
 			var subs = watched.get(xa).subs_;
 			assert('"a","items"' in subs);
-			assert('"a","items","0"' in subs);
+			assert('"a","items","0","name"' in subs);
 			assertEq(Object.keys(subs).length, 2);
 
 			xa.a.items.pop();
@@ -2239,61 +2232,32 @@ var test_XElement = {
 
 	temp: function() {
 
-		// Three level bind
 		(function () {
-
-			class C_P8 extends XElement {}
-			C_P8.html = `				
-				<div>
-				    <span id="names" data-loop="c.names: name">
-				        <div data-text="name"></div>
-					</span>
+			class B_P14 extends XElement {}
+			B_P14.html = `
+				<div x-loop="parentA.unused: unused">
+					<div x-text="parentA.item"></div>
 				</div>`;
 
-			class B_P8 extends XElement {}
-			B_P8.html = `				
+			class A_P14 extends XElement {}
+			A_P14.html = `
 				<div>
-				    <x-c_p8 id="xc" data-prop="c: this.b.c"></x-c_p8>
+					<x-b_p14 id="b" x-prop="parentA: this"></x-b_p14>
 				</div>`;
 
-			class A_P8 extends XElement {}
-			A_P8.html = `				
-				<div>
-				    <x-b_p8 id="xb" data-prop="b: this.a.b"></x-b_p8>
-				</div>`;
+			var a = new A_P14();
 
-			var xa = new A_P8();
 
-			var a = {b: {c: {names: [1, 2, 3]}}};
-			xa.a = a;
+			window.init = true;
+			a.unused = [1];
+			a.item = 'A';
 
-			assertEq(xa.a.$removeProxy, a);
-			assertEq(xa.xb.b.$removeProxy, a.b);
-			assertEq(xa.xb.xc.c.$removeProxy, a.b.c);
-			assertEq(xa.xb.xc.names.children[0].textContent, '1');
-
+			console.log(a.b.shadowRoot.children[0].textContent);
+			//assertEq(lb.b.shadowRoot.children[0].textContent, 'A');
 		})();
 
 	},
 
-	temp2: function() {
-
-		// Make sure unbinding one element doesn't unsubscribe() other watches.
-		(function () {
-			class M5 extends XElement {}
-			M5.html = `
-				<div>
-					<span data-text="item.name"></span>
-					<p data-text="item.name"></p>
-				</div>`;
-			var m = new M5();
-			m.item = {name: 'A'};
-
-			assert(m.item.$isProxy);
-			unbindEl(m.shadowRoot.children[1]);
-			assert(m.item.$isProxy);
-		})();
-	},
 
 
 	/*

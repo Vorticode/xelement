@@ -27,8 +27,54 @@ var eq = (item1, item2) => {
 	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
 };
 
-
 var WeakMultiMap = function() {
+
+	let self = this;
+	self.items = new WeakMap();
+
+	/**
+	 * Add an item to the map.  If it already exists, add another at the same key.
+	 * @param key
+	 * @param value */
+	self.add = function(key, value) {
+		let itemSet = self.items.get(key);
+		if (!itemSet)
+			self.items.set(key, [value]);
+		else
+			itemSet.push(value);
+	};
+
+	/**
+	 * Retrieve an item from the set that matches key and all values specified.
+	 * @param key
+	 * @returns {*|undefined} */
+	self.get = function(key) {
+		return self.items.get(key)[0];
+	};
+
+	self.getAll = function(key, ...values) {
+		return self.items.get(key) || [];
+	};
+
+	// remove last item added.
+	self.remove = function(key) {
+		let itemSet = self.items.get(key);
+		if (!itemSet)
+			return undefined;
+		if (itemSet.length === 1) // remove on last item
+			self.items.delete(key);
+		return itemSet.pop();
+	};
+
+	self.removeAll = function(key) {
+		return self.items.delete(key);
+	}
+
+};
+
+
+// Multi key lookup version.  Might not need this added complexity.
+var WeakMultiMap2 = function() {
 
 	let self = this;
 	self.items = new WeakMap();

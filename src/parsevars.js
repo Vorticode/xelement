@@ -114,6 +114,11 @@ var replaceVarsOld = (code, replacements) => {
 	return code;
 };
 
+// TODO: actual parsing.
+var trimThis = function(code) {
+	return code.replace(/^this\./, '');
+};
+
 /**
  * TODO: this function should leave alone anything after a :
  *
