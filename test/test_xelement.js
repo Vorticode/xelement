@@ -721,9 +721,7 @@ var test_XElement = {
 
 		// Make sure items within loop are unbound and unwatched.
 		(function () {
-			class BL5 extends XElement {
-			}
-
+			class BL5 extends XElement {}
 			BL5.html = `
 				<div>
 					<div id="loop" data-loop="items: item">
@@ -806,9 +804,7 @@ var test_XElement = {
 
 		// Reassign whole loop variable multiple times to make sure we don't lose the subscription.
 		(function () {
-			class BL7 extends XElement {
-			}
-
+			class BL7 extends XElement {}
 			BL7.html = `
 			<div>
 				<div id="loop" data-loop="items: item">
@@ -845,9 +841,7 @@ var test_XElement = {
 
 		// bound data is not a direct child of loop (this used to fail due to a bug in getContext()).
 		(function () {
-			class BL8 extends XElement {
-			}
-
+			class BL8 extends XElement {}
 			BL8.html = `
 				<div data-loop="items: item">
 					<div>
@@ -864,9 +858,7 @@ var test_XElement = {
 
 		// Loop with index.
 		(function () {
-			class BL9 extends XElement {
-			}
-
+			class BL9 extends XElement {}
 			BL9.html = `
 				<div data-loop="items: i, item">
 					<span data-text="i"></span>
@@ -880,9 +872,7 @@ var test_XElement = {
 
 		// Make sure loop items property unsubscribe as they're removed.  This used to fail.
 		(function () {
-			class BL10 extends XElement {
-			}
-
+			class BL10 extends XElement {}
 			BL10.html =
 				'<div data-loop="items:item">' +
 				'<span data-text="item.name"></span>' +
@@ -908,9 +898,7 @@ var test_XElement = {
 		// Loop over var that doesn't initially exist.
 		(function () {
 
-			class BL11 extends XElement {
-			}
-
+			class BL11 extends XElement {}
 			BL11.html = `				
 				<div data-loop="parts.wheels: wheel">
 				    <span></span>
@@ -922,17 +910,13 @@ var test_XElement = {
 
 		// Async
 		(function () {
-			class Wheel12 extends XElement {
-			}
-
+			class Wheel12 extends XElement {}
 			Wheel12.html = `				
 			<div>
 			    <b>Wheel</b>
 			</div>`;
 
-			class Car12 extends XElement {
-			}
-
+			class Car12 extends XElement {}
 			Car12.html = `				
 			<div data-loop="wheels: wheel">
 			    <x-wheel12 data-attribs="title: wheel"></x-wheel12>
@@ -940,23 +924,18 @@ var test_XElement = {
 			var c = new Car12();
 			c.wheels = [];
 			c.wheels.push(1);
-			setTimeout(function () {
-				c.wheels.push(1);
-
-				// This used to fail when done asynchronously, back when we used connectedCallback()
-				assert(c.shadowRoot.children[1].shadowRoot);
-			}, 10);
+			// setTimeout(function () {
+			// 	c.wheels.push(1);
+			//
+			// 	// This used to fail when done asynchronously, back when we used connectedCallback()
+			// 	assert(c.shadowRoot.children[1].shadowRoot);
+			// }, 10);
 		})();
 
 
 		// Splice to rearrange loop with identical items
 		(function () {
-			class BL1 extends XElement {
-			}
-
-			class BL13 extends XElement {
-			}
-
+			class BL13 extends XElement {}
 			BL13.html = `				
 				<div data-loop="wheels: wheel">
 				    <span data-text="wheel"></span>
@@ -976,9 +955,7 @@ var test_XElement = {
 
 		// Two loops over same array.
 		(function () {
-			class BL14 extends XElement {
-			}
-
+			class BL14 extends XElement {}
 			BL14.html = `
 				<div>
 					<div id="loop1" data-loop="items:item">
@@ -2078,6 +2055,186 @@ var test_XElement = {
 		})();
 	},
 
+	cleanup: function() {
+		// This messes up another test with setTmeout
+		(function () {
+			watched = new Map();
+			watchedEls = new Map();
+			proxyRoots = new Map();
+			proxyObjects = new Map();
+
+			class A_C1 extends XElement {
+			}
+
+			A_C1.html = `
+				<div>
+					<div x-loop="items: item">
+						<input data-val="item"/>
+					</div>
+				</div>`;
+			var a = new A_C1();
+			a.items = ['A', 'B', 'C'];
+
+			let sizes = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+
+			//console.log(watched.size, watchedEls.size);
+
+			for (let i = 0; i < 1; i++) {
+				let c = a.items.pop();
+				a.items.push(c);
+			}
+
+			let sizes2 = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+			assert(arrayEq(sizes, sizes2));
+
+			//console.log(watched.size, watchedEls.size);
+			//console.log(watchedEls);
+
+			watched = new WeakMap();
+			watchedEls = new WeakMap();
+			proxyRoots = new WeakMap();
+			proxyObjects = new WeakMap();
+		})();
+	},
+
+	cleanup2: function() {
+
+		// This messes up another test with setTmeout
+		(function () {
+			watched = new Map();
+			watchedEls = new Map();
+			proxyRoots = new Map();
+			proxyObjects = new Map();
+
+			class B_C1 extends XElement {
+			}
+
+			B_C1.html = `
+				<div>
+					<div x-loop="parentA.items: item">
+						<span data-text="item"></span>
+					</div>
+				</div>`;
+
+			class A_C1 extends XElement {
+			}
+
+			A_C1.html = `
+				<div>
+					<x-b_c1 data-prop="parentA: this"></x-b_c1>
+					<div x-loop="items: item">
+						<span data-text="item"></span>
+					</div>
+				</div>`;
+			var a = new A_C1();
+			a.items = ['A', 'B', 'C'];
+
+			let sizes = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+
+			//console.log(watched.size, watchedEls.size);
+
+			for (let i = 0; i < 10; i++) {
+
+				a.items.push('D');
+				let c = a.items.pop();
+			}
+
+			let sizes2 = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+			console.log(sizes, sizes2);
+			assert(arrayEq(sizes, sizes2));
+
+			//console.log(watched.size, watchedEls.size);
+			//console.log(watchedEls);
+
+			watched = new WeakMap();
+			watchedEls = new WeakMap();
+			proxyRoots = new WeakMap();
+			proxyObjects = new WeakMap();
+		})();
+	},
+
+	cleanup3: function() {
+
+		watched = new Map();
+		watchedEls = new Map();
+		proxyRoots = new Map();
+		proxyObjects = new Map();
+
+		class XNode extends XElement {}
+		XNode.html = `
+			<div>
+				<select x-loop="xRung.xFunc.xProgram.xLadderBuilder.variables: v">
+					<option x-text="v"></option>
+				</select>
+			</div>`;
+
+		class XRung extends XElement {}
+		XRung.html = `
+			<div>
+				<x-node x-prop="xRung: this"></x-node>				
+			</div>`;
+
+		class XFunc extends XElement {}
+		XFunc.html = `
+			<div>
+			    <x-rung x-prop="rung: func.rungs[0]; xFunc: this"></x-rung>				
+			</div>`;
+
+		class XProgram extends XElement {}
+		XProgram.html = `
+			<div>
+				<!-- Deleting this x-loop div makes it fail. -->
+				<x-func x-prop="func: program.functions[0]; xProgram: this"></x-func>					
+			</div>`;
+
+		class XLadderBuilder extends XElement {
+
+			constructor() {
+				super();
+				this.variables = ['A', 'B', 'C'];
+
+				this.program =  {
+					functions: [
+						{
+							rungs: [
+								{
+									nodes: [1]
+								}
+							]
+						}
+					],
+					rungs: [
+						{
+							nodes: [1]
+						}
+					],
+					nodes: [1]
+				};
+
+				//this.xVariableDrawer.variables.push('D');
+			}
+
+		}
+		XLadderBuilder.html = `
+			<div>
+				<x-program id="xProgram" x-prop="xLadderBuilder: this; program: this.program"></x-program>				
+			</div>`;
+
+		var lb = new XLadderBuilder();
+		document.body.appendChild(lb);
+
+
+		let sizes = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+
+		lb.variables.push('D');
+		lb.variables.pop();
+
+		let sizes2 = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+		console.log(sizes, sizes2);
+		assert(arrayEq(sizes, sizes2));
+
+	},
+
 
 
 	temp: function() {
@@ -2136,8 +2293,7 @@ var test_XElement = {
 			unbindEl(m.shadowRoot.children[1]);
 			assert(m.item.$isProxy);
 		})();
-	}
-
+	},
 
 
 	/*

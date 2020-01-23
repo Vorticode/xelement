@@ -1232,10 +1232,13 @@ var removeElWatch = (el, path, callback) => {
 	let we = watchedEls.get(el);
 
 	if (we) {
-		for (let i in we) {
+		for (let i=0; i<we.length; i++) {
 			let item = we[i];
 			if (arrayEq(item.path_, path) && item.callback_ === callback) {
-				we.splice(i, 1);
+				if (we.length === 1)
+					watchedEls.delete(el);
+				else
+					we.splice(i, 1);
 				return;
 			}
 		}
@@ -1553,6 +1556,7 @@ var unbindEl = (self, el) => {
 					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 					delete el.loopHtml_;
 					delete el.items_;
+					delete el.loopChildren;
 				}
 
 				let watchedEl = watchedEls.get(el);
@@ -1561,12 +1565,10 @@ var unbindEl = (self, el) => {
 						// only getXParent when first needed.
 						if (!parent) {
 							if (self !== el)
-								var parent = self;
+								parent = self;
 							else
 								parent = getXParent(el) || self;
 						}
-
-
 
 						unwatch(parent, sub.path_, sub.callback_);
 						removeElWatch(el, sub.path_, sub.callback_);
