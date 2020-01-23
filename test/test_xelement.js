@@ -202,7 +202,7 @@ var test_Watch = {
 		assertEq(o.a[0], 1);
 
 		// Make sure we only have one op
-		assertEq(JSON.stringify(ops[0]), '["set",["a","length"],1]');
+		assertEq(JSON.stringify(ops[0].slice(0, 3)), '["set",["a","length"],1]');
 		assertEq(ops.length, 1);
 
 		// Old, from when we notified of every sub-operation:

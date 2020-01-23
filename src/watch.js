@@ -32,26 +32,22 @@ var removeProxies = (obj, visited) => {
 		visited.add(obj);
 
 		// Recursively remove proxies from every property of obj:
-		for (let name in obj)
-			if (obj.hasOwnProperty(name)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
-				let t = obj[name];
-				let v = removeProxies(t, visited);
+		for (let name in Object.keys(obj)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
+			let t = obj[name];
+			let v = removeProxies(t, visited);
 
-				// If a proxy was removed from the property.
-				if (v !== t) {
-					// Not sure what this line was here for, now commented out:
-					//obj = obj.$removeProxy || obj;
-
-					if (Object.getOwnPropertyDescriptor(obj, name).writable)
-						obj[name] = v;
-					else {
-						// It's a defined property.  Set it on the underlying object.
-						let wp = watched.get(obj);
-						let node = wp ? wp.fields_ : obj;
-						node[name] = v
-					}
+			// If a proxy was removed from the property.
+			if (v !== t) {
+				if (Object.getOwnPropertyDescriptor(obj, name).writable)
+					obj[name] = v;
+				else {
+					// It's a defined property.  Set it on the underlying object.
+					let wp = watched.get(obj);
+					let node = wp ? wp.fields_ : obj;
+					node[name] = v
 				}
 			}
+		}
 	}
 	return obj;
 };
