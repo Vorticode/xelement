@@ -1500,9 +1500,7 @@ var test_XElement = {
 
 		// Bind directly to "this"
 		(function () {
-			class BD5Inner extends XElement {
-			}
-
+			class BD5Inner extends XElement {}
 			BD5Inner.html = `
 				<div>
 					<div id="loop" data-loop="t1.items: item">					
@@ -1993,8 +1991,55 @@ var test_XElement = {
 
 
 
+	temp: function() {
 
 
+		var o = {
+			items: ['A', 'B', 'C']
+		};
+
+		watch(o, 'items', function (action, path, val) {
+			console.log('items', path);
+		});
+
+
+		watch(o, ['items', '0'], function (action, path, val) {
+			console.log('items[0]', path);
+		});
+
+
+		watch(o, ['items', '1'], function (action, path, val) {
+			console.log('items[1]', path);
+		});
+
+		// TODO: Should only notify about the one changed value.
+		// notify own level, everything above, and only what's changed in levels below.
+		o.items = ['A2', 'B', 'C'];
+
+	},
+
+	temp2: function() {
+		class B_P5 extends XElement {}
+		B_P5.html = `
+			<div>
+				<div id="loop" data-loop="parentA.items: item">					
+					<div data-text="item.name"></div>
+				</div>
+			</div>`;
+
+		class A_P5 extends XElement {}
+		A_P5.html = `
+			<div>
+				<x-b_p5 id="b" data-prop="parentA: this"></x-b_p5>
+			</div>`;
+
+		var a = new A_P5();
+
+		window.debugger = true;
+		debugger;
+		a.items = [{name: '1'}];
+		assertEq(a.b.loop.children.length, 1);
+	}
 
 
 

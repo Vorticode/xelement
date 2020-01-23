@@ -301,7 +301,7 @@ var bindElProps = (self, el, context) => {
 			else if (attr.name.startsWith('data-'))
 				attrName = attr.name.slice(5); // remove data- prefix.
 
-			if (attrName) {
+			if (attrName/* && attrName !== 'prop'*/) { // prop handled in init so it happens first.
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
 
@@ -546,7 +546,12 @@ var initHtml = (self) => {
 		}
 
 		// This is set before data binding so that we can search loop children before bindings.loop() removes them.
+		//console.log(self.parentNode);
 		self.propSubscriptions = Array.from(getPropSubscribers(self));
+
+		//let prop = getXAttrib(self, 'prop');
+		//if (prop)
+		//	bindings.prop(self.parentNode, prop, self, {});
 
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
@@ -687,7 +692,7 @@ var bindings = {
 				//#ENDIF
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
-				let updateProp = /*XElement.batch(*/(action, path, value) => {
+				let updateProp = /*XElement.batch(*/(action, path, value, oldVal) => {
 					// // Only reassign the value and trigger notfications if it's actually changed.
 					//let oldVal = el[prop];
 					//if (isObj(oldVal))
@@ -701,6 +706,9 @@ var bindings = {
 					// trigger the watchers.
 					// if (oldVal !== newVal)
 					//XElement.batch(function() {
+					//if (window.debugger)
+					//	debugger;
+					el[prop] = undefined;
 						el[prop] = newVal;
 					//})();
 				}/*)*/;
@@ -714,7 +722,6 @@ var bindings = {
 				// <x-item x-prop="parent: this"><span x-text="parent.a"></x-prop>
 				// Then we watch this.a on x-item's parent and update the x-item's parent.a when it changes.
 				if (expr === 'this') {
-					//let subs = getPropSubscribers(el);
 					for (let sub of el.propSubscriptions) {
 						watch(self, sub, updateProp);
 						addElWatch(el, sub, updateProp);
@@ -871,7 +878,6 @@ var bindings = {
 			// Do nothing if the array hasn't changed.
 			if (arrayEq(oldItems, newItems, true))
 				return;
-			console.log(el);
 
 			// Set temporary index on each child, so we can track how they're re-ordered.
 			for (let i in Array.from(root.children))

@@ -1,4 +1,11 @@
 
+var removeProxy = (obj) => {
+	if (isObj(obj))
+		return obj.$removeProxy || obj;
+	return obj;
+};
+
+
 
 /**
  * Operates recursively to remove all proxies.  But should it?
@@ -9,33 +16,40 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	while (obj.$isProxy) // should never be more than 1 level deep of proxies.
+	if (obj.$isProxy)
 		obj = obj.$removeProxy;
 
 	//#IFDEV
-	if (obj.$isProxy)
+	if (obj.$isProxy) // should never be more than 1 level deep of proxies.
 		throw new XElementError("Double wrapped proxy found.");
 	//#ENDIF
 
-	if (isObj(obj)) {
+	if (typeof obj === 'object') {
 		if (!visited)
 			visited = new WeakSet();
 		else if (visited.has(obj))
-			return obj;
+			return obj; // visited this object before in a cyclic data structure.
 		visited.add(obj);
 
+		// Recursively remove proxies from every property of obj:
 		for (let name in obj)
 			if (obj.hasOwnProperty(name)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
 				let t = obj[name];
 				let v = removeProxies(t, visited);
-				if (v !== t) {
-					//watchlessSet(obj, [name], v);
-					// obj.$removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
 
-					obj = obj.$removeProxy || obj;
-					let wp = watched.get(obj);
-					let node = wp ? wp.fields_ : obj;
-					node[name] = v
+				// If a proxy was removed from the property.
+				if (v !== t) {
+					// Not sure what this line was here for, now commented out:
+					//obj = obj.$removeProxy || obj;
+
+					if (Object.getOwnPropertyDescriptor(obj, name).writable)
+						obj[name] = v;
+					else {
+						// It's a defined property.  Set it on the underlying object.
+						let wp = watched.get(obj);
+						let node = wp ? wp.fields_ : obj;
+						node[name] = v
+					}
 				}
 			}
 	}
@@ -60,28 +74,52 @@ class WatchProperties {
 
 	/**
 	 * When a property or sub-property changes, notify its subscribers.
+	 * This is an expanded version of watchproxy.notify.  It also notifies every callback subscribed to a parent of path,
+	 * and all children of path if their own value changed.
 	 * @param action {string}
 	 * @param path {string[]}
 	 * @param value {*=} */
-	notify_(action, path, value) {
+	notify_(action, path, value, oldVal) {
+
+		let cpath = csv(path);
+
 
 		// Traverse up the path looking for anything subscribed.
 		let parentPath = path.slice(0, -1);
-		let cpath = csv(path);
 		while (parentPath.length) {
-			let cpath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
+			let cpath2 = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
-			if (cpath in this.subs_)
-				for (let callback of this.subs_[cpath])
+			if (cpath2 in this.subs_)
+				for (let callback of this.subs_[cpath2])
 					callback.apply(this.obj_, arguments) // "this.obj_" so it has the context of the original object.
 			parentPath.pop();
 		}
 
+		// Notify at the current level:
+		if (cpath in this.subs_)
+			for (let callback of this.subs_[cpath])
+				callback.apply(this.obj_, arguments);
+
 		// Traverse to our current level and downward looking for anything subscribed
+		let newVal = traversePath(this.obj_, path);
 		for (let name in this.subs_)
-			if (name.startsWith(cpath))
-				for (let callback of this.subs_[name])
-					callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
+			if (name.startsWith(cpath) && name.length > cpath.length) {
+				let subPath = name.slice(cpath.length > 0 ? cpath.length + 1 : cpath.length); // +1 for ','
+				let oldSubPath = JSON.parse('[' + subPath + ']');
+
+				let oldSubVal = traversePath(oldVal, oldSubPath);
+				let newSubVal = traversePath(newVal, oldSubPath);
+
+
+				if (oldSubVal !== newSubVal)
+					for (let callback of this.subs_[name])
+						callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
+			}
+
+		// for (let name in this.subs_)
+		// 	if (name.startsWith(cpath))
+		// 		for (let callback of this.subs_[name])
+		// 			callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 	}
 
 	/**

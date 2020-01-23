@@ -74,14 +74,18 @@ var handler = {
 
 		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
-			//if (field !== 'length') {
 
-				// Don't allow setting proxies on underlying obj.
-				// This removes them recursivly in case of something like newVal=[Proxy(obj)].
-				obj[field] = removeProxies(newVal);
+			// Don't allow setting proxies on underlying obj.
+			// This removes them recursivly in case of something like newVal=[Proxy(obj)].
+			newVal = removeProxies(newVal);
+
+			//if (obj[field] !== newVal) {
+				let oldVal = obj[field];
+				obj[field] = newVal;
 
 				let path = [...proxyObj.getPath_(root), field];
-				root.notify_('set', path, obj[field]);
+
+				root.notify_('set', path, obj[field], oldVal);
 			//}
 		}
 

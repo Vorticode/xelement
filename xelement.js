@@ -189,6 +189,9 @@ var parentIndex = (el) => !el.parentNode ? 0 : Array.prototype.indexOf.call(el.p
  * @param value {*=} If not undefined, set the object's path field to this value.
  * @param watchless {boolean=false} If true, the value will be set without triggering any watch notifications. */
 var traversePath = (obj, path, create, value, watchless) => {
+	if (!obj && !create && path.length)
+		return undefined;
+
 	let i = 0;
 	for (let srcProp of path) {
 		let last = i === path.length-1;
@@ -596,14 +599,18 @@ var handler = {
 
 		var proxyObj = ProxyObject.get_(obj);
 		for (let root of proxyObj.roots_) {
-			//if (field !== 'length') {
 
-				// Don't allow setting proxies on underlying obj.
-				// This removes them recursivly in case of something like newVal=[Proxy(obj)].
-				obj[field] = removeProxies(newVal);
+			// Don't allow setting proxies on underlying obj.
+			// This removes them recursivly in case of something like newVal=[Proxy(obj)].
+			newVal = removeProxies(newVal);
+
+			//if (obj[field] !== newVal) {
+				let oldVal = obj[field];
+				obj[field] = newVal;
 
 				let path = [...proxyObj.getPath_(root), field];
-				root.notify_('set', path, obj[field]);
+
+				root.notify_('set', path, obj[field], oldVal);
 			//}
 		}
 
@@ -800,6 +807,13 @@ var watchProxy = (root, callback) => {
 };;
 
 
+var removeProxy = (obj) => {
+	if (isObj(obj))
+		return obj.$removeProxy || obj;
+	return obj;
+};
+
+
 
 /**
  * Operates recursively to remove all proxies.  But should it?
@@ -810,33 +824,40 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	while (obj.$isProxy) // should never be more than 1 level deep of proxies.
+	if (obj.$isProxy)
 		obj = obj.$removeProxy;
 
 	//#IFDEV
-	if (obj.$isProxy)
+	if (obj.$isProxy) // should never be more than 1 level deep of proxies.
 		throw new XElementError("Double wrapped proxy found.");
 	//#ENDIF
 
-	if (isObj(obj)) {
+	if (typeof obj === 'object') {
 		if (!visited)
 			visited = new WeakSet();
 		else if (visited.has(obj))
-			return obj;
+			return obj; // visited this object before in a cyclic data structure.
 		visited.add(obj);
 
+		// Recursively remove proxies from every property of obj:
 		for (let name in obj)
 			if (obj.hasOwnProperty(name)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
 				let t = obj[name];
 				let v = removeProxies(t, visited);
-				if (v !== t) {
-					//watchlessSet(obj, [name], v);
-					// obj.$removeProxy[name] = v;  This should let us remove watchlessSet, but it doesn't work.
 
-					obj = obj.$removeProxy || obj;
-					let wp = watched.get(obj);
-					let node = wp ? wp.fields_ : obj;
-					node[name] = v
+				// If a proxy was removed from the property.
+				if (v !== t) {
+					// Not sure what this line was here for, now commented out:
+					//obj = obj.$removeProxy || obj;
+
+					if (Object.getOwnPropertyDescriptor(obj, name).writable)
+						obj[name] = v;
+					else {
+						// It's a defined property.  Set it on the underlying object.
+						let wp = watched.get(obj);
+						let node = wp ? wp.fields_ : obj;
+						node[name] = v
+					}
 				}
 			}
 	}
@@ -861,28 +882,52 @@ class WatchProperties {
 
 	/**
 	 * When a property or sub-property changes, notify its subscribers.
+	 * This is an expanded version of watchproxy.notify.  It also notifies every callback subscribed to a parent of path,
+	 * and all children of path if their own value changed.
 	 * @param action {string}
 	 * @param path {string[]}
 	 * @param value {*=} */
-	notify_(action, path, value) {
+	notify_(action, path, value, oldVal) {
+
+		let cpath = csv(path);
+
 
 		// Traverse up the path looking for anything subscribed.
 		let parentPath = path.slice(0, -1);
-		let cpath = csv(path);
 		while (parentPath.length) {
-			let cpath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
+			let cpath2 = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
-			if (cpath in this.subs_)
-				for (let callback of this.subs_[cpath])
+			if (cpath2 in this.subs_)
+				for (let callback of this.subs_[cpath2])
 					callback.apply(this.obj_, arguments) // "this.obj_" so it has the context of the original object.
 			parentPath.pop();
 		}
 
+		// Notify at the current level:
+		if (cpath in this.subs_)
+			for (let callback of this.subs_[cpath])
+				callback.apply(this.obj_, arguments);
+
 		// Traverse to our current level and downward looking for anything subscribed
+		let newVal = traversePath(this.obj_, path);
 		for (let name in this.subs_)
-			if (name.startsWith(cpath))
-				for (let callback of this.subs_[name])
-					callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
+			if (name.startsWith(cpath) && name.length > cpath.length) {
+				let subPath = name.slice(cpath.length > 0 ? cpath.length + 1 : cpath.length); // +1 for ','
+				let oldSubPath = JSON.parse('[' + subPath + ']');
+
+				let oldSubVal = traversePath(oldVal, oldSubPath);
+				let newSubVal = traversePath(newVal, oldSubPath);
+
+
+				if (oldSubVal !== newSubVal)
+					for (let callback of this.subs_[name])
+						callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
+			}
+
+		// for (let name in this.subs_)
+		// 	if (name.startsWith(cpath))
+		// 		for (let callback of this.subs_[name])
+		// 			callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 	}
 
 	/**
@@ -1251,6 +1296,9 @@ var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) 
  *    item.a, item.a[0], item.a.c, and item.b, this function will return ['a', 'b'] because they are the first level subscribers.
  * Must be called on an XElement before bindEl() removes the loop children.
  * Code similar to this is used in other places.  It'd be nice to make it shared.
+ * TODO: This causes too many redraws.  Suppose <x-b data-prop="parentA.items">, and it subscribes
+ * to a particular property on items[0].
+ * However, changing that property in parentA will cause all of items to be invalidated, redrawing everything related.
  * @param el {HTMLElement}
  * @param props {string[]=}
  * @param context {object<string, string>[]=}
@@ -1385,7 +1433,7 @@ var bindElProps = (self, el, context) => {
 			else if (attr.name.startsWith('data-'))
 				attrName = attr.name.slice(5); // remove data- prefix.
 
-			if (attrName) {
+			if (attrName/* && attrName !== 'prop'*/) { // prop handled in init so it happens first.
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](self, attr.value, el, context);
 
@@ -1630,7 +1678,12 @@ var initHtml = (self) => {
 		}
 
 		// This is set before data binding so that we can search loop children before bindings.loop() removes them.
+		//console.log(self.parentNode);
 		self.propSubscriptions = Array.from(getPropSubscribers(self));
+
+		//let prop = getXAttrib(self, 'prop');
+		//if (prop)
+		//	bindings.prop(self.parentNode, prop, self, {});
 
 		// 8. Bind all data- and event attributes
 		// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
@@ -1727,7 +1780,7 @@ var bindings = {
 		for (let name in obj) {
 			let attrExpr = addThis(replaceVars(obj[name], context), context);
 
-			let setAttr = /*elf.enqueue(*/function (/*action, path, value*/) {
+			let setAttr = /*XElement.batch(*/function (/*action, path, value*/) {
 				var result = safeEval.call(self, attrExpr);
 				if (result === false || result === null || result === undefined)
 					el.removeAttribute(name);
@@ -1771,7 +1824,7 @@ var bindings = {
 				//#ENDIF
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
-				let updateProp = /*self.enqueue(*/(action, path, value) => {
+				let updateProp = /*XElement.batch(*/(action, path, value, oldVal) => {
 					// // Only reassign the value and trigger notfications if it's actually changed.
 					//let oldVal = el[prop];
 					//if (isObj(oldVal))
@@ -1784,7 +1837,12 @@ var bindings = {
 					// but a value within them has changed.  Thus we still need to do the assignment to
 					// trigger the watchers.
 					// if (oldVal !== newVal)
+					//XElement.batch(function() {
+					//if (window.debugger)
+					//	debugger;
+					el[prop] = undefined;
 						el[prop] = newVal;
+					//})();
 				}/*)*/;
 
 
@@ -1796,7 +1854,6 @@ var bindings = {
 				// <x-item x-prop="parent: this"><span x-text="parent.a"></x-prop>
 				// Then we watch this.a on x-item's parent and update the x-item's parent.a when it changes.
 				if (expr === 'this') {
-					//let subs = getPropSubscribers(el);
 					for (let sub of el.propSubscriptions) {
 						watch(self, sub, updateProp);
 						addElWatch(el, sub, updateProp);
@@ -1831,7 +1888,7 @@ var bindings = {
 			let classExpr = addThis(replaceVars(obj[name], context), context);
 
 			// This code is called on every update.
-			let updateClass = /*self.enqueue(*/() => {
+			let updateClass = /*XElement.batch*/() => {
 				let result = safeEval.call(self, classExpr);
 				if (result)
 					el.classList.add(name);
@@ -1861,8 +1918,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = /*self.enqueue(*/(/*action, path, value*/) => {
-
+		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
 			el.textContent = safeEval.call(self, code);
 		}/*)*/;
 		for (let path of parseVars(code)) {
@@ -1881,7 +1937,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = /*self.enqueue(*/(/*action, path, value*/) => {
+		let setHtml = /*XElement.batch(*/(/*action, path, value*/) => {
 			el.innerHTML = safeEval.call(self, code);
 		}/*)*/;
 
@@ -1954,7 +2010,6 @@ var bindings = {
 			// Do nothing if the array hasn't changed.
 			if (arrayEq(oldItems, newItems, true))
 				return;
-			console.log(el);
 
 			// Set temporary index on each child, so we can track how they're re-ordered.
 			for (let i in Array.from(root.children))
@@ -2095,9 +2150,6 @@ var bindings = {
 
 			// Update the arrays after we drag items.
 			var moveItems = function(event) {
-				console.log(event);
-
-
 				let oldSelf = getXParent(event.from);
 				let newSelf = getXParent(event.to);
 
@@ -2179,7 +2231,7 @@ var bindings = {
 				traversePath(self, paths[0], true, value);
 			});
 
-		let setVal = /*self.enqueue(*/(/*action, path, value*/) => {
+		let setVal = /*XElement.batch*/(/*action, path, value*/) => {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
@@ -2210,7 +2262,7 @@ var bindings = {
 		if (displayNormal === 'none')
 			displayNormal = '';
 
-		let setVisible = /*self.enqueue(*/(/*action, path, value*/) => {
+		let setVisible = /*XElement.batch*/(/*action, path, value*/) => {
 			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
 		}/*)*/;
 

@@ -186,6 +186,9 @@ var parentIndex = (el) => !el.parentNode ? 0 : Array.prototype.indexOf.call(el.p
  * @param value {*=} If not undefined, set the object's path field to this value.
  * @param watchless {boolean=false} If true, the value will be set without triggering any watch notifications. */
 var traversePath = (obj, path, create, value, watchless) => {
+	if (!obj && !create && path.length)
+		return undefined;
+
 	let i = 0;
 	for (let srcProp of path) {
 		let last = i === path.length-1;
