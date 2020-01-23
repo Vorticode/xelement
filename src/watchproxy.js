@@ -81,6 +81,8 @@ var handler = {
 
 			//if (obj[field] !== newVal) {
 				let oldVal = obj[field];
+
+				// TODO: This can trigger notification if field was created on obj by defineOwnProperty()!
 				obj[field] = newVal;
 
 				let path = [...proxyObj.getPath_(root), field];
@@ -172,7 +174,8 @@ class ProxyObject {
 							let result =  Array.prototype[func].apply(obj, arguments);
 
 							// Trigger a single notfication change.
-							self.proxy_.length = self.proxy_.length + 0;
+							//self.proxy_.length = self.proxy_.length + 0;
+							self.proxy_.$trigger;
 
 							return result;
 						}

@@ -213,11 +213,14 @@ var traversePath = (obj, path, create, value, watchless) => {
 
 		// If last item in path
 		if (last && value !== undefined) {
-			if (watchless)
+			if (watchless) {
 				obj = obj.$removeProxy || obj;
-			obj.$disableWatch= true;
+				obj.$disableWatch = true; // sometimes this causes stack overflow?  Perhaps I need to use Object.getOwnPropertyDescriptor() to see if it's a prop?
+			}
+
 			obj[srcProp] = value;
-			delete obj.$disableWatch;
+			if (watchless)
+				delete obj.$disableWatch;
 		}
 
 		// Traverse deeper along destination object.

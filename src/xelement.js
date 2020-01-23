@@ -78,6 +78,12 @@ lazy modifier for input binding, to only trigger update after change.
  * @type {WeakMap<HTMLElement, {path_:string, callback_:function}[]>} */
 var watchedEls = new WeakMap();
 var addElWatch = (el, path, callback) => {
+	//#IFDEV
+	if (!Array.isArray(path))
+		throw new XElementError();
+	//#ENDIF
+
+
 	let we = watchedEls.get(el);
 	if (!we)
 		watchedEls.set(el, we = []);
@@ -86,15 +92,18 @@ var addElWatch = (el, path, callback) => {
 
 var removeElWatch = (el, path, callback) => {
 	let we = watchedEls.get(el);
+
 	if (we) {
 		for (let i in we) {
 			let item = we[i];
-			if (item.path_===path && item.calback_ === callback) {
+			if (arrayEq(item.path_, path) && item.callback_ === callback) {
 				we.splice(i, 1);
-				break;
+				return;
 			}
 		}
 	}
+
+	throw new XElementError('missing watch');
 };
 
 
@@ -395,6 +404,8 @@ var unbindEl = (self, el) => {
 	for (let child of next.children)
 		unbindEl(self, child);
 
+	var parent;
+
 	// Unbind properties
 	if (el.attributes)
 		for (let attr of el.attributes) {
@@ -409,9 +420,16 @@ var unbindEl = (self, el) => {
 				let watchedEl = watchedEls.get(el);
 				if (watchedEl)
 					for (let sub of watchedEl) {
-						var p = self!==el ? self : p || getXParent(el) || self; // only getXParent when first needed.
-						unwatch(p, sub.path_, sub.callback_);
-						removeElWatch(p, sub.path_, sub.callback_);
+						// only getXParent when first needed.
+						if (!parent) {
+							if (self !== el)
+								var parent = self;
+							else
+								parent = getXParent(el) || self;
+						}
+
+						unwatch(parent, sub.path_, sub.callback_);
+						removeElWatch(el, sub.path_, sub.callback_);
 					}
 			}
 		}
@@ -692,7 +710,10 @@ var bindings = {
 				//#ENDIF
 
 				let expr = addThis(replaceVars(obj[prop], context), context);
-				let updateProp = /*XElement.batch(*/(action, path, value, oldVal) => {
+				let allowRecurse = true;
+
+
+				let updateProp = /*XElement.batch(*/(action, path, value, oldVal, indirect) => {
 					// // Only reassign the value and trigger notfications if it's actually changed.
 					//let oldVal = el[prop];
 					//if (isObj(oldVal))
@@ -705,12 +726,27 @@ var bindings = {
 					// but a value within them has changed.  Thus we still need to do the assignment to
 					// trigger the watchers.
 					// if (oldVal !== newVal)
-					//XElement.batch(function() {
-					//if (window.debugger)
-					//	debugger;
-					el[prop] = undefined;
+
+
+					if (indirect || !allowRecurse)
+						return;
+
+
+					if (true || !path || path.length<1) {
+						el[prop] = undefined;
 						el[prop] = newVal;
-					//})();
+					}
+
+
+
+					else {
+						allowRecurse = false;
+						//traversePath(el, path, true, value);
+						//traversePath(el, [prop, ...path], true, value);
+						traversePath(el, [prop, ...path], true, value);
+						allowRecurse = true;
+					}
+
 				}/*)*/;
 
 
@@ -724,7 +760,7 @@ var bindings = {
 				if (expr === 'this') {
 					for (let sub of el.propSubscriptions) {
 						watch(self, sub, updateProp);
-						addElWatch(el, sub, updateProp);
+						addElWatch(el, [sub], updateProp);
 					}
 				}
 
@@ -846,7 +882,12 @@ var bindings = {
 		// Allow loop attrib to be applied above shadowroot.
 		let root = el.shadowRoot || el;
 
-		var rebuildChildren = /*XElement.batch(*/(action, path, value) => {
+		var rebuildChildren = /*XElement.batch(*/(action, path, value, oldVal, indirect) => {
+
+			// The modification was actually just a child of the loop variable.
+			// The loop variable itself wasn't assigned a new value.
+			if (indirect)
+				return;
 
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
@@ -880,6 +921,9 @@ var bindings = {
 			// Do nothing if the array hasn't changed.
 			if (arrayEq(oldItems, newItems, true))
 				return;
+
+			// if (window.init)
+			// 	debugger;
 
 			// Set temporary index on each child, so we can track how they're re-ordered.
 			for (let i=0; i< root.children.length; i++)

@@ -202,7 +202,7 @@ var test_Watch = {
 		assertEq(o.a[0], 1);
 
 		// Make sure we only have one op
-		assertEq(JSON.stringify(ops[0].slice(0, 3)), '["set",["a","length"],1]');
+		assertEq(JSON.stringify(ops[0].slice(0, 3)), '["set",["a"],[1]]');
 		assertEq(ops.length, 1);
 
 		// Old, from when we notified of every sub-operation:
@@ -435,9 +435,7 @@ var test_XElement = {
 
 		// Slot
 		(function () {
-			class S1 extends XElement {
-			}
-
+			class S1 extends XElement {}
 			S1.html = '<div><b><slot>Fallback</slot></b></div>';
 
 			var div = document.createElement('div');
@@ -451,9 +449,7 @@ var test_XElement = {
 
 		// Named slots
 		(function () {
-			class S2 extends XElement {
-			}
-
+			class S2 extends XElement {}
 			S2.html = '<div><i><slot name="f1" id="f1">f1</slot></i><u><slot name="f2" id="f2">f2</slot></u></div>';
 
 			var div = document.createElement('div');
@@ -471,9 +467,7 @@ var test_XElement = {
 
 		// data-html bind
 		(function () {
-			class M3 extends XElement {
-			}
-
+			class M3 extends XElement {}
 			M3.html = '<div><span data-html="spanHtml">Text</span></div>';
 
 			var m = new M3();
@@ -484,9 +478,7 @@ var test_XElement = {
 
 		// data-text bind
 		(function () {
-			class M4 extends XElement {
-			}
-
+			class M4 extends XElement {}
 			M4.html = '<div><span data-text="spanHtml">Text</span></div>';
 
 			var m = new M4();
@@ -497,14 +489,12 @@ var test_XElement = {
 
 		// Make sure unbinding one element doesn't unsubscribe() other watches.
 		(function () {
-			class M5 extends XElement {
-			}
-
-			M5.html =
-				'<div>' +
-				'<span data-text="item.name"></span>' +
-				'<p data-text="item.name"></p>' +
-				'</div>';
+			class M5 extends XElement {}
+			M5.html = `
+				<div>
+					<span data-text="item.name"></span>
+					<p data-text="item.name"></p>
+				</div>`;
 			var m = new M5();
 			m.item = {name: 1};
 
@@ -517,9 +507,7 @@ var test_XElement = {
 	dataVal: function () {
 		// data-val bind input
 		(function () {
-			class BV1 extends XElement {
-			}
-
+			class BV1 extends XElement {}
 			BV1.html = '<div><input id="input" data-val="value"/></div>';
 
 			// Changing the value sets the input.value.
@@ -535,9 +523,7 @@ var test_XElement = {
 
 		// data-val bind input checkbox
 		(function () {
-			class BV2 extends XElement {
-			}
-
+			class BV2 extends XElement {}
 			BV2.html = '<div><input id="checkbox" type="checkbox" data-val="value"/></div>';
 
 			// Changing the value sets the input.value.
@@ -567,9 +553,7 @@ var test_XElement = {
 
 		// data-val bind select
 		(function () {
-			class BV3 extends XElement {
-			}
-
+			class BV3 extends XElement {}
 			BV3.html =
 				'<div>' +
 				'<select id="select" data-val="value">' +
@@ -593,9 +577,7 @@ var test_XElement = {
 	dataClasses: function () {
 
 		(function () {
-			class C1 extends XElement {
-			}
-
+			class C1 extends XElement {}
 			C1.html = `
 				<div>
 					<span id="span" data-classes="a: firstClass; b: object.secondClass"></span>
@@ -656,6 +638,7 @@ var test_XElement = {
 			//document.body.appendChild(b);
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span><span data-text="item">2</span>');
 
+			window.init = true;
 			b.items.pop();
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span>');
 
@@ -1593,33 +1576,27 @@ var test_XElement = {
 		// Three level bind
 		(function () {
 
-			class BD8C extends XElement {
-			}
+			class C_P8 extends XElement {}
+			C_P8.html = `				
+				<div>
+				    <span id="names" data-loop="c.names: name">
+				        <div data-text="name"></div>
+					</span>
+				</div>`;
 
-			BD8C.html = `				
-			<div>
-			    <span id="names" data-loop="c.names: name">
-			        <div data-text="name"></div>
-				</span>
-			</div>`;
+			class B_P8 extends XElement {}
+			B_P8.html = `				
+				<div>
+				    <x-c_p8 id="xc" data-prop="c: this.b.c"></x-c_p8>
+				</div>`;
 
-			class BD8B extends XElement {
-			}
+			class A_P8 extends XElement {}
+			A_P8.html = `				
+				<div>
+				    <x-b_p8 id="xb" data-prop="b: this.a.b"></x-b_p8>
+				</div>`;
 
-			BD8B.html = `				
-			<div>
-			    <x-bd8c id="xc" data-prop="c: this.b.c"></x-bd8c>
-			</div>`;
-
-			class BD8A extends XElement {
-			}
-
-			BD8A.html = `				
-			<div>
-			    <x-bd8b id="xb" data-prop="b: this.a.b"></x-bd8b>
-			</div>`;
-
-			var xa = new BD8A();
+			var xa = new A_P8();
 
 			var a = {b: {c: {names: [1, 2, 3]}}};
 			xa.a = a;
@@ -1635,17 +1612,13 @@ var test_XElement = {
 		// Data bind to loop item.
 		(function () {
 
-			class BD9B extends XElement {
-			}
-
+			class BD9B extends XElement {}
 			BD9B.html = `				
 			<div>
 			    <span id="nameText" data-text="item.name"></span>
 			</div>`;
 
-			class BD9A extends XElement {
-			}
-
+			class BD9A extends XElement {}
 			BD9A.html = `				
 			<div>
 			    <span id="loop" data-loop="a.items: item">
@@ -1663,17 +1636,13 @@ var test_XElement = {
 
 		// Double deep loop binding.
 		(function () {
-			class BD10C extends XElement {
-			}
-
+			class BD10C extends XElement {}
 			BD10C.html = `				
 			<div>
 				<span data-text="wheel"></span>
 			</div>`;
 
-			class BD10B extends XElement {
-			}
-
+			class BD10B extends XElement {}
 			BD10B.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
@@ -1681,9 +1650,7 @@ var test_XElement = {
 				</span>
 			</div>`;
 
-			class BD10A extends XElement {
-			}
-
+			class BD10A extends XElement {}
 			BD10A.html = `				
 			<div data-loop="cars: car">
 				<x-bd10b data-prop="car: car"></x-bd10b>
@@ -1701,9 +1668,7 @@ var test_XElement = {
 		// Double deep loop binding 2
 		(function () {
 
-			class BD11Inner extends XElement {
-			}
-
+			class BD11Inner extends XElement {}
 			BD11Inner.html = `				
 			<div>
 			    <span id="loop" data-loop="car.wheels: wheel">
@@ -1711,9 +1676,7 @@ var test_XElement = {
 				</span>
 			</div>`;
 
-			class BD11 extends XElement {
-			}
-
+			class BD11 extends XElement {}
 			BD11.html = `				
 			<div data-loop="cars: car">
 				<x-bd11inner data-prop="car: car"></x-bd11inner>
@@ -1737,17 +1700,13 @@ var test_XElement = {
 		// Ensure props are unsubscribed as items are removed.
 		(function () {
 
-			class BD12B extends XElement {
-			}
-
+			class BD12B extends XElement {}
 			BD12B.html = `				
 			<div>
 			    <span id="nameText" data-text="item.name"></span>
 			</div>`;
 
-			class BD12A extends XElement {
-			}
-
+			class BD12A extends XElement {}
 			BD12A.html = `				
 			<div>
 			    <span id="loop" data-loop="a.items: item">
@@ -1993,8 +1952,8 @@ var test_XElement = {
 		// Test how many times text redraw happens.
 		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
-		(function() {
-			class B extends XElement {
+		(function () {
+			class B_R1 extends XElement {
 				constructor() {
 					super();
 					this.redraw = 0;
@@ -2007,35 +1966,39 @@ var test_XElement = {
 				}
 			}
 
-			B.html = `
+			B_R1.html = `
 				<div x-loop="a.items: item">
 					<span x-text="item + this.passthrough('')"></span>			
 				</div>`;
 
-			class A extends XElement {}
-			A.html = `
+			class A_R1 extends XElement {
+			}
+
+			A_R1.html = `
 				<div>
-					<x-b id="b" x-prop="a: this"></x-b>		
+					<x-b_r1 id="b" x-prop="a: this"></x-b_r1>		
 				</div>`;
 
-			var a = new A();
-			a.items = [1, 2, 3];
+			var a = new A_R1();
+			a.items = ['A', 'B', 'C'];
 
 			var init = true;
 			a.items.shift();
-			//console.log(a.b.redraw);
 
-			// Should
-			assertEq(a.b.redraw, 2);
+			// We only need to reassign the text of elements 1 and 2 to be 2 and 3.
+			//console.log(a.b.redraw);
+			assertEq(a.b.shadowRoot.children[0].textContent, 'B');
+			assertLte(a.b.redraw, 4);
 		})();
 	},
 
 	redraw2: function() {
+
 		// Test how many times text redraw happens.
 		// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 		// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
 		(function() {
-			class A extends XElement {
+			class A_R2 extends XElement {
 				constructor() {
 					super();
 					this.redraw = 0;
@@ -2047,24 +2010,25 @@ var test_XElement = {
 					return item;
 				}
 			}
-			A.html = `
+			A_R2.html = `
 				<div>
-					<div x-loop="items: item">
+					<div id="loop" x-loop="items: item">
 						<span x-text="item + this.passthrough('')"></span>			
 					</div>
 				</div>`;
 
-			var a = new A();
+			var a = new A_R2();
 			a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-			window.init = true;
 			var init = true;
 			a.items[0] = 'A2';
-			console.log(a.redraw);
 
-			//assertEq(a.b.redraw, 1);
+			// Make sure we just set the value and don't rebuild the loop.
+			assertEq(a.redraw, 1);
+			assertEq(a.loop.children[0].textContent, 'A2');
 		})();
 	},
+
 
 	redraw3: function() {
 		// Test how many times text redraw happens.
@@ -2078,48 +2042,101 @@ var test_XElement = {
 				}
 
 				passthrough(item) {
-					if (init)
+					if (init) {
+						console.log('redraw');
 						this.redraw++;
+					}
 					return item;
 				}
 			}
 
 			B.html = `
-				`;
-
-			class A extends XElement {
-				constructor() {
-					super();
-					this.redraw = 0;
-				}
-
-				passthrough(item) {
-					if (init)
-						this.redraw++;
-					return item;
-				}
-			}
-			A.html = `
 				<div>
-					<div x-loop="items: item">
+					<div id="loop" x-loop="parentA.items: item">
 						<span x-text="item + this.passthrough('')"></span>			
 					</div>
+				</div>`;
+
+			class A extends XElement {}
+			A.html = `
+				<div>
+					<x-b id="b" x-prop="parentA: this"></x-b>
 				</div>`;
 
 			var a = new A();
 			a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
 
+			window.init = true;
 			var init = true;
 			a.items[0] = 'A2';
-			console.log(a.redraw);
 
-			//assertEq(a.b.redraw, 1);
+			console.log(a.b.redraw);
+			console.log(a.b.loop.children[0].textContent);
+
+			assertEq(a.b.redraw, 1);
+			assertEq(a.b.loop.children[0].textContent, 'A2');
 		})();
 	},
 
 
 
+	temp: function() {
 
+		// Three level bind
+		(function () {
+
+			class C_P8 extends XElement {}
+			C_P8.html = `				
+				<div>
+				    <span id="names" data-loop="c.names: name">
+				        <div data-text="name"></div>
+					</span>
+				</div>`;
+
+			class B_P8 extends XElement {}
+			B_P8.html = `				
+				<div>
+				    <x-c_p8 id="xc" data-prop="c: this.b.c"></x-c_p8>
+				</div>`;
+
+			class A_P8 extends XElement {}
+			A_P8.html = `				
+				<div>
+				    <x-b_p8 id="xb" data-prop="b: this.a.b"></x-b_p8>
+				</div>`;
+
+			var xa = new A_P8();
+
+			var a = {b: {c: {names: [1, 2, 3]}}};
+			xa.a = a;
+
+			assertEq(xa.a.$removeProxy, a);
+			assertEq(xa.xb.b.$removeProxy, a.b);
+			assertEq(xa.xb.xc.c.$removeProxy, a.b.c);
+			assertEq(xa.xb.xc.names.children[0].textContent, '1');
+
+		})();
+
+	},
+
+	temp2: function() {
+
+		// Make sure unbinding one element doesn't unsubscribe() other watches.
+		(function () {
+			class M5 extends XElement {}
+			M5.html = `
+				<div>
+					<span data-text="item.name"></span>
+					<p data-text="item.name"></p>
+				</div>`;
+			var m = new M5();
+			m.item = {name: 'A'};
+
+			assert(m.item.$isProxy);
+			unbindEl(m.shadowRoot.children[1]);
+			assert(m.item.$isProxy);
+		})();
+	}
 
 
 
