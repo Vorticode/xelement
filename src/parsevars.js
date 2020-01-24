@@ -228,6 +228,9 @@ var parseLoop = (code) => {
  * @param prefix {string=} Defaults to "this"
  * @returns {string} */
 var addThis = (code, context, isStandalone, prefix) => {
+	if (Array.isArray(context))
+		context = context[0]; // TODO: Instead of this hack, we need to handle context as an array.
+
 	prefix = prefix || 'this';
 	isStandalone = isStandalone || isStandaloneVar;
 	if (!isStandalone(code))

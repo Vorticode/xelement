@@ -1,6 +1,5 @@
 /**
  * Functions for JavaScript unit testing.
- * TODO: Support nested tests that collapse in the table.
  */
 
 class AssertError extends Error {
@@ -11,23 +10,36 @@ class AssertError extends Error {
 }
 
 function assert(val) {
-	if (!val)
+	if (!val) {
+		if (Tests.debugOnAssertFail)
+			debugger;
 		throw new AssertError(val);
+	}
 }
 
 function assertEq(val1, val2) {
-	if (val1 !== val2)
+	if (val1 !== val2) {
+		if (Tests.debugOnAssertFail)
+			debugger;
 		throw new AssertError(val1 + ' !== ' + val2);
+	}
 }
 
+
 function assertNeq(val1, val2) {
-	if (val1 !== val2)
+	if (val1 !== val2) {
+		if (Tests.debugOnAssertFail)
+			debugger;
 		throw new AssertError(val1 + ' === ' + val2);
+	}
 }
 
 function assertLte(val1, val2) {
-	if (val1 > val2)
+	if (val1 > val2) {
+		if (Tests.debugOnAssertFail)
+			debugger;
 		throw new AssertError(val1 + ' > ' + val2);
+	}
 }
 
 var Mock = {
@@ -58,114 +70,203 @@ var Mock = {
  * A set of functions for running tests. */
 var Tests = {
 
-	/**
-	 * Find all top level and object member functions that begin with startsWith.
-	 * And also all functions of any object's whose name begins with startsWith.
-	 * @param startsWith {string}
-	 * @param obj {object=} Used for recusion.  Leave this blank.
-	 * @returns {object<string, function>} */
-	find: function(startsWith, obj) {
-		if (!obj) {
-			Tests.find.objs = new WeakSet();
-			obj = window;
+	debugOnAssertFail: false,
+	debugOnError: false,
+	throwError: false,
+	expandLevel: 2,
+
+
+
+	getIntArg: function(name, def) {
+		name = name.replace(/ /g, '+');
+
+		let allArgs = window.location.search.substr(1)
+			.split(/&/g);
+
+		for (let arg of allArgs) {
+			let [argName, val] = arg.split('=');
+			if (argName === name)
+				return parseInt(val);
 		}
-		var result = {};
+		return def;
+	},
 
-		// Skip objects we've already traversed.
-		// Otherwise circular references will lead to a stack overflow.
-		if (!Tests.find.objs.has(obj)) {
-			Tests.find.objs.add(obj);
+	toggleTest: function(e) {
+		// Skip if we clicked a link.
+		if (e.target.tagName === 'A')
+			return;
 
-			for (let name in obj) {
+		let tr = e.currentTarget.parentNode;
 
-				// avoid deprecated msg in chrome
-				if (['webkitStorageInfo', 'webkitIndexedDB'].includes(name))
-					continue;
+		// Toggle our own checkbox.
+		let checkbox = e.currentTarget.querySelector('[type=checkbox]');
+		if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'LABEL') // if clicked other than checkbox
+			checkbox.checked = !checkbox.checked;
 
-				// If a member's name matches startsWith
-				let val = obj[name];
-				if ((val instanceof Function) && name.startsWith(startsWith))
-					result[name] = val;
+		// Toggle our own tr element
+		tr.className = checkbox.checked ? 'selected' : '';
 
-				// If member is an object, recurse:
-				else if (isObj(val)) {
+		// Toggle the child tr elements and checkboxes
+		var nextTr = tr.nextSibling;
+		if (nextTr) {
+			var subTable = nextTr.querySelector('table');
+			if (subTable) {
+				subTable.querySelectorAll('[type=checkbox]').forEach((x) => x.checked = checkbox.checked);
+				subTable.querySelectorAll('tr').forEach((x) => x.className = checkbox.checked ? 'selected' : '');
+			}
+		}
+	},
 
-					// If the object's name matches startsWith, include all of its functions.
-					// Otherwise only include its functions that match startsWith.
-					//var startsWith2 = name.startsWith(startsWith) ? '' : startsWith;
-					if (name.startsWith(startsWith)) {
-						var result2 = Tests.find('', val);
-						for (let name2 in result2)
-							result[name + '.' + name2] = result2[name2];
+	toggleExpand: function(e) {
+		let tr = e.target.parentNode.parentNode;
+
+		var nextTr = tr.nextSibling;
+		let expand = false;
+		if (nextTr) {
+			var subTable = nextTr.querySelector('table');
+			if (subTable) {
+				expand = subTable.style.display === 'none';
+				subTable.style.display = expand ? '' : 'none';
+			}
+		}
+
+		tr.querySelector('input.expand').checked = expand;
+	},
+
+	/**
+	 * @param testObj {object<string, function|object>}
+	 * @param testName {string=}
+	 * @param level {string[]=}
+	 * @returns {[string[], int, int]} */
+	getTable: function(testObj, testName, level) {
+		testName = testName || 'All Tests';
+		level = level || [testName];
+
+		// StringBuilder
+		var html = [];
+
+		let val = testObj;
+
+		let checked = Tests.getIntArg(testName);
+		let checkedAttr = checked ? 'checked' : '';
+		let selected = checked ? 'selected' : '';
+
+		let dataTest = '';
+		if (typeof val === 'function')
+			dataTest = 'data-test="' + level.join('.') + '"';
+
+		let type = typeof val;
+
+
+		// Checbox and name, used for both a single and group of tests.
+		html.push(
+			'<tr class="' + selected + ' ' + type + '"' + ' ' + dataTest + '>' +
+				'<td class="level' + level.length + '" onclick="Tests.toggleTest(event)">' +
+					'<label style="user-select: none">' +
+						'<input class="enabled" name="' + testName + '" type="checkbox" value="1" ' + checkedAttr + '>' +
+						testName +
+					'</label>');
+
+		// Expand button
+		let expand = Tests.getIntArg(testName + '_expand', level.length <= Tests.expandLevel);
+		if (typeof val === 'object') {
+			let expandChecked = expand ? 'checked' : '';
+			html.push(
+				'<a class="expand"  href="javascript:void(0)" onclick="Tests.toggleExpand(event)">▼</a>' +
+				'<input class="expand" type="checkbox" style="display: none" name="' + testName + '_expand" value="1"' + expandChecked + '>'
+			);
+		}
+
+
+		html.push('</td>');
+
+		// An object of tests
+		if (typeof val === 'object') {
+
+			// Run all the sub tests and get their html.
+			let subHtml2 = [];
+			for (let testName in testObj) {
+				let nextLevel = [...level, testName];
+
+				let subHtml = Tests.getTable(val[testName], testName, nextLevel);
+				subHtml2 = [...subHtml2, subHtml];
+			}
+
+			// Add their html with their pass/fail count.
+			html.push(
+					'<td class="summary"></td>' +
+				'</tr>' +
+				'<tr>' +
+					'<td colspan=2">' +
+						'<div class="indent"><table ' + (expand ? '' : 'style="display: none"') + '>');
+			html = [...html, ...subHtml2];
+
+			html.push('</table></div></td>');
+
+		}
+
+		// An individual test
+		else
+			html.push('</td><td class="result"></td>');
+
+
+		html.push('</tr>');
+
+
+		return html.join('');
+	},
+
+	runTests: function(table) {
+		let testTrs = table.querySelectorAll('tr[data-test]');
+		for (let tr of testTrs) {
+			let code = tr.getAttribute('data-test');
+
+
+			let runTest = tr.querySelector('input.enabled').checked;
+
+			if (runTest) {
+				let tdResult = tr.querySelector('td.result');
+				if (Tests.throwError) {
+					eval(code + '()');
+					tdResult.innerHTML = '<div class="pass">Passed</div>';
+				}
+				else {
+
+					try {
+						eval(code + '()');
+						tdResult.innerHTML = '<div class="pass">Passed</div>';
+						status++;
+					} catch (e) {
+						if (Tests.debugOnError)
+							debugger;
+						tdResult.innerHTML = '<div class="fail">' + Tests.stack(e) + '</div>';
 					}
 				}
 			}
 		}
-		return result;
-	},
 
-	/**
-	 * @returns {string[]} */
-	getEnabled: function() {
-		return window.location.search.substr(1)
-			.split(/&/g)
-			.filter((x) => x.endsWith('=1') )
-			.map((x) => x.substr(0, x.length-2) );
-	},
 
-	/**
-	 * Prints output to cells created by getTable() if they exist,
-	 * otherwise prints to console.
-	 * @param testNames {string[]} */
-	run: function(testNames) {
-		for (let testName of testNames) {
-			var output = document.getElementById(testName);
-			//try {
-				eval(testName + '()');
-				if (output)
-					output.innerHTML = '<div class="pass">Passed</div>';
-				else
-					console.log(testName + ': Passed');
+		// Update statuses of each group
+		let groups = table.querySelectorAll('tr.object');
+		for (let group of groups) {
+			let nextTr = group.nextSibling;
+			if (!nextTr)
+				continue;
 
-			/*
-			}
-			catch (e) {
-				if (e instanceof AssertError) {
-					if (output)
-						output.innerHTML = '<div class="fail">' + Tests.stack(e) + '</div>';
-					else
-						console.error(testName + ': Failed\n' + Tests.stack(e));
-				}
-				else
-					throw e;
-			}*/
+			let pass = nextTr.querySelectorAll('div.pass').length;
+			let fail = nextTr.querySelectorAll('div.fail').length;
+
+			let summary = group.querySelector('td.summary');
+			summary.classList.remove('pass');
+			summary.classList.remove('fail');
+			summary.classList.add(fail===0 ? 'pass' : 'fail');
+
+			if (pass+fail > 0)
+				summary.innerHTML = pass + '/' + (pass+fail) + ' passed';
+			else
+				summary.innerHTML = '';
+
 		}
-	},
-
-	/**
-	 * @param testNames {string[]}
-	 * @returns {HTMLTableElement|Element} */
-	getTable: function(testNames) {
-		var table = document.createElement('table');
-		var enabled = Tests.getEnabled();
-
-		// StringBuilder
-		var html = ['<tr><th style="text-align: left"><input type="checkbox" ' +
-			'onclick="this.parentNode.parentNode.parentNode.querySelectorAll(\'[type=checkbox]\').forEach((x) => x.checked=this.checked)"></th>'];
-		for (let testName of testNames) {
-			var checked = enabled.includes(testName) ? 'checked' : '';
-			html.push(
-				'<tr>' +
-					'<td><label style="user-select: none">' +
-						'<input name="' + testName + '" type="checkbox" value="1" ' + checked + '>' +
-						testName +
-					'</label></td>' +
-					'<td id="' + testName + '"></td>' +
-				'</tr>');
-		}
-
-		table.innerHTML = html.join('');
-		return table;
 	},
 
 
@@ -190,24 +291,3 @@ var Tests = {
 		return Tests.escapeHtml(stack).replace(/\n/g, '<br/>');
 	}
 };
-
-
-
-/*
-
-// Test Watch:
-var tree = {
-	a: [1, 2, 3],
-	b: 2
-};
-
-var callback = function() {
-	console.log(arguments);
-};
-var a = tree.a;
-watch(tree, 'a', callback);
-a.push(5);
-tree.a.push(4);
-
-unwatch(tree, 'a', callback);
-*/

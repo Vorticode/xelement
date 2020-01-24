@@ -157,118 +157,6 @@ var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.g
 
 var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) || el.getAttribute('data-' + name));
 
-/**
- * Given element el with x-props="item: this", find all first-level subscriptions to item.
- * That is if el has itself or descendants that bind to:
- *    item.a, item.a[0], item.a.c, and item.b, this function will return ['a', 'b'] because they are the first level subscribers.
- * Must be called on an XElement before bindEl() removes the loop children.
- * Code similar to this is used in other places.  It'd be nice to make it shared.
- * TODO: This causes too many redraws.  Suppose <x-b data-prop="parentA.items">, and it subscribes
- * to a particular property on items[0].
- * However, changing that property in parentA will cause all of items to be invalidated, redrawing everything related.
- * @param el {HTMLElement}
- * @param props {string[]=}
- * @param context {object<string, string>[]=}
- * @returns {Set}
-var getPropSubscribers = function(el, props, context) {
-
-	context = context || [];
-	let result = new Set();
-
-	if (!props && el instanceof XElement) {
-		var propCode = getXAttrib(el, 'prop');
-		// Getting data-prop for the first time from the top level element.
-		if (propCode) {
-			let items = parseObj(propCode);
-			props = Object.keys(items);
-		}
-		else // no props
-			return result;
-	}
-
-
-	let simpleAttribs = ['text', 'html', 'val', 'visible'];
-	for (let attrib of simpleAttribs) {
-		let code = getXAttrib(el, attrib);
-		if (code) {
-			code = replaceVars(code, context);
-			let paths = parseVars(code);
-			for (let path of paths) {
-
-				// path[0] is the name of the bound prop and path[1] is the field we subscribet on it:
-				if (props.includes(path[0]) && path[1])
-					result.add(path[1]);
-			}
-		}
-	}
-
-	let objAttribs = ['attribs', 'classes', 'sortable'];
-	for (let attrib of objAttribs) {
-		let code = getXAttrib(el, attrib);
-		if (code) {
-			code = replaceVars(code, context);
-			let codeObj = parseObj(code);
-			for (let key in codeObj) {
-				let item = codeObj[key];
-				let paths = parseVars(item);
-				for (let path of paths) {
-					if (props.includes(path[0]) && path[1])
-						result.add(path[1]);
-				}
-			}
-		}
-	}
-
-	let loop = getXAttrib(el, 'loop');
-	if (loop) {
-		var [foreach, loopVar, indexVar] = parseLoop(loop);
-		foreach = replaceVars(foreach, context);
-		let paths = parseVars(foreach);
-		for (let path of paths) {
-			if (props.includes(path[0]) && path[1])
-				result.add(path[1]);
-		}
-	}
-
-
-	// Recurse through children.
-	let parent = el.shadowRoot || el;
-
-	// .loopChildren are the children that are removed  on loop init.
-	// This is covered by the ThirdLevelPropForwardLoop test.
-	let children = parent.loopChildren || parent.children;
-
-	for (let i=0; i<children.length; i++) {
-
-		let child = children[i];
-		let localContext = {};
-
-		// Create loop context
-		if (foreach) {
-			localContext[loopVar] = foreach + '[' + i + ']';
-			if (indexVar !== undefined)
-				localContext[indexVar] = i;
-		}
-
-		// Getting props from a child xelement so we can descent into it and also look for subscriptions
-		// This is needed to make Test:  SecondLevelPropForward work.
-		if (child instanceof XElement) {
-			propCode = getXAttrib(child, 'prop');
-			if (propCode) {
-				let items = parseObj(propCode);
-				for (let key in items)
-					localContext[key] = items[key];
-			}
-		}
-
-
-		let items = getPropSubscribers(child, props, [localContext, ...context]);
-		result = new Set([...result, ...items]); // merge sets
-	}
-
-	return result;
-};
- */
 
 /**
  * Recursively process all the data- attributes in el and its descendants.
@@ -295,15 +183,18 @@ var bindElProps = (xelement, el, context) => {
 
 	if (el instanceof XElement) {
 
+		// Don't inherit within-element context from parent.
+		el.context2 = (xelement.context2 || []).slice();
+
 		let prop = getXAttrib(el, 'prop');
 		if (prop)
-			bindings.prop(xelement, prop, el, context); // modifies context
+			bindings.prop(xelement, prop, el, el.context2); // adds a new context
 
 
 		xelement = el;
-		//xelement.context2 = context;
 
-
+		// Context object used only within this XElement.
+		context = [{}, ...el.context2];
 	}
 
 	// Seach attributes for data- bindings.
@@ -431,22 +322,6 @@ var unbindEl = (self, el) => {
 					delete el.items_;
 					delete el.loopChildren;
 				}
-
-				// Old
-				// let watchedEl = watchedEls.get(el);
-				// if (watchedEl)
-				// 	for (let sub of watchedEl) {
-				// 		// only getXParent when first needed.
-				// 		if (!parent) {
-				// 			if (self !== el)
-				// 				parent = self;
-				// 			else
-				// 				parent = getXParent(el) || self;
-				// 		}
-				//
-				// 		unwatch(parent, sub.path_, sub.callback_);
-				// 		removeElWatch(el, sub.path_, sub.callback_);
-				// 	}
 
 				// New
 				let watches = watchedEls2.getAll(el);
@@ -576,11 +451,11 @@ var initHtml = (self) => {
 				enumerable: 1,
 				configurable: 1,
 				get: () => node,
+				//#IFDEV
 				set: () => {
-					//#IFDEV
 					throw new XElementError('Property ' + id + ' not writable');
-					//#ENDIF
 				}
+				//#ENDIF
 			});
 
 			// Only leave the id attributes if we have a shadow root.
@@ -588,14 +463,6 @@ var initHtml = (self) => {
 			if (!self.shadowRoot)
 				node.removeAttribute('id');
 		}
-
-		// This is set before data binding so that we can search loop children before bindings.loop() removes them.
-		//console.log(self.parentNode);
-		//self.propSubscriptions = Array.from(getPropSubscribers(self));
-
-		//let prop = getXAttrib(self, 'prop');
-		//if (prop)
-		//	bindings.prop(self.parentNode, prop, self, {});
 
 
 		if (disableBind === 0) {
@@ -778,6 +645,40 @@ var bindings = {
 						return safeEval.call(el, addThis(expr));
 					}
 				});
+
+
+				// Attempt 2:  fails the props test because
+				// el.propGetter = function () {
+				// 	return safeEval.call(self, expr);
+				// };
+				//
+				// // This will be replaced if something subscribes to prop.
+				// Object.defineProperty(el, prop, {
+				// 	configurable: true,
+				// 	get: function () {
+				// 		if (window.init)
+				// 			debugger;
+				// 		return safeEval.call(self, expr);
+				// 	},
+				// 	set: function(val) {
+				// 		let paths = parseVars(expr);
+				// 		traversePath(self, paths[0], true, val);
+				// 	}
+				// });
+
+				// Attempt 3: works except for embed, loopnested, and events:
+				// Will probably cause too much redraw, as assigning a whole object will trigger updates of all its children.
+				// let paths = parseVars(expr);
+				// for (let path of paths) {
+				// 	let updateProp = function() {
+				// 		el[prop] = safeEval.call(self, expr);
+				//
+				// 	};
+				// 	watch(self, path, updateProp);
+				// 	watchedEls2.add(el,[self, path, updateProp]);
+				// }
+				//
+				// el[prop] = safeEval.call(self, expr);
 			}
 		}
 	},
@@ -859,7 +760,6 @@ var bindings = {
 		setHtml();
 	},
 
-
 	// TODO: Removing an item from the beginning of the array copy the first to the 0th,
 	// then createEl a new 1st item before deleting it when rebuildChildren is called again with the delete operation.
 	// Batching updates into a set should fix this.
@@ -875,13 +775,13 @@ var bindings = {
 		// 	return;
 
 		context = context || [];
-		context = context.slice(); // copy, because we add to it as we descend.
+		//context = context.slice(); // copy, because we add to it as we descend.
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
-		el.context_ = context;  // is this used?
+		el.context_ = context;  // Used in sortable.
 
 		// Allow loop attrib to be applied above shadowroot.
 		let root = el.shadowRoot || el;
@@ -986,19 +886,21 @@ var bindings = {
 				}
 			}
 
-			let localContext = context.slice();
+
 
 			//#IFDEV
-			if (loopVar in localContext)
-				throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
-			if (indexVar && indexVar in localContext)
-				throw new XElementError('Loop index variable "' + indexVar + '" already used in outer loop.');
+			// if (loopVar in localContext)
+			// 	throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
+			// if (indexVar && indexVar in localContext)
+			// 	throw new XElementError('Loop index variable "' + indexVar + '" already used in outer loop.');
 			//#ENDIF
 
 			// Rebind events on any elements that had their index change.
 			for (let i=0; i< root.children.length; i++) {
 				let child = root.children[i];
 				if (child.index_ !== i) {
+
+					let localContext = {};
 
 					// TODO, if child is an xelement, this won't unbind any events within it!
 
@@ -1015,7 +917,7 @@ var bindings = {
 					// TODO: That code is removed, so we no longer need this line.
 					child.context_ = localContext;
 
-					bindEl(self, child, [localContext]);
+					bindEl(self, child, [localContext, ...context]);
 				}
 				delete child.index_;
 			}

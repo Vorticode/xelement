@@ -4,17 +4,35 @@
 	<meta charset="UTF-8">
 	<title>Tests</title>
 	<style>
-		body { color: #555; background-color: black; font-family: sans-serif }
-		table td { vertical-align: top; padding: .25em .5em }
-		table td:first-child { padding-left: 0 }
-		label {white-space: nowrap; font-weight: bold }
+		body { color: #777; background-color: black; font-family: sans-serif; font-size: 14px; margin: 0 }
 		button, input { background-color: #333;
 			color: white;
 			border: 2px solid gray;
 			border-radius: .4em;
 			padding: .25em .75em }
-		.pass { color : #0c0 }
-		.fail { color: #c00 }
+
+		table.tests * { box-sizing: border-box }
+		table.tests tr.selected > td { background-color: #171717; color: #ccc }
+
+
+		table.tests td { vertical-align: top; color: #555; padding: 0; position: relative }
+		table.tests label {white-space: nowrap; font-weight: bold; width: 100% }
+
+		table.tests input[type=checkbox] { margin: 2px }
+
+		table.tests .pass { color : #0c0 !important }
+		table.tests .fail { color: #e00 !important; word-wrap: break-word }
+
+		table.tests .level0 { width: 200px }
+		table.tests .level1 { width: 180px }
+		table.tests .level2 { width: 160px }
+		table.tests .level3 { width: 140px }
+		table.tests .level4 { width: 120px }
+		table.tests .level5 { width: 100px }
+
+		table.tests, table.tests table { table-layout: fixed; width: 100%; border-collapse: collapse }
+		table.tests div.indent { padding-left: 20px; }
+		table.tests a { text-decoration: none; color: #77a }
 	</style>
 
 	<script src="/src/sortable.min.js"></script>
@@ -39,20 +57,17 @@
 <body>
 	<form id="tests">
 		<button>Run Tests</button>
+
+
+		<script>
+			//Tests.throwError = true;
+			table = Tests.getTable(XElementTests, 'XElementTests');
+			document.write('<table class="tests" cellspacing="0">' + table + '</table>');
+
+			Tests.runTests(document.querySelector('table.tests'));
+		</script>
+		<button>Run Tests</button>
 	</form>
-
-	<script>
-		var tests = Tests.find("test_");
-		table = Tests.getTable(Object.keys(tests));
-		document.getElementById('tests').appendChild(table);
-
-		var enabled = Tests.getEnabled();
-		Tests.run(enabled);
-
-		function click2(a, b, c) {
-			console.log(this, a, b, c);
-		}
-	</script>
 
 </body>
 </html>
