@@ -188,13 +188,13 @@ var bindElProps = (xelement, el, context) => {
 
 		let prop = getXAttrib(el, 'prop');
 		if (prop)
-			bindings.prop(xelement, prop, el, el.context2); // adds a new context
+			bindings.prop(xelement, prop, el, context); // modifies context
 
 
 		xelement = el;
+		//xelement.context2 = context;
 
-		// Context object used only within this XElement.
-		context = [{}, ...el.context2];
+
 	}
 
 	// Seach attributes for data- bindings.
@@ -490,16 +490,16 @@ class XElement extends HTMLElement {
 	constructor() {
 		//#IFDEV
 		try {
-		//#ENDIF
+			//#ENDIF
 			super();
-		//#IFDEV
+			//#IFDEV
 		} catch (error) {
 			if (error instanceof TypeError) // Add helpful message to error:
 				error.message += '\nMake sure to set the .html property before instantiating the class "' + this.name + '".';
 			throw error;
 		}
 		//#ENDIF
-		
+
 		let xname = getXName(this.constructor);
 		let self = this;
 		if (customElements.get(xname))
@@ -641,6 +641,7 @@ var bindings = {
 				// }
 
 				Object.defineProperty(el, prop, {
+					configurable: true,
 					get: function () {
 						return safeEval.call(el, addThis(expr));
 					}
@@ -759,6 +760,7 @@ var bindings = {
 		// Set initial value.
 		setHtml();
 	},
+
 
 	// TODO: Removing an item from the beginning of the array copy the first to the 0th,
 	// then createEl a new 1st item before deleting it when rebuildChildren is called again with the delete operation.
@@ -888,19 +890,21 @@ var bindings = {
 
 
 
-			//#IFDEV
-			// if (loopVar in localContext)
-			// 	throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
-			// if (indexVar && indexVar in localContext)
-			// 	throw new XElementError('Loop index variable "' + indexVar + '" already used in outer loop.');
-			//#ENDIF
+		
 
 			// Rebind events on any elements that had their index change.
 			for (let i=0; i< root.children.length; i++) {
 				let child = root.children[i];
 				if (child.index_ !== i) {
 
-					let localContext = {};
+					let localContext =  {...context[0]};
+					
+					//#IFDEV
+					if (loopVar in localContext)
+						throw new XElementError('Loop variable "' + loopVar + '" already used in outer loop.');
+					if (indexVar && indexVar in localContext)
+						throw new XElementError('Loop index variable "' + indexVar + '" already used in outer loop.');
+					//#ENDIF
 
 					// TODO, if child is an xelement, this won't unbind any events within it!
 
@@ -1056,7 +1060,7 @@ var bindings = {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
-				// noinspection EqualityComparisonWithCoercionJS
+			// noinspection EqualityComparisonWithCoercionJS
 				el.checked = result == true;
 			else
 				el.value = result;

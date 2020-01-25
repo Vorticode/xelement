@@ -364,11 +364,10 @@ XElement: {
 		assertEq(p.invalidattr, 'val1');
 	},
 
-	embed: function () {
+	embed: {
 		// Embed
-		(function () {
-			class E1 extends XElement {
-			}
+		embed1: function () {
+			class E1 extends XElement {}
 
 			E1.html = '<div title="E1">E1</div>';
 			var e1 = new E1();
@@ -380,64 +379,57 @@ XElement: {
 
 			var e2 = new E2();
 			assertEq(e2.shadowRoot.innerHTML, '<x-e1 title="E2">E1</x-e1>');
-		})();
+		},
 
 		// Embed with binding to both parent and self.
-		(function () {
-			class E3 extends XElement {
-			}
+		parentAndSelf: function () {
+			class B_E2 extends XElement {}
+			B_E2.html = '<div data-attribs="title: titleText">E1</div>';
 
-			E3.html = '<div data-attribs="title: titleText">E1</div>';
+			class A_E2 extends XElement {} // e2 wraps e1
+			A_E2.html = '<div><x-b_e2 id="b" data-classes="big: isBig">E1</x-b_e2></div>';
 
-			class E4 extends XElement {
-			} // e2 wraps e1
-			E4.html = '<div><x-e3 id="e3" data-classes="big: isBig">E1</x-e3></div>';
 
-			var e4 = new E4();
+			var e4 = new A_E2();
 
-			assertEq(e4.e3.getAttribute('title'), null);
-			assertEq(e4.e3.getAttribute('class'), null);
+			assertEq(e4.b.getAttribute('title'), null);
+			assertEq(e4.b.getAttribute('class'), null);
 
-			e4.titleText = 'hello';
-			e4.e3.isBig = true;
+			e4.b.titleText = 'hello';
+			e4.b.isBig = true;
 
-			assertEq(e4.e3.getAttribute('title'), 'hello');
-			assertEq(e4.e3.getAttribute('class'), 'big');
-		})();
+			assertEq(e4.b.getAttribute('title'), 'hello');
+			assertEq(e4.b.getAttribute('class'), 'big');
+		},
 
 
 		// Embed with conflicting binding to both parent and self.
-		(function () {
-			class E5 extends XElement {
-			}
+		embed3: function () {
+			class B_E3 extends XElement {}
+			B_E3.html = '<div data-classes="big1: isBig">E1</div>';
 
-			E5.html = '<div data-classes="big1: isBig">E1</div>';
+			class A_E3 extends XElement {}
+			A_E3.html = '<div><x-b_e3 id="b" data-classes="big2: isBig">E1</x-b_e3></div>';
 
-			class E6 extends XElement {
-			}
-
-			E6.html = '<div><x-e5 id="e5" data-classes="big2: isBig">E1</x-e5></div>';
-
-			// The data-classes attribute on E5's instantiation overrides the same attribute on E5's definition.
-			// But we subscribe to isBig on both E6 and E5.  Setting either updates the class.
+			// The data-classes attribute on B_E3's instantiation overrides the same attribute on B_E3's definition.
+			// But we subscribe to isBig on both A_E3 and B_E3.  Setting either updates the class.
 			// TODO: We shold define what the best behavior for this case is.  Right now this tests exists only to ensure nothing breaks.
-			var e6 = new E6();
+			var a = new A_E3();
 
-			assertEq(e6.e5.getAttribute('class'), null);
+			assertEq(a.b.getAttribute('class'), null);
 
-			//e6.isBig = true;
-			e6.isBig = true;
-			assertEq(e6.e5.getAttribute('class'), 'big2');
+			a.isBig = true;
+			assertEq(a.b.getAttribute('class'), 'big2');
 
-			e6.e5.isBig = false;
-			assertEq(e6.e5.getAttribute('class'), null);
+			a.b.isBig = false;
+			assertEq(a.b.getAttribute('class'), null);
 
-			e6.e5.isBig = true;
-			assertEq(e6.e5.getAttribute('class'), 'big2');
-		})();
+			a.b.isBig = true;
+			assertEq(a.b.getAttribute('class'), 'big2');
+		},
 
 		// Slot
-		(function () {
+		slot: function () {
 			class S1 extends XElement {
 			}
 
@@ -450,10 +442,10 @@ XElement: {
 			assertEq(div.innerHTML, '<x-s1>Hello</x-s1>');
 			assertEq(div.childNodes[0].shadowRoot.innerHTML, '<b><slot>Fallback</slot></b>');
 
-		})();
+		},
 
 		// Named slots
-		(function () {
+		namedSlots: function () {
 			class S2 extends XElement {
 			}
 
@@ -467,7 +459,7 @@ XElement: {
 			assertEq(s2.shadowRoot.children[0].children[0].assignedNodes()[0].outerHTML, '<b slot="f1">Hello</b>');
 			assertEq(s2.shadowRoot.children[1].children[0].assignedNodes()[0].outerHTML, '<s slot="f2">Goodbye</s>');
 
-		})();
+		}
 	},
 
 	misc: {
@@ -1030,10 +1022,10 @@ XElement: {
 		// TODO: Test loop over non-simple var.
 	},
 
-	dataLoopNested: function () {
+	dataLoopNested: {
 
 		// Nested loop over two separate properties
-		(function () {
+		loopNested1: function () {
 
 			class BL30 extends XElement {
 			}
@@ -1079,10 +1071,10 @@ XElement: {
 
 			assertEq(b.shadowRoot.children.length, 1);
 
-		})();
+		},
 
 		// Nested loop over sub properties.
-		(function () {
+		loopNested2: function () {
 			class BL31 extends XElement {
 			}
 
@@ -1115,10 +1107,10 @@ XElement: {
 				'<span data-text="family.name+\':\'+species">cats:lion</span>' +
 				'<span data-text="family.name+\':\'+species">cats:tiger</span>' +
 				'</div>');
-		})();
+		},
 
 		// Nested loop with index.
-		(function () {
+		loopNested3: function () {
 			class BL32 extends XElement {
 			}
 
@@ -1134,10 +1126,10 @@ XElement: {
 			b.items = [1, 2];
 			assertEq(b.shadowRoot.innerHTML, '<p data-loop="items: j, item2"><span data-text="i+j">0</span><span data-text="i+j">1</span></p><p data-loop="items: j, item2"><span data-text="i+j">1</span><span data-text="i+j">2</span></p>');
 
-		})();
+		},
 
 		// Nested loop with duplicate loopVar.
-		(function () {
+		loopNested4: function () {
 			class BL33 extends XElement {
 			}
 
@@ -1158,10 +1150,10 @@ XElement: {
 			}
 
 			assert(error instanceof XElementError);
-		})();
+		},
 
 		// Nested loop with duplicate index.
-		(function () {
+		loopNested5: function () {
 			class BL34 extends XElement {
 			}
 
@@ -1182,7 +1174,7 @@ XElement: {
 			}
 
 			assert(error instanceof XElementError);
-		})();
+		}
 	},
 
 	events: function () {
