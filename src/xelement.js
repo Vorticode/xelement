@@ -921,7 +921,7 @@ var bindings = {
 					// TODO: That code is removed, so we no longer need this line.
 					child.context_ = localContext;
 
-					bindEl(self, child, [localContext, ...context]);
+					bindEl(self, child, [localContext, ...context.slice(1)]);
 				}
 				delete child.index_;
 			}
