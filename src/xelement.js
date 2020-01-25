@@ -1,12 +1,16 @@
 /*
 Inherit from XElement to create custom HTML Components.
 
-TODO: next goals:
-Remove .context_ assignments to loop el and child in bindings.loop()
-Document all properties that bindings.loop() sets on elements.
+
+TODO: major bugfixes
+LB Add a bunch of functions/rungs/etc then remove them.  Typing characters still has small redraw leaks.
+Changing sort order breaks items.
+Write a better parser for expr.replace(/this/g, 'parent');
 parseVars("this.passthrough(x)") doesn't find x.
 parseVars("item + passthrough('')") finds "passthrough" as a variable.
+Document all properties that bindings.loop() sets on elements.
 
+TODO: next goals:
 {{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
 allow comments in loops.
@@ -211,15 +215,12 @@ var bindElProps = (xelement, el, context) => {
 			// Here we still need to use the inner context of the parent XElement because
 			// prop may have variables within it that may need to be resolved.
 			bindings.prop(xelement, prop, el, context); // adds a new context to the beginning of the array.
-			//bindings.prop(xelement, prop, el, el.context2);
 
 			// Then we add the new context item added by prop();
 			context = [context[0], ...el.context2];
 		}
 		else
 			context = el.context2.slice();
-
-
 
 
 
@@ -271,7 +272,6 @@ var bindElProps = (xelement, el, context) => {
 
 		for (let child of next.children)
 			bindElProps(xelement, child, context);
-
 	}
 };
 
@@ -443,6 +443,7 @@ var initHtml = (self) => {
 		}
 
 		// 4. Bind events on the defintion to functions on its own element and not its container
+		// TODO: Remove this line and make the bindElEvents() smart enough to know what to do on its own, like we did with bindElProps()
 		bindElEvents(self, self, null, false, div);
 
 		// 5.  Add attributes from instantiation.
@@ -665,31 +666,18 @@ var bindings = {
 				expr = addThis(expr, context);
 
 				// Replace 'this' references with 'parent'
-				// let paths = parseVars(expr, true, true);
-				// for (path of paths) {
-				// 	if (path[0] === 'this')
-				// 		path[0] = 'parent';
-				// }
-
-				// TODO: temporary until I write actual parsing
-				expr = expr.replace(/this/g, 'parent');
+				// TODO: temporary lazy way until I write actual parsing
+				let expr2 = expr.replace(/this/g, 'parent');
 
 				let newContext = {};
-				newContext[prop] = expr;
+				newContext[prop] = expr2;
 
 				context.unshift(newContext);
-
-				// Actually set the value in case we query it directly:
-				// for (let path of parseVars(expr)) {
-				// 	watch(el, path, function() {
-				// 		el[prop] = safeEval.call(el, addThis(expr));
-				// 	});
-				// }
 
 				Object.defineProperty(el, prop, {
 					configurable: true,
 					get: function () {
-						return safeEval.call(el, addThis(expr));
+						return safeEval.call(self, expr);
 					}
 				});
 
