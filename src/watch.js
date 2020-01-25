@@ -1,10 +1,5 @@
 
-var removeProxy = (obj) => {
-	if (isObj(obj))
-		return obj.$removeProxy || obj;
-	return obj;
-};
-
+var removeProxy = (obj) => isObj(obj) ? obj.$removeProxy || obj : obj;
 
 
 /**

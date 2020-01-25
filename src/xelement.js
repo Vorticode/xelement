@@ -548,10 +548,10 @@ class XElement extends HTMLElement {
 }
 
 
+/*
 let queuedOps = new Set();
 let queueDepth = 0;
 
-/*
 XElement.enqueue = function(callback) {
 	return function() {
 		if (queueDepth === 0)
@@ -560,7 +560,6 @@ XElement.enqueue = function(callback) {
 			queuedOps.add(callback);
 	};
 };
-*/
 
 // Untested.  It might not be possible to use this without screwing things up.
 XElement.batch = function(callback) {
@@ -583,6 +582,7 @@ XElement.batch = function(callback) {
 		}
 	}
 };
+*/
 
 
 // TODO: write a function to replace common code among these.
@@ -1023,14 +1023,14 @@ var bindings = {
 				//debugger;
 				let array = traversePath(newSelf, path, true, newArray, true);
 				rebindLoopChildren(newSelf, event.to, [context], oldSelf); // But we still need to unbind and rebind them in their currnet positions.
-				array.$trigger; // This won't trigger rebuilding our own children because their order already matches.
+				array.$trigger(); // This won't trigger rebuilding our own children because their order already matches.
 
 
 				// If origin was a different loop:
 				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
 					let array = traversePath(oldSelf, path, true, oldArray, true);
 					rebindLoopChildren(oldSelf, event.from, [context]);
-					array.$trigger;
+					array.$trigger();
 				}
 
 

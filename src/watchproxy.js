@@ -17,10 +17,12 @@ var handler = {
 		if (field==='$roots')
 			return ProxyObject.get_(obj).roots_;
 		if (field==='$trigger') {
-			let proxyObj = ProxyObject.get_(obj);
-			for (let root of proxyObj.roots_)
-				root.notify_('set', [], obj);
-			return proxyObj.roots_;
+			return (path) => {
+				let roots = ProxyObject.get_(obj).roots_;
+				for (let root of roots)
+					root.notify_('set', path || [], obj);
+				return roots;
+			}
 		}
 
 
@@ -86,7 +88,6 @@ var handler = {
 				obj[field] = newVal;
 
 				let path = [...proxyObj.getPath_(root), field];
-
 				root.notify_('set', path, obj[field], oldVal);
 			//}
 		}
@@ -174,9 +175,7 @@ class ProxyObject {
 							let result =  Array.prototype[func].apply(obj, arguments);
 
 							// Trigger a single notfication change.
-							//self.proxy_.length = self.proxy_.length + 0;
-							self.proxy_.$trigger;
-
+							self.proxy_.$trigger();
 							return result;
 						}
 					}
