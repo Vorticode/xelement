@@ -103,17 +103,6 @@ var parseVars = (code, includeThis, allowCall) => {
 	return result;
 };
 
-var replaceVarsOld = (code, replacements) => {
-	var paths = parseVars(code, 1);
-	for (let path of paths.reverse()) // We loop in reverse so the replacement indices don't get messed up.
-		for (let oldVar in replacements) {
-			if (path.length >= 1 && path[0] === oldVar)
-				// replacements[oldVar] is newVar.
-				code = code.slice(0, path.index_[0].start) + replacements[oldVar] + code.slice(path.index_[0].start + oldVar.length);
-		}
-	return code;
-};
-
 // TODO: actual parsing.
 var trimThis = function(code) {
 	return code.replace(/^this\./, '');

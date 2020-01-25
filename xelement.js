@@ -312,19 +312,34 @@ var safeEvalCache = new Cache();
 /**
  * Evaluate expr, but allow undefined variables.
  * @param expr {string}
+ * @param args {object}
  * @returns {*} */
-function safeEval(expr) {
+function safeEval(expr, args, statements) {
+
+	let code = statements ? expr : 'return (' + expr + ')';
+	if (args && Object.keys(args).length) {
+
+		// Convert args object to var a=arguments[0][name] assignments
+		let argAssignments = [];
+		for (let name in args)
+			argAssignments.push(name + '=arguments[0]["' + name.replace(/"/g, '\"') + '"]');
+
+		code = 'var ' + argAssignments.join(',') + ';' + code;
+	}
+
+	console.log(code);
+
 	try {
 		//return Function('return (' + expr + ')').call(this);
 		let lazyEval = function() {
-			return Function('return (' + expr + ')');
+			return Function(code);
 		};
-		return safeEvalCache.get(expr, lazyEval).call(this);
+		return safeEvalCache.get(code, lazyEval).call(this, args);
 	}
 	catch (e) { // Don't fail for null values.
 		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
 			//#IFDEV
-				e.message += ' in expression "' + expr + '"';
+				e.message += ' in expression "' + code + '"';
 			//#ENDIF
 			throw e;
 		}
@@ -600,10 +615,12 @@ var handler = {
 		if (field==='$roots')
 			return ProxyObject.get_(obj).roots_;
 		if (field==='$trigger') {
-			let proxyObj = ProxyObject.get_(obj);
-			for (let root of proxyObj.roots_)
-				root.notify_('set', [], obj);
-			return proxyObj.roots_;
+			return (path) => {
+				let roots = ProxyObject.get_(obj).roots_;
+				for (let root of roots)
+					root.notify_('set', path || [], obj);
+				return roots;
+			}
 		}
 
 
@@ -669,7 +686,6 @@ var handler = {
 				obj[field] = newVal;
 
 				let path = [...proxyObj.getPath_(root), field];
-
 				root.notify_('set', path, obj[field], oldVal);
 			//}
 		}
@@ -757,9 +773,7 @@ class ProxyObject {
 							let result =  Array.prototype[func].apply(obj, arguments);
 
 							// Trigger a single notfication change.
-							//self.proxy_.length = self.proxy_.length + 0;
-							self.proxy_.$trigger;
-
+							self.proxy_.$trigger();
 							return result;
 						}
 					}
@@ -868,12 +882,7 @@ var watchProxy = (root, callback) => {
 };;
 
 
-var removeProxy = (obj) => {
-	if (isObj(obj))
-		return obj.$removeProxy || obj;
-	return obj;
-};
-
+var removeProxy = (obj) => isObj(obj) ? obj.$removeProxy || obj : obj;
 
 
 /**
@@ -885,13 +894,14 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	if (obj.$isProxy)
+	if (obj.$isProxy) {
 		obj = obj.$removeProxy;
 
-	//#IFDEV
-	if (obj.$isProxy) // should never be more than 1 level deep of proxies.
-		throw new XElementError("Double wrapped proxy found.");
-	//#ENDIF
+		//#IFDEV
+		if (obj.$isProxy) // If still a proxy.  There should never be more than 1 level deep of proxies.
+			throw new XElementError("Double wrapped proxy found.");
+		//#ENDIF
+	}
 
 	if (typeof obj === 'object') {
 		if (!visited)
@@ -905,7 +915,7 @@ var removeProxies = (obj, visited) => {
 			let t = obj[name];
 			let v = removeProxies(t, visited);
 
-			// If a proxy was removed from the property.
+			// If a proxy was removed from something created with Object.defineOwnProperty()
 			if (v !== t) {
 				if (Object.getOwnPropertyDescriptor(obj, name).writable) // we never set writable=true when we defineProperty.
 					obj[name] = v;
@@ -1120,7 +1130,7 @@ var watched = new WeakMap();
  * @param path {string|string[]}
  * @param callback {function(action:string, path:string[], value:string?)} */
 var watch = (obj, path, callback) => {
-	obj = obj.$removeProxy || obj;
+	obj = removeProxy(obj);
 
 	// Keep only one WatchProperties per watched object.
 	var wp = watched.get(obj);
@@ -1136,7 +1146,7 @@ var watch = (obj, path, callback) => {
  * @param path {string|string[]}
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
-	obj = obj.$removeProxy || obj;
+	obj = removeProxy(obj);
 	var wp = watched.get(obj);
 
 	if (wp) {
@@ -1290,15 +1300,6 @@ var getRootXElement = function(obj, path) {
 	return result;
 };
 
-
-var getLoopParent = (el) => { // will error if not in an XParent.
-	while ((el = (el.parentNode || el.host)) && el) {
-		if (getLoopCode_(el))
-			return el;
-	}
-	return null;
-};
-
 var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.getAttribute('data-loop'));
 
 var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) || el.getAttribute('data-' + name));
@@ -1448,8 +1449,12 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 				// 1. event, assigned to the current event.
 				// 2. this, assigned to the class instance.
 				let callback = function (event) {
-					// TODO: safeEval() won't work here because we have to have event in the scope.
+
 					eval(code);
+
+					// TODO: Make safeEval() work here.  It currently fails bc it has the wrong xelement.
+					// Try this again after we redo event binding in initHtml().
+					//safeEval.call(xelement, code, {event: event}, true);
 				}.bind(xelement);
 				el.addEventListener(eventName, callback);
 
@@ -1494,8 +1499,6 @@ var unbindEl = (xelement, el) => {
 	for (let child of next.children)
 		unbindEl(xelement, child);
 
-	var parent;
-
 	// Unbind properties
 	if (el.attributes)
 		for (let attr of el.attributes) {
@@ -1505,7 +1508,7 @@ var unbindEl = (xelement, el) => {
 					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 					delete el.loopHtml_;
 					delete el.items_;
-					delete el.loopChildren;
+					//delete el.loopChildren;
 				}
 
 				// New
@@ -1863,12 +1866,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	loop: (self, code, el, context) => {
 
-		// Make sure loop isn't being bound to a parent element in addition to the child XElement.
-		// if (el instanceof XElement && el !== self)
-		// 	return;
-
 		context = context || [];
-		//context = context.slice(); // copy, because we add to it as we descend.
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
@@ -1897,7 +1895,7 @@ var bindings = {
 				//#ENDIF
 
 				root.loopHtml_ = root.innerHTML.trim();
-				root.loopChildren = Array.from(root.children);
+				//root.loopChildren = Array.from(root.children);
 
 				// Remove children before calling rebuildChildren()
 				// That way we don't unbind elements that were never bound.
@@ -1910,10 +1908,8 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
-			var newItems = (safeEval.call(self, foreach) || []);
-			newItems = newItems.$removeProxy || newItems;
-			var oldItems = (root.items_ || []);
-			oldItems = oldItems.$removeProxy || oldItems;
+			var newItems = removeProxy(safeEval.call(self, foreach) || []);
+			var oldItems = removeProxy(root.items_ || []);
 
 			// Do nothing if the array hasn't changed.
 			if (arrayEq(oldItems, newItems, true))
@@ -1979,9 +1975,6 @@ var bindings = {
 				}
 			}
 
-
-
-		
 
 			// Rebind events on any elements that had their index change.
 			for (let i=0; i< root.children.length; i++) {
@@ -2138,7 +2131,7 @@ var bindings = {
 		var loopCode = getLoopCode_(el);
 		if (loopCode) {
 
-			let [foreach, loopVar, indexVar] = parseLoop(loopCode);
+			let [foreach/*, loopVar, indexVar*/] = parseLoop(loopCode);
 			//#IFDEV
 			if (!isStandaloneVar(foreach))
 				throw new XElementError("Binding sortable to non-standalone loop variable.");
@@ -2179,14 +2172,14 @@ var bindings = {
 				//debugger;
 				let array = traversePath(newSelf, path, true, newArray, true);
 				rebindLoopChildren(newSelf, event.to, [context], oldSelf); // But we still need to unbind and rebind them in their currnet positions.
-				array.$trigger; // This won't trigger rebuilding our own children because their order already matches.
+				array.$trigger(); // This won't trigger rebuilding our own children because their order already matches.
 
 
 				// If origin was a different loop:
 				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
 					let array = traversePath(oldSelf, path, true, oldArray, true);
 					rebindLoopChildren(oldSelf, event.from, [context]);
-					array.$trigger;
+					array.$trigger();
 				}
 
 
@@ -2204,8 +2197,6 @@ var bindings = {
 					onUpdate.call(self, event);
 			};
 		}
-
-
 
 
 		Sortable.create(el, result);

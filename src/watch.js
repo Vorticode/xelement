@@ -70,7 +70,8 @@ class WatchProperties {
 	 * and all children of path if their own value changed.
 	 * @param action {string}
 	 * @param path {string[]}
-	 * @param value {*=} */
+	 * @param value {*=}
+	 * @param oldVal {*=} */
 	notify_(action, path, value, oldVal) {
 
 		let cpath = csv(path);

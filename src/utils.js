@@ -10,6 +10,7 @@ class XElementError extends Error {
  * Return true if the two arrays have the same items in the same order.
  * @param array1 {*[]}
  * @param array2 {*[]}
+ * @param deep {boolean=false}
  * @returns {boolean} */
 var arrayEq = (array1, array2, deep) => {
 	if (array1.length !== array2.length)
@@ -310,10 +311,11 @@ var safeEvalCache = new Cache();
  * Evaluate expr, but allow undefined variables.
  * @param expr {string}
  * @param args {object}
+ * @param isStatements {boolean=false}
  * @returns {*} */
-function safeEval(expr, args, statements) {
+function safeEval(expr, args, isStatements) {
 
-	let code = statements ? expr : 'return (' + expr + ')';
+	let code = isStatements ? expr : 'return (' + expr + ')';
 	if (args && Object.keys(args).length) {
 
 		// Convert args object to var a=arguments[0][name] assignments
@@ -323,8 +325,6 @@ function safeEval(expr, args, statements) {
 
 		code = 'var ' + argAssignments.join(',') + ';' + code;
 	}
-
-	console.log(code);
 
 	try {
 		//return Function('return (' + expr + ')').call(this);
@@ -336,7 +336,7 @@ function safeEval(expr, args, statements) {
 	catch (e) { // Don't fail for null values.
 		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
 			//#IFDEV
-				e.message += ' in expression "' + code + '"';
+			e.message += ' in expression "' + code + '"';
 			//#ENDIF
 			throw e;
 		}

@@ -728,7 +728,7 @@ var bindings = {
 						'This restriction may be removed in the future.');
 				//#ENDIF
 
-				root.loopHtml_ = root.innerHTML.trim();
+				root.loopHtml_ = root.children[0].outerHTML.trim();
 				//root.loopChildren = Array.from(root.children);
 
 				// Remove children before calling rebuildChildren()

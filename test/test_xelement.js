@@ -898,7 +898,6 @@ XElement: {
 
 		// Loop over var that doesn't initially exist.
 		(function () {
-
 			class BL11 extends XElement {}
 			BL11.html = `				
 				<div data-loop="parts.wheels: wheel">
@@ -986,6 +985,22 @@ XElement: {
 			assertEq(b.loop2.children[1].innerText, '2');
 			assertEq(b.loop2.children[2].innerText, '3');
 			assertEq(b.loop1.children.length, 3);
+		})();
+
+
+		// Loop over child with comemnts
+		(function () {
+			class A_L15 extends XElement {}
+			A_L15.html = `				
+				<div data-loop="items: item">
+					<!-- Hi I'm a comment -->
+				    <span></span>
+				</div>`;
+
+			var a = new A_L15();
+			a.items = [1, 2];
+
+			assertEq(a.shadowRoot.children.length, 2);
 		})();
 
 		// TODO: Test loop over non-simple var.
@@ -1469,9 +1484,7 @@ XElement: {
 		// Same as above, but loop is used twice.
 		// This used to fail because the proxy instead of the original object was being watched the second time.
 		(function () {
-			class BD6Inner extends XElement {
-			}
-
+			class BD6Inner extends XElement {}
 			BD6Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1479,9 +1492,7 @@ XElement: {
 				</div>
 			</div>`;
 
-			class BD6Outer extends XElement {
-			}
-
+			class BD6Outer extends XElement {}
 			BD6Outer.html = `
 			<div>
 				<div id="loop" data-loop="items: item">					
@@ -1499,9 +1510,7 @@ XElement: {
 
 		// Make sure multiple subsribers are updated when an input changes.
 		(function () {
-			class BD7Inner extends XElement {
-			}
-
+			class BD7Inner extends XElement {}
 			BD7Inner.html = `
 			<div>
 				<div id="loop" data-loop="t1.items: item">					
@@ -1509,8 +1518,7 @@ XElement: {
 				</div>
 			</div>`;
 
-			class BD7Outer extends XElement {
-			}
+			class BD7Outer extends XElement {}
 
 			BD7Outer.html = `
 			<div>
