@@ -1279,9 +1279,7 @@ XElement: {
 
 		// Make sure we don't try to call the function on the inner element.
 		(function () {
-			class EV4Inner extends XElement {
-			}
-
+			class EV4Inner extends XElement {}
 			EV4Inner.html = `<div>hi</div>`;
 
 			class EV4Outer extends XElement {

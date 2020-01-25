@@ -309,19 +309,34 @@ var safeEvalCache = new Cache();
 /**
  * Evaluate expr, but allow undefined variables.
  * @param expr {string}
+ * @param args {object}
  * @returns {*} */
-function safeEval(expr) {
+function safeEval(expr, args, statements) {
+
+	let code = statements ? expr : 'return (' + expr + ')';
+	if (args && Object.keys(args).length) {
+
+		// Convert args object to var a=arguments[0][name] assignments
+		let argAssignments = [];
+		for (let name in args)
+			argAssignments.push(name + '=arguments[0]["' + name.replace(/"/g, '\"') + '"]');
+
+		code = 'var ' + argAssignments.join(',') + ';' + code;
+	}
+
+	console.log(code);
+
 	try {
 		//return Function('return (' + expr + ')').call(this);
 		let lazyEval = function() {
-			return Function('return (' + expr + ')');
+			return Function(code);
 		};
-		return safeEvalCache.get(expr, lazyEval).call(this);
+		return safeEvalCache.get(code, lazyEval).call(this, args);
 	}
 	catch (e) { // Don't fail for null values.
 		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
 			//#IFDEV
-				e.message += ' in expression "' + expr + '"';
+				e.message += ' in expression "' + code + '"';
 			//#ENDIF
 			throw e;
 		}

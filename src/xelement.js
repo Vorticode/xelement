@@ -134,15 +134,6 @@ var getRootXElement = function(obj, path) {
 	return result;
 };
 
-
-var getLoopParent = (el) => { // will error if not in an XParent.
-	while ((el = (el.parentNode || el.host)) && el) {
-		if (getLoopCode_(el))
-			return el;
-	}
-	return null;
-};
-
 var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.getAttribute('data-loop'));
 
 var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) || el.getAttribute('data-' + name));
@@ -292,8 +283,12 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 				// 1. event, assigned to the current event.
 				// 2. this, assigned to the class instance.
 				let callback = function (event) {
-					// TODO: safeEval() won't work here because we have to have event in the scope.
+
 					eval(code);
+
+					// TODO: Make safeEval() work here.  It currently fails bc it has the wrong xelement.
+					// Try this again after we redo event binding in initHtml().
+					//safeEval.call(xelement, code, {event: event}, true);
 				}.bind(xelement);
 				el.addEventListener(eventName, callback);
 
@@ -337,8 +332,6 @@ var unbindEl = (xelement, el) => {
 	// Recursively unbind children.
 	for (let child of next.children)
 		unbindEl(xelement, child);
-
-	var parent;
 
 	// Unbind properties
 	if (el.attributes)
@@ -982,7 +975,7 @@ var bindings = {
 		var loopCode = getLoopCode_(el);
 		if (loopCode) {
 
-			let [foreach, loopVar, indexVar] = parseLoop(loopCode);
+			let [foreach/*, loopVar, indexVar*/] = parseLoop(loopCode);
 			//#IFDEV
 			if (!isStandaloneVar(foreach))
 				throw new XElementError("Binding sortable to non-standalone loop variable.");
@@ -1048,8 +1041,6 @@ var bindings = {
 					onUpdate.call(self, event);
 			};
 		}
-
-
 
 
 		Sortable.create(el, result);
