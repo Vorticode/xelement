@@ -79,29 +79,15 @@ lazy modifier for input binding, to only trigger update after change.
 /**
  * A map between elements and the callback functions subscribed to them.
  * Each value is an array of objects with path and callback function.
- * @type {WeakMap<HTMLElement, {path_:string, callback_:function}[]>} */
-var watchedEls2 = new WeakMultiMap();
+ * @type {WeakMultiMap<HTMLElement, {path_:string, callback_:function}[]>} */
+var elWatches = new WeakMultiMap();
 
 
 /**
  * A map between elements and the events assigned to them. *
- * @type {WeakMap<HTMLElement, *[]>} */
-var elEvents = new WeakMap();
+ * @type {WeakMultiMap<HTMLElement, *[]>} */
+var elEvents = new WeakMultiMap();
 
-
-/**
- *
- * @param el {HTMLElement}
- * @param eventName {string}
- * @param callback {function}
- * @param originalEventAttrib {string}
- * @param root */
-var addElEvent = (el, eventName, callback, originalEventAttrib, root) => {
-	let ee = elEvents.get(el);
-	if (!ee)
-		elEvents.set(el, ee = []);
-	ee.push([eventName, callback, originalEventAttrib, root]);
-};
 
 
 /**
@@ -310,7 +296,10 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 					eval(code);
 				}.bind(xelement);
 				el.addEventListener(eventName, callback);
-				addElEvent(el, eventName, callback, originalEventAttrib, xelement);
+
+				// Save everything we'll need to restore it later.
+				elEvents.add(el, [eventName, callback, originalEventAttrib, xelement]);
+				//addElEvent(el, eventName, callback, originalEventAttrib, xelement);
 
 				// Remove the original version so it doesn't also fire.
 				el.removeAttribute('on' + eventName);
@@ -336,18 +325,18 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 
 /**
  * Unbind properties and events from the element.
- * @param self {XElement|HTMLElement}
+ * @param xelement {XElement|HTMLElement}
  * @param el {HTMLElement=} Remove all bindings within root and children. Defaults to self. */
-var unbindEl = (self, el) => {
-	el = el || self;
+var unbindEl = (xelement, el) => {
+	el = el || xelement;
 
 	// Only go into shadowroot if coming from the top level.
 	// This way we don't traverse into the shadowroots of other XElements.
-	var next = self===el && el.shadowRoot ? el.shadowRoot : el;
+	var next = xelement===el && el.shadowRoot ? el.shadowRoot : el;
 
 	// Recursively unbind children.
 	for (let child of next.children)
-		unbindEl(self, child);
+		unbindEl(xelement, child);
 
 	var parent;
 
@@ -364,21 +353,21 @@ var unbindEl = (self, el) => {
 				}
 
 				// New
-				let watches = watchedEls2.getAll(el);
+				let watches = elWatches.getAll(el);
 				for (let w of watches)
 					unwatch(...w);
-				watchedEls2.removeAll(el);
+				elWatches.removeAll(el);
 			}
 		}
 
 	// Unbind events
-	let ee = elEvents.get(el) || [];
+	let ee = elEvents.getAll(el) || [];
 	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string, root:XElement]
 
 		// Only unbind if it was bound from the same root.
 		// This is needed to allow onclick="" attributes on both the definition and instantiation of an element,
 		// and having their "this" bound to themselves or the parent element, respectively.
-		if (item[3] === self) {
+		if (item[3] === xelement) {
 			el.removeEventListener(item[0], item[1]);
 			el.setAttribute('on' + item[0], item[2]);
 		}
@@ -573,6 +562,7 @@ XElement.enqueue = function(callback) {
 };
 */
 
+// Untested.  It might not be possible to use this without screwing things up.
 XElement.batch = function(callback) {
 	return function() {
 		if (queueDepth)
@@ -580,7 +570,7 @@ XElement.batch = function(callback) {
 		else {
 			queueDepth++;
 
-			let result = callback(arguments[0], arguments[1], arguments[2], arguments[3]);
+			let result = callback(...arguments);
 
 			queueDepth--;
 			if (queueDepth === 0) {
@@ -622,99 +612,10 @@ var bindings = {
 			// Then set the attribute to the value returned by the code.
 			for (let path of parseVars(attrExpr)) {
 				watch(self, path, setAttr);
-				watchedEls2.add(el, [self,  path, setAttr]);
+				elWatches.add(el, [self,  path, setAttr]);
 			}
 
 			setAttr();
-		}
-	},
-
-	/**
-	 * @param self {XElement} A parent XElement
-	 * @param code {string}
-	 * @param el {HTMLElement} An XElement that's a child of self, that has a data-prop attribute.
-	 * @param context {object<string, string>[]} */
-	prop: (self, code, el, context) => {
-
-
-		//#IFDEV
-		if (!context)
-			throw new XElementError();
-		if (!Array.isArray(context))
-			throw new XElementError();
-		if (!(el instanceof XElement))
-			throw new XElementError('The data-prop and x-prop attributes can only be used on XElements in ' + code);
-		//#ENDIF
-
-		// allow binding only on instantiation and not definition
-		if (self !== el) {
-			el.parent = self;
-
-			var obj = parseObj(code);
-			for (let prop in obj) {
-
-				//#IFDEV
-				if (prop === 'this')
-					throw new XElementError('Cannot use data-propx or x-prop to bind to "this" as a destination in ' + code);
-				//#ENDIF
-
-				let expr = obj[prop];
-
-				// Add 'this' prefix to standaline variables.
-				expr = trimThis(expr);
-				expr = replaceVars(expr, context);
-				expr = addThis(expr, context);
-
-				// Replace 'this' references with 'parent'
-				// TODO: temporary lazy way until I write actual parsing
-				let expr2 = expr.replace(/this/g, 'parent');
-
-				let newContext = {};
-				newContext[prop] = expr2;
-
-				context.unshift(newContext);
-
-				Object.defineProperty(el, prop, {
-					configurable: true,
-					get: function () {
-						return safeEval.call(self, expr);
-					}
-				});
-
-
-				// Attempt 2:  fails the props test because
-				// el.propGetter = function () {
-				// 	return safeEval.call(self, expr);
-				// };
-				//
-				// // This will be replaced if something subscribes to prop.
-				// Object.defineProperty(el, prop, {
-				// 	configurable: true,
-				// 	get: function () {
-				// 		if (window.init)
-				// 			debugger;
-				// 		return safeEval.call(self, expr);
-				// 	},
-				// 	set: function(val) {
-				// 		let paths = parseVars(expr);
-				// 		traversePath(self, paths[0], true, val);
-				// 	}
-				// });
-
-				// Attempt 3: works except for embed, loopnested, and events:
-				// Will probably cause too much redraw, as assigning a whole object will trigger updates of all its children.
-				// let paths = parseVars(expr);
-				// for (let path of paths) {
-				// 	let updateProp = function() {
-				// 		el[prop] = safeEval.call(self, expr);
-				//
-				// 	};
-				// 	watch(self, path, updateProp);
-				// 	watchedEls2.add(el,[self, path, updateProp]);
-				// }
-				//
-				// el[prop] = safeEval.call(self, expr);
-			}
 		}
 	},
 
@@ -746,7 +647,7 @@ var bindings = {
 			for (let path of parseVars(classExpr)) {
 				let [root, pathFromRoot] = getRootXElement(self, path);
 				watch(root, path, updateClass);
-				watchedEls2.add(el, [root, pathFromRoot, updateClass]);
+				elWatches.add(el, [root, pathFromRoot, updateClass]);
 			}
 
 			// Set initial values.
@@ -767,7 +668,7 @@ var bindings = {
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
 			watch(root, pathFromRoot, setText);
-			watchedEls2.add(el, [root, pathFromRoot, setText]);
+			elWatches.add(el, [root, pathFromRoot, setText]);
 		}
 
 		// Set initial value.
@@ -788,7 +689,7 @@ var bindings = {
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
 			watch(self, pathFromRoot, setHtml);
-			watchedEls2.add(el, [root,  pathFromRoot, setHtml]);
+			elWatches.add(el, [root,  pathFromRoot, setHtml]);
 		}
 
 		// Set initial value.
@@ -968,11 +869,98 @@ var bindings = {
 		for (let path of parseVars(foreach)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
 			watch(root, pathFromRoot, rebuildChildren);
-			watchedEls2.add(el, [root, pathFromRoot, rebuildChildren]);
+			elWatches.add(el, [root, pathFromRoot, rebuildChildren]);
 		}
 
 		// Set initial children
 		rebuildChildren();
+	},
+
+	/**
+	 * @param self {XElement} A parent XElement
+	 * @param code {string}
+	 * @param el {HTMLElement} An XElement that's a child of self, that has a data-prop attribute.
+	 * @param context {object<string, string>[]} */
+	prop: (self, code, el, context) => {
+
+		//#IFDEV
+		if (!context)
+			throw new XElementError();
+		if (!Array.isArray(context))
+			throw new XElementError();
+		if (!(el instanceof XElement))
+			throw new XElementError('The data-prop and x-prop attributes can only be used on XElements in ' + code);
+		//#ENDIF
+
+		// allow binding only on instantiation and not definition
+		if (self !== el) {
+			el.parent = self;
+
+			var obj = parseObj(code);
+			for (let prop in obj) {
+
+				//#IFDEV
+				if (prop === 'this')
+					throw new XElementError('Cannot use data-propx or x-prop to bind to "this" as a destination in ' + code);
+				//#ENDIF
+
+				// Add 'this' prefix to standaline variables.
+				let expr = obj[prop];
+				expr = trimThis(expr);
+				expr = replaceVars(expr, context);
+				expr = addThis(expr, context);
+
+
+				// Add the parent property to the context.
+				let expr2 = expr.replace(/this/g, 'parent'); // TODO: temporary lazy way until I write actual parsing
+				let newContext = {};
+				newContext[prop] = expr2;
+				context.unshift(newContext);
+
+				// Create a property so we can access the parent.
+				// This is often deleted and replaced by watch()
+				Object.defineProperty(el, prop, {
+					configurable: true,
+					get: function () {
+						return safeEval.call(self, expr);
+					}
+				});
+
+
+				// Attempt 2:  fails the props test because
+				// el.propGetter = function () {
+				// 	return safeEval.call(self, expr);
+				// };
+				//
+				// // This will be replaced if something subscribes to prop.
+				// Object.defineProperty(el, prop, {
+				// 	configurable: true,
+				// 	get: function () {
+				// 		if (window.init)
+				// 			debugger;
+				// 		return safeEval.call(self, expr);
+				// 	},
+				// 	set: function(val) {
+				// 		let paths = parseVars(expr);
+				// 		traversePath(self, paths[0], true, val);
+				// 	}
+				// });
+
+				// Attempt 3: works except for embed, loopnested, and events:
+				// Will probably cause too much redraw, as assigning a whole object will trigger updates of all its children.
+				// let paths = parseVars(expr);
+				// for (let path of paths) {
+				// 	let updateProp = function() {
+				// 		el[prop] = safeEval.call(self, expr);
+				//
+				// 	};
+				// 	watch(self, path, updateProp);
+				// 	elWatches.add(el,[self, path, updateProp]);
+				// }
+				//
+				// el[prop] = safeEval.call(self, expr);
+			}
+		}
 	},
 
 	// Requires Sortable.js
@@ -1104,7 +1092,7 @@ var bindings = {
 		for (let path of paths) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
 			watch(root, pathFromRoot, setVal);
-			watchedEls2.add(el, [root, pathFromRoot, setVal]);
+			elWatches.add(el, [root, pathFromRoot, setVal]);
 		}
 
 		// Set initial value.
@@ -1129,7 +1117,7 @@ var bindings = {
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
 			watch(root, pathFromRoot, setVisible);
-			watchedEls2.add(el, [root, pathFromRoot, setVisible]);
+			elWatches.add(el, [root, pathFromRoot, setVisible]);
 		}
 
 		// Set initial value.

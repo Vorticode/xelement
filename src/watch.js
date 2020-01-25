@@ -82,10 +82,10 @@ class WatchProperties {
 		// Traverse up the path looking for anything subscribed.
 		let parentPath = path.slice(0, -1);
 		while (parentPath.length) {
-			let cpath2 = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
+			let parentCPath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
-			if (cpath2 in this.subs_)
-				for (let callback of this.subs_[cpath2])
+			if (parentCPath in this.subs_)
+				for (let callback of this.subs_[parentCPath])
 					// "this.obj_" so it has the context of the original object.
 					// We set indirect to true, which data-loop's rebuildChildren() uses to know it doesn't need to do anything.
 					callback.apply(this.obj_, [...arguments, true])
@@ -283,41 +283,3 @@ var unwatch = (obj, path, callback) => {
 	}
 };
 
-/**
- * This function is unused.
- * Get a property from a watched object, bypassing the proxy.
- * If the returned value is changed, no callbacks will be called.
- * @param obj {object}
- * @param path {string[]}
- * @returns {*} */
-/*
-function watchlessGet(obj, path) {
-	let node = watched.get(obj).fields_;
-	for (let p of path) {
-		node = node[p];
-		if (node.$isProxy)
-			throw new XElementError();
-	}
-	return node;
-}
-*/
-/*
-var watchlessSet = (obj, path, val) => {
-	// TODO: Make this work instead:
-	// Or just use $removeProxy prop?
-	//traversePath(watched.get(obj).fields_, path, true, val);
-	//return val;
-	obj = obj.$removeProxy || obj;
-	var wp = watched.get(obj);
-
-
-	let node = wp ? wp.fields_ : obj;
-	let prop = path.slice(-1)[0];
-	for (let p of path.slice(0, -1)) {
-		node = node[p];
-		node = node.$removeProxy || node;
-	}
-
-	return node[prop] = val;
-};
-*/

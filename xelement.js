@@ -30,6 +30,7 @@ var eq = (item1, item2) => {
 	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
 };
 
+
 var WeakMultiMap = function() {
 
 	let self = this;
@@ -55,7 +56,7 @@ var WeakMultiMap = function() {
 		return self.items.get(key)[0];
 	};
 
-	self.getAll = function(key, ...values) {
+	self.getAll = function(key) {
 		return self.items.get(key) || [];
 	};
 
@@ -77,90 +78,90 @@ var WeakMultiMap = function() {
 
 
 // Multi key lookup version.  Might not need this added complexity.
-var WeakMultiMap2 = function() {
-
-	let self = this;
-	self.items = new WeakMap();
-
-	// TODO: write an internal function that combines common elements of these functions
-
-
-	/**
-	 * Add an item to the map.  If it already exists, add another at the same key.
-	 * @param key
-	 * @param values */
-	self.add = function(key, ...values) {
-		let itemSet = self.items.get(key);
-		if (!itemSet)
-			self.items.set(key, [values]);
-		else
-			itemSet.push(values);
-	};
-
-	/**
-	 * Retrieve an item from the set that matches key and all values specified.
-	 * @param key
-	 * @param values
-	 * @returns {*|undefined} */
-	self.get = function(key, ...values) {
-		let itemSet = self.items.get(key);
-		if (itemSet) {
-			for (let item of itemSet) {
-				if (arrayEq(item.slice(0, values.length), values, true))
-					return item;
-			}
-		}
-		return undefined;
-	};
-
-	self.getAll = function(key, ...values) {
-		let result = [];
-		let itemSet = self.items.get(key);
-		if (itemSet) {
-			for (let item of itemSet) {
-				let matches = true;
-				for (let i = 0; i < values.length; i++) {
-					if (!eq(item[i], values[i])) {
-						matches = false;
-						break;
-					}
-				}
-
-				// Return the first item in the array that matches.
-				if (matches)
-					result.push(item);
-			}
-		}
-
-
-		return result;
-	};
-
-	// remove first match
-	self.remove = function(key, ...values) {
-		let itemSet = self.items.get(key);
-		if (itemSet) {
-			for (let j=0; j<itemSet.length; j++) {
-				let item = itemSet[j];
-				let matches = true;
-				for (var i = 0; i < values.length; i++) {
-					if (!eq(item[i], values[i])) {
-						matches = false;
-						break;
-					}
-				}
-
-				// Return the first item in the array that matches.
-				if (matches) {
-					itemSet.splice(j, 1);
-					return item;
-				}
-			}
-		}
-		return undefined;
-	};
-
-};
+// var WeakMultiMap2 = function() {
+//
+// 	let self = this;
+// 	self.items = new WeakMap();
+//
+// 	// TODO: write an internal function that combines common elements of these functions
+//
+//
+// 	/**
+// 	 * Add an item to the map.  If it already exists, add another at the same key.
+// 	 * @param key
+// 	 * @param values */
+// 	self.add = function(key, ...values) {
+// 		let itemSet = self.items.get(key);
+// 		if (!itemSet)
+// 			self.items.set(key, [values]);
+// 		else
+// 			itemSet.push(values);
+// 	};
+//
+// 	/**
+// 	 * Retrieve an item from the set that matches key and all values specified.
+// 	 * @param key
+// 	 * @param values
+// 	 * @returns {*|undefined} */
+// 	self.get = function(key, ...values) {
+// 		let itemSet = self.items.get(key);
+// 		if (itemSet) {
+// 			for (let item of itemSet) {
+// 				if (arrayEq(item.slice(0, values.length), values, true))
+// 					return item;
+// 			}
+// 		}
+// 		return undefined;
+// 	};
+//
+// 	self.getAll = function(key, ...values) {
+// 		let result = [];
+// 		let itemSet = self.items.get(key);
+// 		if (itemSet) {
+// 			for (let item of itemSet) {
+// 				let matches = true;
+// 				for (let i = 0; i < values.length; i++) {
+// 					if (!eq(item[i], values[i])) {
+// 						matches = false;
+// 						break;
+// 					}
+// 				}
+//
+// 				// Return the first item in the array that matches.
+// 				if (matches)
+// 					result.push(item);
+// 			}
+// 		}
+//
+//
+// 		return result;
+// 	};
+//
+// 	// remove first match
+// 	self.remove = function(key, ...values) {
+// 		let itemSet = self.items.get(key);
+// 		if (itemSet) {
+// 			for (let j=0; j<itemSet.length; j++) {
+// 				let item = itemSet[j];
+// 				let matches = true;
+// 				for (var i = 0; i < values.length; i++) {
+// 					if (!eq(item[i], values[i])) {
+// 						matches = false;
+// 						break;
+// 					}
+// 				}
+//
+// 				// Return the first item in the array that matches.
+// 				if (matches) {
+// 					itemSet.splice(j, 1);
+// 					return item;
+// 				}
+// 			}
+// 		}
+// 		return undefined;
+// 	};
+//
+// };
 
 
 
@@ -226,7 +227,7 @@ var keysStartWith = (obj, prefix) => {
 /**
  * @param el {HTMLElement}
  * @returns {int} */
-var parentIndex = (el) => !el.parentNode ? 0 : Array.prototype.indexOf.call(el.parentNode.children, el);
+//var parentIndex = (el) => !el.parentNode ? 0 : Array.prototype.indexOf.call(el.parentNode.children, el);
 
 /**
  * @param obj {object}
@@ -1193,12 +1194,16 @@ var watchlessSet = (obj, path, val) => {
 /*
 Inherit from XElement to create custom HTML Components.
 
-TODO: next goals:
-Remove .context_ assignments to loop el and child in bindings.loop()
-Document all properties that bindings.loop() sets on elements.
+
+TODO: major bugfixes
+LB Add a bunch of functions/rungs/etc then remove them.  Typing characters still has small redraw leaks.
+Changing sort order breaks items.
+Write a better parser for expr.replace(/this/g, 'parent');
 parseVars("this.passthrough(x)") doesn't find x.
 parseVars("item + passthrough('')") finds "passthrough" as a variable.
+Document all properties that bindings.loop() sets on elements.
 
+TODO: next goals:
 {{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
 allow comments in loops.
@@ -1267,29 +1272,15 @@ lazy modifier for input binding, to only trigger update after change.
 /**
  * A map between elements and the callback functions subscribed to them.
  * Each value is an array of objects with path and callback function.
- * @type {WeakMap<HTMLElement, {path_:string, callback_:function}[]>} */
+ * @type {WeakMultiMap<HTMLElement, {path_:string, callback_:function}[]>} */
 var watchedEls2 = new WeakMultiMap();
 
 
 /**
  * A map between elements and the events assigned to them. *
- * @type {WeakMap<HTMLElement, *[]>} */
-var elEvents = new WeakMap();
+ * @type {WeakMultiMap<HTMLElement, *[]>} */
+var elEvents2 = new WeakMultiMap();
 
-
-/**
- *
- * @param el {HTMLElement}
- * @param eventName {string}
- * @param callback {function}
- * @param originalEventAttrib {string}
- * @param root */
-var addElEvent = (el, eventName, callback, originalEventAttrib, root) => {
-	let ee = elEvents.get(el);
-	if (!ee)
-		elEvents.set(el, ee = []);
-	ee.push([eventName, callback, originalEventAttrib, root]);
-};
 
 
 /**
@@ -1412,8 +1403,6 @@ var bindElProps = (xelement, el, context) => {
 
 
 
-
-
 		for (let attrName in el.definitionAttributes) {
 			let val = el.definitionAttributes[attrName];
 			let name = parseXAttrib(attrName);
@@ -1462,7 +1451,6 @@ var bindElProps = (xelement, el, context) => {
 
 		for (let child of next.children)
 			bindElProps(xelement, child, context);
-
 	}
 };
 
@@ -1501,7 +1489,10 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 					eval(code);
 				}.bind(xelement);
 				el.addEventListener(eventName, callback);
-				addElEvent(el, eventName, callback, originalEventAttrib, xelement);
+
+				// Save everything we'll need to restore it later.
+				elEvents2.add(el, [eventName, callback, originalEventAttrib, xelement]);
+				//addElEvent(el, eventName, callback, originalEventAttrib, xelement);
 
 				// Remove the original version so it doesn't also fire.
 				el.removeAttribute('on' + eventName);
@@ -1527,18 +1518,18 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 
 /**
  * Unbind properties and events from the element.
- * @param self {XElement|HTMLElement}
+ * @param xelement {XElement|HTMLElement}
  * @param el {HTMLElement=} Remove all bindings within root and children. Defaults to self. */
-var unbindEl = (self, el) => {
-	el = el || self;
+var unbindEl = (xelement, el) => {
+	el = el || xelement;
 
 	// Only go into shadowroot if coming from the top level.
 	// This way we don't traverse into the shadowroots of other XElements.
-	var next = self===el && el.shadowRoot ? el.shadowRoot : el;
+	var next = xelement===el && el.shadowRoot ? el.shadowRoot : el;
 
 	// Recursively unbind children.
 	for (let child of next.children)
-		unbindEl(self, child);
+		unbindEl(xelement, child);
 
 	var parent;
 
@@ -1563,13 +1554,13 @@ var unbindEl = (self, el) => {
 		}
 
 	// Unbind events
-	let ee = elEvents.get(el) || [];
+	let ee = elEvents2.getAll(el) || [];
 	for (let item of ee) { //  item is [event:string, callback:function, originalCode:string, root:XElement]
 
 		// Only unbind if it was bound from the same root.
 		// This is needed to allow onclick="" attributes on both the definition and instantiation of an element,
 		// and having their "this" bound to themselves or the parent element, respectively.
-		if (item[3] === self) {
+		if (item[3] === xelement) {
 			el.removeEventListener(item[0], item[1]);
 			el.setAttribute('on' + item[0], item[2]);
 		}
@@ -1764,6 +1755,7 @@ XElement.enqueue = function(callback) {
 };
 */
 
+// Untested.  It might not be possible to use this without screwing things up.
 XElement.batch = function(callback) {
 	return function() {
 		if (queueDepth)
@@ -1771,7 +1763,7 @@ XElement.batch = function(callback) {
 		else {
 			queueDepth++;
 
-			let result = callback(arguments[0], arguments[1], arguments[2], arguments[3]);
+			let result = callback(...arguments);
 
 			queueDepth--;
 			if (queueDepth === 0) {
@@ -1857,31 +1849,18 @@ var bindings = {
 				expr = addThis(expr, context);
 
 				// Replace 'this' references with 'parent'
-				// let paths = parseVars(expr, true, true);
-				// for (path of paths) {
-				// 	if (path[0] === 'this')
-				// 		path[0] = 'parent';
-				// }
-
-				// TODO: temporary until I write actual parsing
-				expr = expr.replace(/this/g, 'parent');
+				// TODO: temporary lazy way until I write actual parsing
+				let expr2 = expr.replace(/this/g, 'parent');
 
 				let newContext = {};
-				newContext[prop] = expr;
+				newContext[prop] = expr2;
 
 				context.unshift(newContext);
-
-				// Actually set the value in case we query it directly:
-				// for (let path of parseVars(expr)) {
-				// 	watch(el, path, function() {
-				// 		el[prop] = safeEval.call(el, addThis(expr));
-				// 	});
-				// }
 
 				Object.defineProperty(el, prop, {
 					configurable: true,
 					get: function () {
-						return safeEval.call(el, addThis(expr));
+						return safeEval.call(self, expr);
 					}
 				});
 
