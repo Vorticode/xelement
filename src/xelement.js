@@ -186,14 +186,6 @@ var bindElProps = (xelement, el, context) => {
 	// Handle data-prop and
 	if (el instanceof XElement) {
 
-		// Don't inherit within-element context from parent.
-		el.context2 = (xelement.context2 || []).slice();
-
-		let prop = getXAttrib(el, 'prop');
-		if (prop)
-			bindings.prop(xelement, prop, el, context); // modifies context
-
-		//debugger;
 
 		for (let attrName in el.instantiationAttributes) {
 			let val = el.instantiationAttributes[attrName];
@@ -208,6 +200,26 @@ var bindElProps = (xelement, el, context) => {
 				//#ENDIF
 			}
 		}
+
+
+		// Don't inherit within-element context from parent.
+		el.context2 = (xelement.context2 || []).slice();
+
+		let prop = getXAttrib(el, 'prop');
+		if (prop) {
+
+			// Here we still need to use the inner context of the parent XElement because
+			// prop may have variables within it that may need to be resolved.
+			bindings.prop(xelement, prop, el, context); // adds a new context to the beginning of the array.
+			//bindings.prop(xelement, prop, el, el.context2);
+
+			// Then we add the new context item added by prop();
+			context = [context[0], ...el.context2];
+		}
+		else
+			context = el.context2.slice();
+
+
 
 
 
@@ -227,7 +239,6 @@ var bindElProps = (xelement, el, context) => {
 
 
 		xelement = el;
-		//xelement.context2 = context;
 	}
 
 
