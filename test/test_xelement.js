@@ -396,9 +396,12 @@ XElement: {
 			assertEq(e4.b.getAttribute('class'), null);
 
 			e4.b.titleText = 'hello';
-			e4.b.isBig = true;
-
 			assertEq(e4.b.getAttribute('title'), 'hello');
+
+			e4.b.isBig = true;
+			assertEq(e4.b.getAttribute('class'), null);
+
+			e4.isBig = true;
 			assertEq(e4.b.getAttribute('class'), 'big');
 		},
 
@@ -406,10 +409,10 @@ XElement: {
 		// Embed with conflicting binding to both parent and self.
 		embed3: function () {
 			class B_E3 extends XElement {}
-			B_E3.html = '<div data-classes="big1: isBig">E1</div>';
+			B_E3.html = '<div data-classes="bigB: isBig">E1</div>';
 
 			class A_E3 extends XElement {}
-			A_E3.html = '<div><x-b_e3 id="b" data-classes="big2: isBig">E1</x-b_e3></div>';
+			A_E3.html = '<div><x-b_e3 id="b" data-classes="bigA: isBig">E1</x-b_e3></div>';
 
 			// The data-classes attribute on B_E3's instantiation overrides the same attribute on B_E3's definition.
 			// But we subscribe to isBig on both A_E3 and B_E3.  Setting either updates the class.
@@ -419,19 +422,21 @@ XElement: {
 			assertEq(a.b.getAttribute('class'), null);
 
 			a.isBig = true;
-			assertEq(a.b.getAttribute('class'), 'big2');
+			assertEq(a.b.getAttribute('class'), 'bigA');
+			a.b.isBig = true;
+			assertEq(a.b.getAttribute('class'), 'bigA bigB');
+
+
+			a.isBig = false;
+			assertEq(a.b.getAttribute('class'), 'bigB');
 
 			a.b.isBig = false;
 			assertEq(a.b.getAttribute('class'), null);
-
-			a.b.isBig = true;
-			assertEq(a.b.getAttribute('class'), 'big2');
 		},
 
 		// Slot
 		slot: function () {
-			class S1 extends XElement {
-			}
+			class S1 extends XElement {}
 
 			S1.html = '<div><b><slot>Fallback</slot></b></div>';
 

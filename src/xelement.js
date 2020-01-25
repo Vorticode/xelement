@@ -157,6 +157,7 @@ var getLoopCode_ = (el) => el.getAttribute && (el.getAttribute('x-loop') || el.g
 
 var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) || el.getAttribute('data-' + name));
 
+var parseXAttrib = (name) => name.startsWith('x-') ? name.slice(2) : name.startsWith('data-') ? name.slice(5) : null;
 
 /**
  * Recursively process all the data- attributes in el and its descendants.
@@ -181,6 +182,8 @@ var bindElProps = (xelement, el, context) => {
 	context = context || [];
 	context = context.slice();
 
+
+	// Handle data-prop and
 	if (el instanceof XElement) {
 
 		// Don't inherit within-element context from parent.
@@ -190,22 +193,48 @@ var bindElProps = (xelement, el, context) => {
 		if (prop)
 			bindings.prop(xelement, prop, el, context); // modifies context
 
+		//debugger;
+
+		for (let attrName in el.instantiationAttributes) {
+			let val = el.instantiationAttributes[attrName];
+			let name = parseXAttrib(attrName);
+			if (name && name !== 'prop') { // prop handled in init so it happens first.
+				if (bindings[name]) // attr.value is code.
+					bindings[name](xelement, val, el, context);
+
+				//#IFDEV
+				else
+					throw new XElementError(attrName);
+				//#ENDIF
+			}
+		}
+
+
+
+		for (let attrName in el.definitionAttributes) {
+			let val = el.definitionAttributes[attrName];
+			let name = parseXAttrib(attrName);
+			if (name && name !== 'prop') { // prop handled in init so it happens first.
+				if (bindings[name]) // attr.value is code.
+					bindings[name](el, val, el, context);
+
+				//#IFDEV
+				else
+					throw new XElementError(attrName);
+				//#ENDIF
+			}
+		}
+
 
 		xelement = el;
 		//xelement.context2 = context;
-
-
 	}
 
-	// Seach attributes for data- bindings.
-	if (el.attributes) { // shadow root has no attributes.
-		for (let attr of el.attributes) {
-			let attrName = null;
-			if (attr.name.startsWith('x-'))
-				attrName = attr.name.slice(2); // remove data- prefix.
-			else if (attr.name.startsWith('data-'))
-				attrName = attr.name.slice(5); // remove data- prefix.
 
+	// Seach attributes for data- bindings.
+	else if (el.attributes) { // shadow root has no attributes.
+		for (let attr of el.attributes) {
+			let attrName = parseXAttrib(attr.name);
 			if (attrName && attrName !== 'prop') { // prop handled in init so it happens first.
 				if (bindings[attrName]) // attr.value is code.
 					bindings[attrName](xelement, attr.value, el, context);
@@ -385,10 +414,16 @@ var initHtml = (self) => {
 		var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
 		disableBind--;
 
+
+		// Save definition attributes
+		self.definitionAttributes = {};
+		for (let attr of div.attributes)
+			self.definitionAttributes[attr.name] = attr.value;
+
 		// 2. Remove and save attributes from instantiation.
-		var attributes = {};
+		self.instantiationAttributes = {};
 		for (let attr of self.attributes) // From instantiation.
-			attributes[attr.name] = attr.value;
+			self.instantiationAttributes[attr.name] = attr.value;
 
 		// 3.  Add attributes from definition (Item.html='<div attr="value"')
 		for (let attr of div.attributes) { // From definition
@@ -400,8 +435,8 @@ var initHtml = (self) => {
 		bindElEvents(self, self, null, false, div);
 
 		// 5.  Add attributes from instantiation.
-		for (let name in attributes) // From instantiation
-			setAttribute(self, name, attributes[name]);
+		for (let name in self.instantiationAttributes) // From instantiation
+			setAttribute(self, name, self.instantiationAttributes[name]);
 
 		// 6. Create Shadow DOM
 		self.attachShadow({mode: 'open'});
