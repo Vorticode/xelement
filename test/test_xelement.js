@@ -592,9 +592,7 @@ XElement: {
 		classes: function () {
 
 			(function () {
-				class C1 extends XElement {
-				}
-
+				class C1 extends XElement {}
 				C1.html = `
 					<div>
 						<span id="span" data-classes="a: firstClass; b: object.secondClass"></span>
@@ -620,15 +618,13 @@ XElement: {
 
 			// Test with existing class, evaluated code.
 			(function () {
-				class C1 extends XElement {
-				}
-
-				C1.html = `
+				class C2 extends XElement {}
+				C2.html = `
 					<div>
 						<span id="span" data-classes="a: this.num1 + this.num2 === 12" class="b"></span>
 					</div>`;
 
-				var c = new C1();
+				var c = new C2();
 				assertEq(c.span.getAttribute('class'), 'b');
 
 				c.num1 = c.num2 = 6;
@@ -643,9 +639,7 @@ XElement: {
 	loop: function () {
 		// Simple loop
 		(function () {
-			class BL1 extends XElement {
-			}
-
+			class BL1 extends XElement {}
 			BL1.html =
 				'<div data-loop="items:item">' +
 				'<span data-text="item"></span>' +
@@ -671,9 +665,7 @@ XElement: {
 
 		// Loop with sub-properties, whitespace around nodes
 		(function () {
-			class BL2 extends XElement {
-			}
-
+			class BL2 extends XElement {}
 			BL2.html =
 				'<div data-loop="items:item">' +
 				'   <span data-text="item.a"></span>    ' +
@@ -686,9 +678,7 @@ XElement: {
 
 		// Loop with input val binding to children.
 		(function () {
-			class BL3 extends XElement {
-			}
-
+			class BL3 extends XElement {}
 			BL3.html =
 				'<div>' +
 				'<div data-loop="items:item" id="loop">' +
@@ -707,9 +697,7 @@ XElement: {
 
 		// Loop on nested XElement with val binding.
 		(function () {
-			class BL4 extends XElement {
-			}
-
+			class BL4 extends XElement {}
 			BL4.html =
 				'<div>' +
 				'<div data-loop="items:item" id="loop">' +
@@ -717,9 +705,7 @@ XElement: {
 				'</div>' +
 				'</div>';
 
-			class BL5 extends XElement {
-			}
-
+			class BL5 extends XElement {}
 			BL5.html = `
 				<div>
 					<x-bl4 id="bl4"></x-bl4>
@@ -738,9 +724,7 @@ XElement: {
 
 		// Make sure items within loop are unbound and unwatched.
 		(function () {
-			class BL5 extends XElement {
-			}
-
+			class BL5 extends XElement {}
 			BL5.html = `
 				<div>
 					<div id="loop" data-loop="items: item">
@@ -765,9 +749,7 @@ XElement: {
 
 		// Test functions that modify more than one array element.
 		(function () {
-			class BL6 extends XElement {
-			}
-
+			class BL6 extends XElement {}
 			BL6.html = `
 				<div data-loop="items: item">
 					<input data-val="item.name">					
@@ -823,9 +805,7 @@ XElement: {
 
 		// Reassign whole loop variable multiple times to make sure we don't lose the subscription.
 		(function () {
-			class BL7 extends XElement {
-			}
-
+			class BL7 extends XElement {}
 			BL7.html = `
 			<div>
 				<div id="loop" data-loop="items: item">
@@ -862,9 +842,7 @@ XElement: {
 
 		// bound data is not a direct child of loop (this used to fail due to a bug in getContext()).
 		(function () {
-			class BL8 extends XElement {
-			}
-
+			class BL8 extends XElement {}
 			BL8.html = `
 				<div data-loop="items: item">
 					<div>
@@ -881,9 +859,7 @@ XElement: {
 
 		// Loop with index.
 		(function () {
-			class BL9 extends XElement {
-			}
-
+			class BL9 extends XElement {}
 			BL9.html = `
 				<div data-loop="items: i, item">
 					<span data-text="i"></span>
@@ -897,9 +873,7 @@ XElement: {
 
 		// Make sure loop items property unsubscribe as they're removed.  This used to fail.
 		(function () {
-			class BL10 extends XElement {
-			}
-
+			class BL10 extends XElement {}
 			BL10.html =
 				'<div data-loop="items:item">' +
 				'<span data-text="item.name"></span>' +
@@ -925,9 +899,7 @@ XElement: {
 		// Loop over var that doesn't initially exist.
 		(function () {
 
-			class BL11 extends XElement {
-			}
-
+			class BL11 extends XElement {}
 			BL11.html = `				
 				<div data-loop="parts.wheels: wheel">
 				    <span></span>
@@ -939,17 +911,13 @@ XElement: {
 
 		// Async
 		(function () {
-			class Wheel12 extends XElement {
-			}
-
+			class Wheel12 extends XElement {}
 			Wheel12.html = `				
 			<div>
 			    <b>Wheel</b>
 			</div>`;
 
-			class Car12 extends XElement {
-			}
-
+			class Car12 extends XElement {}
 			Car12.html = `				
 			<div data-loop="wheels: wheel">
 			    <x-wheel12 data-attribs="title: wheel"></x-wheel12>
@@ -968,9 +936,7 @@ XElement: {
 
 		// Splice to rearrange loop with identical items
 		(function () {
-			class BL13 extends XElement {
-			}
-
+			class BL13 extends XElement {}
 			BL13.html = `				
 				<div data-loop="wheels: wheel">
 				    <span data-text="wheel"></span>
@@ -990,9 +956,7 @@ XElement: {
 
 		// Two loops over same array.
 		(function () {
-			class BL14 extends XElement {
-			}
-
+			class BL14 extends XElement {}
 			BL14.html = `
 				<div>
 					<div id="loop1" data-loop="items:item">
@@ -1032,9 +996,7 @@ XElement: {
 		// Nested loop over two separate properties
 		loopNested1: function () {
 
-			class BL30 extends XElement {
-			}
-
+			class BL30 extends XElement {}
 			BL30.html = `
 				<div data-loop="numbers:number">
 					<div data-loop="letters:letter">
@@ -1080,9 +1042,7 @@ XElement: {
 
 		// Nested loop over sub properties.
 		loopNested2: function () {
-			class BL31 extends XElement {
-			}
-
+			class BL31 extends XElement {}
 			BL31.html =
 				'<div data-loop="families:family">' +
 				'<div data-loop="family.species:species">' +
@@ -1116,9 +1076,7 @@ XElement: {
 
 		// Nested loop with index.
 		loopNested3: function () {
-			class BL32 extends XElement {
-			}
-
+			class BL32 extends XElement {}
 			BL32.html = `
 				<div data-loop="items: i, item">
 					<p data-loop="items: j, item2">
@@ -1135,9 +1093,7 @@ XElement: {
 
 		// Nested loop with duplicate loopVar.
 		loopNested4: function () {
-			class BL33 extends XElement {
-			}
-
+			class BL33 extends XElement {}
 			BL33.html = `
 				<div data-loop="items: i, item">
 					<div data-loop="items: i2, item">
@@ -1159,9 +1115,7 @@ XElement: {
 
 		// Nested loop with duplicate index.
 		loopNested5: function () {
-			class BL34 extends XElement {
-			}
-
+			class BL34 extends XElement {}
 			BL34.html = `
 				<div data-loop="items: i, item">
 					<div data-loop="items: i, item2">
@@ -1233,9 +1187,7 @@ XElement: {
 
 		// Make sure events can access the loop context.
 		(function () {
-			class EV2 extends XElement {
-			}
-
+			class EV2 extends XElement {}
 			EV2.html = `
 				<div data-loop="items: i, item">
 					<span onclick="this.result = i + item"></span>
@@ -1258,7 +1210,6 @@ XElement: {
 					this.clicked = true;
 				}
 			}
-
 			EV3Inner.html = `<div onclick="this.inner()"></div>`;
 
 			class EV3Outer extends XElement {
@@ -1299,9 +1250,7 @@ XElement: {
 		// Test events in loop.
 		// onclick="this.result = i + car + ':' + j + wheel"
 		(function () {
-			class EV5 extends XElement {
-			}
-
+			class EV5 extends XElement {}
 			EV5.html = `
 				<div data-loop="letters: letter">
 					<span onclick="this.result = letter"></span>					
@@ -1319,9 +1268,7 @@ XElement: {
 		// Test events in double loop (used to fail)
 		// onclick="this.result = i + car + ':' + j + wheel"
 		(function () {
-			class EV6 extends XElement {
-			}
-
+			class EV6 extends XElement {}
 			EV6.html = `
 				<div data-loop="numbers: n, number">
 					<div data-loop="letters: l, letter">

@@ -11,13 +11,14 @@ var removeProxies = (obj, visited) => {
 	if (obj === null || obj === undefined)
 		return obj;
 
-	if (obj.$isProxy)
+	if (obj.$isProxy) {
 		obj = obj.$removeProxy;
 
-	//#IFDEV
-	if (obj.$isProxy) // should never be more than 1 level deep of proxies.
-		throw new XElementError("Double wrapped proxy found.");
-	//#ENDIF
+		//#IFDEV
+		if (obj.$isProxy) // If still a proxy.  There should never be more than 1 level deep of proxies.
+			throw new XElementError("Double wrapped proxy found.");
+		//#ENDIF
+	}
 
 	if (typeof obj === 'object') {
 		if (!visited)
@@ -31,7 +32,7 @@ var removeProxies = (obj, visited) => {
 			let t = obj[name];
 			let v = removeProxies(t, visited);
 
-			// If a proxy was removed from the property.
+			// If a proxy was removed from something created with Object.defineOwnProperty()
 			if (v !== t) {
 				if (Object.getOwnPropertyDescriptor(obj, name).writable) // we never set writable=true when we defineProperty.
 					obj[name] = v;
@@ -246,7 +247,7 @@ var watched = new WeakMap();
  * @param path {string|string[]}
  * @param callback {function(action:string, path:string[], value:string?)} */
 var watch = (obj, path, callback) => {
-	obj = obj.$removeProxy || obj;
+	obj = removeProxy(obj);
 
 	// Keep only one WatchProperties per watched object.
 	var wp = watched.get(obj);
@@ -262,7 +263,7 @@ var watch = (obj, path, callback) => {
  * @param path {string|string[]}
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
-	obj = obj.$removeProxy || obj;
+	obj = removeProxy(obj);
 	var wp = watched.get(obj);
 
 	if (wp) {

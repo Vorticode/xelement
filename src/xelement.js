@@ -342,7 +342,7 @@ var unbindEl = (xelement, el) => {
 					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 					delete el.loopHtml_;
 					delete el.items_;
-					delete el.loopChildren;
+					//delete el.loopChildren;
 				}
 
 				// New
@@ -700,12 +700,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	loop: (self, code, el, context) => {
 
-		// Make sure loop isn't being bound to a parent element in addition to the child XElement.
-		// if (el instanceof XElement && el !== self)
-		// 	return;
-
 		context = context || [];
-		//context = context.slice(); // copy, because we add to it as we descend.
 
 		// Parse code into foreach parts
 		var [foreach, loopVar, indexVar] = parseLoop(code);
@@ -734,7 +729,7 @@ var bindings = {
 				//#ENDIF
 
 				root.loopHtml_ = root.innerHTML.trim();
-				root.loopChildren = Array.from(root.children);
+				//root.loopChildren = Array.from(root.children);
 
 				// Remove children before calling rebuildChildren()
 				// That way we don't unbind elements that were never bound.
@@ -747,10 +742,8 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
-			var newItems = (safeEval.call(self, foreach) || []);
-			newItems = newItems.$removeProxy || newItems;
-			var oldItems = (root.items_ || []);
-			oldItems = oldItems.$removeProxy || oldItems;
+			var newItems = removeProxy(safeEval.call(self, foreach) || []);
+			var oldItems = removeProxy(root.items_ || []);
 
 			// Do nothing if the array hasn't changed.
 			if (arrayEq(oldItems, newItems, true))
@@ -816,9 +809,6 @@ var bindings = {
 				}
 			}
 
-
-
-		
 
 			// Rebind events on any elements that had their index change.
 			for (let i=0; i< root.children.length; i++) {
