@@ -241,6 +241,44 @@ Watch: {
 		assertEq(path[1], '0');
 	},
 
+
+	// Same as above, but make sure references to sub-array are updated.
+	arrayShiftRecurse: function () {
+		var o = {
+			items:[
+				{
+					parts: [
+						{name: 'A'},
+						{name: 'B'}
+					]
+				},
+				{
+					parts: [
+						{name: 'C'},
+						{name: 'D'}
+					]
+				}
+			]
+		};
+		var wp = watchProxy(o, ()=>{});
+
+		// Get reference to item before splice.
+		let b = wp.items[1].parts[0];
+
+		// remove first item.
+		wp.items.splice(0, 1);
+
+
+		// Make sure path of b has been updated.
+		let pr = proxyRoots.get(o);
+		let po = proxyObjects.get(b.$removeProxy);
+		//debugger;
+		let path = po.getPath_(pr);
+		console.log(path);
+
+		assert(arrayEq(path, ['items', '0', 'parts', '0']));
+	},
+
 	unsubscribe: function() {
 
 		var o = { a: [0, 1] };
@@ -586,9 +624,7 @@ XElement: {
 			// Regular, non-data attributes
 			// Instantiation overrides definition attribute.
 			(function () {
-				class AT extends XElement {
-				}
-
+				class AT extends XElement {}
 				AT.html = '<div title="val1"></div>';
 
 				// Make sure attribute is set from html.
@@ -604,9 +640,7 @@ XElement: {
 
 			// Regular attribute
 			(function () {
-				class M1 extends XElement {
-				}
-
+				class M1 extends XElement {}
 				M1.html = '<div><span id="span" data-attribs="title: titleProp">Text</span></div>';
 				var m = new M1();
 
@@ -617,9 +651,7 @@ XElement: {
 
 			// Bind to sub-property
 			(function () {
-				class M2 extends XElement {
-				}
-
+				class M2 extends XElement {}
 				M2.html = '<div><span data-attribs="title: span[0].titleProp">Text</span></div>';
 				var m = new M2();
 
