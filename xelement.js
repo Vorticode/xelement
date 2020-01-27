@@ -13,6 +13,7 @@ class XElementError extends Error {
  * Return true if the two arrays have the same items in the same order.
  * @param array1 {*[]}
  * @param array2 {*[]}
+ * @param deep {boolean=false}
  * @returns {boolean} */
 var arrayEq = (array1, array2, deep) => {
 	if (array1.length !== array2.length)
@@ -313,10 +314,11 @@ var safeEvalCache = new Cache();
  * Evaluate expr, but allow undefined variables.
  * @param expr {string}
  * @param args {object}
+ * @param isStatements {boolean=false}
  * @returns {*} */
-function safeEval(expr, args, statements) {
+function safeEval(expr, args, isStatements) {
 
-	let code = statements ? expr : 'return (' + expr + ')';
+	let code = isStatements ? expr : 'return (' + expr + ')';
 	if (args && Object.keys(args).length) {
 
 		// Convert args object to var a=arguments[0][name] assignments
@@ -326,8 +328,6 @@ function safeEval(expr, args, statements) {
 
 		code = 'var ' + argAssignments.join(',') + ';' + code;
 	}
-
-	console.log(code);
 
 	try {
 		//return Function('return (' + expr + ')').call(this);
@@ -339,7 +339,7 @@ function safeEval(expr, args, statements) {
 	catch (e) { // Don't fail for null values.
 		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
 			//#IFDEV
-				e.message += ' in expression "' + code + '"';
+			e.message += ' in expression "' + code + '"';
 			//#ENDIF
 			throw e;
 		}
@@ -452,17 +452,6 @@ var parseVars = (code, includeThis, allowCall) => {
 	}
 
 	return result;
-};
-
-var replaceVarsOld = (code, replacements) => {
-	var paths = parseVars(code, 1);
-	for (let path of paths.reverse()) // We loop in reverse so the replacement indices don't get messed up.
-		for (let oldVar in replacements) {
-			if (path.length >= 1 && path[0] === oldVar)
-				// replacements[oldVar] is newVar.
-				code = code.slice(0, path.index_[0].start) + replacements[oldVar] + code.slice(path.index_[0].start + oldVar.length);
-		}
-	return code;
 };
 
 // TODO: actual parsing.
@@ -953,7 +942,8 @@ class WatchProperties {
 	 * and all children of path if their own value changed.
 	 * @param action {string}
 	 * @param path {string[]}
-	 * @param value {*=} */
+	 * @param value {*=}
+	 * @param oldVal {*=} */
 	notify_(action, path, value, oldVal) {
 
 		let cpath = csv(path);
@@ -1095,6 +1085,10 @@ class WatchProperties {
 			// Remove the callback from the subscriptions
 			if (callback) {
 				let callbackIndex = this.subs_[cpath].indexOf(callback);
+				//#IFDEV
+				if (callbackIndex === -1)
+					throw new XElementError('Bad index');
+				//#ENDIF
 				this.subs_[cpath].splice(callbackIndex, 1); // splice() modifies array in-place
 			}
 
@@ -1456,6 +1450,7 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 					// Try this again after we redo event binding in initHtml().
 					//safeEval.call(xelement, code, {event: event}, true);
 				}.bind(xelement);
+
 				el.addEventListener(eventName, callback);
 
 				// Save everything we'll need to restore it later.
@@ -1528,7 +1523,8 @@ var unbindEl = (xelement, el) => {
 		// and having their "this" bound to themselves or the parent element, respectively.
 		if (item[3] === xelement) {
 			el.removeEventListener(item[0], item[1]);
-			el.setAttribute('on' + item[0], item[2]);
+			if (item[2])
+				el.setAttribute('on' + item[0], item[2]);
 		}
 	}
 };
@@ -1894,7 +1890,7 @@ var bindings = {
 						'This restriction may be removed in the future.');
 				//#ENDIF
 
-				root.loopHtml_ = root.innerHTML.trim();
+				root.loopHtml_ = root.children[0].outerHTML.trim();
 				//root.loopChildren = Array.from(root.children);
 
 				// Remove children before calling rebuildChildren()
@@ -2085,8 +2081,6 @@ var bindings = {
 				// Object.defineProperty(el, prop, {
 				// 	configurable: true,
 				// 	get: function () {
-				// 		if (window.init)
-				// 			debugger;
 				// 		return safeEval.call(self, expr);
 				// 	},
 				// 	set: function(val) {
@@ -2115,14 +2109,14 @@ var bindings = {
 	// Requires Sortable.js
 	// does not support dynamic (watch) binding.
 	sortable: (self, code, el, context) => {
-		var result = {};
+		var options = {};
 
 		// Build arguments to send to Sortable.
 		if (code) { // we also allow a bare sortable attribute with no value.
 			var obj = parseObj(code);
 			for (let name in obj) {
 				let expr = addThis(replaceVars(obj[name], context), context);
-				result[name] = safeEval.call(self, expr);
+				options[name] = safeEval.call(self, expr);
 			}
 		}
 
@@ -2142,14 +2136,16 @@ var bindings = {
 			let path = parseVars(foreach)[0];
 
 			// Get values passed in by the user.
-			var onAdd = result.onAdd;
-			var onUpdate = result.onUpdate;
+			var onAdd = options.onAdd;
+			var onUpdate = options.onUpdate;
 
 			// Update the arrays after we drag items.
 			var moveItems = function(event) {
 				let oldSelf = getXParent(event.from);
 				let newSelf = getXParent(event.to);
 
+
+				// Use slice() to get copies of the modified arrays.
 				let oldContext = event.from.context_;
 				let oldForeach = parseLoop(getLoopCode_(event.from))[0];
 				oldForeach = addThis(replaceVars(oldForeach, oldContext), oldContext);
@@ -2169,29 +2165,28 @@ var bindings = {
 				// Set the newArray without triggering notifications.
 				// Because a notification will cause data-loop's rebuildChildren() to be called
 				// And Sortable has already rearranged the elements.
-				//debugger;
 				let array = traversePath(newSelf, path, true, newArray, true);
-				rebindLoopChildren(newSelf, event.to, [context], oldSelf); // But we still need to unbind and rebind them in their currnet positions.
+				rebindLoopChildren(newSelf, event.to, context, oldSelf); // But we still need to unbind and rebind them in their currnet positions.
 				array.$trigger(); // This won't trigger rebuilding our own children because their order already matches.
 
 
 				// If origin was a different loop:
 				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
 					let array = traversePath(oldSelf, path, true, oldArray, true);
-					rebindLoopChildren(oldSelf, event.from, [context]);
+					rebindLoopChildren(oldSelf, event.from, context);
 					array.$trigger();
 				}
 
 
 			};
 
-			result.onAdd = function(event) {
+			options.onAdd = function(event) {
 				moveItems(event);
 				if (onAdd)
 					onAdd.call(self, event);
 			};
 
-			result.onUpdate = function(event) {
+			options.onUpdate = function(event) {
 				moveItems(event);
 				if (onUpdate)
 					onUpdate.call(self, event);
@@ -2199,7 +2194,7 @@ var bindings = {
 		}
 
 
-		Sortable.create(el, result);
+		Sortable.create(el, options);
 	},
 
 	/**
@@ -2213,8 +2208,8 @@ var bindings = {
 
 		// Update object property when input value changes, only if a simple var.
 		var paths = parseVars(code);
-		if (paths.length === 1 && isStandaloneVar(code))
-			el.addEventListener('input', () => {
+		if (paths.length === 1 && isStandaloneVar(code)) {
+			let onInput = () => {
 				let value;
 				if (el.type === 'checkbox')
 					value = el.checked;
@@ -2223,7 +2218,15 @@ var bindings = {
 
 				// We don't use watchlessSet in case other things are subscribed.
 				traversePath(self, paths[0], true, value);
-			});
+			};
+
+			el.addEventListener('input', onInput);
+
+			// Add so this binding is removed when the element is unbound (but still exists),
+			// such as when it moves to a different spot in a loop or from x-sortable.
+			// Covered by test simpleBinding.val.unbind()
+			elEvents.add(el, ['input', onInput, null, self]);
+		}
 
 		let setVal = /*XElement.batch*/(/*action, path, value*/) => {
 			let result = safeEval.call(self, code);
@@ -2290,7 +2293,7 @@ var rebindLoopChildren = function(self, el, context, oldSelf) {
 	let [foreach, loopVar, indexVar] = parseLoop(getLoopCode_(el));
 	foreach = addThis(replaceVars(foreach, context), context);
 
-	let localContext = {};
+	let localContext = {...context[0]};
 	for (let i=0; i<el.children.length; i++) {
 		let child = el.children[i];
 
@@ -2300,7 +2303,8 @@ var rebindLoopChildren = function(self, el, context, oldSelf) {
 		if (indexVar !== undefined)
 			localContext[indexVar] = i;
 
-		bindEl(self, child, [localContext, ...context]);
+
+		bindEl(self, child, [localContext, ...context.slice(1)]);
 	}
 
 	el.items_ = safeEval.call(self, foreach).slice();

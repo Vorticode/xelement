@@ -213,6 +213,10 @@ class WatchProperties {
 			// Remove the callback from the subscriptions
 			if (callback) {
 				let callbackIndex = this.subs_[cpath].indexOf(callback);
+				//#IFDEV
+				if (callbackIndex === -1)
+					throw new XElementError('Bad index');
+				//#ENDIF
 				this.subs_[cpath].splice(callbackIndex, 1); // splice() modifies array in-place
 			}
 

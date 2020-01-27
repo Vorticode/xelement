@@ -111,7 +111,7 @@ var Tests = {
 		if (nextTr) {
 			var subTable = nextTr.querySelector('table');
 			if (subTable) {
-				subTable.querySelectorAll('[type=checkbox]').forEach((x) => x.checked = checkbox.checked);
+				subTable.querySelectorAll('input.enabled').forEach((x) => x.checked = checkbox.checked);
 				subTable.querySelectorAll('tr').forEach((x) => x.className = checkbox.checked ? 'selected' : '');
 			}
 		}
