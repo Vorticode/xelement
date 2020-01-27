@@ -14,8 +14,6 @@ var handler = {
 			return true;
 		if (field==='$removeProxy')
 			return obj;
-		if (field==='$roots')
-			return ProxyObject.get_(obj).roots_;
 		if (field==='$trigger') {
 			return (path) => {
 				let roots = ProxyObject.get_(obj).roots_;
@@ -23,6 +21,17 @@ var handler = {
 					root.notify_('set', path || [], obj);
 				return roots;
 			}
+		}
+
+		// Debugging functions
+		if (field==='$roots')
+			return ProxyObject.get_(obj).roots_;
+		if (field==='$subscribers') {
+			return Array.from(ProxyObject.get_(obj).roots_)
+				.map((x) => x.callbacks_)
+				.reduce((a, b) => [...a, ...b])
+				.map((x) => x('info'))
+				.reduce((a, b) => [...a, ...b])
 		}
 
 
@@ -80,16 +89,17 @@ var handler = {
 			// Don't allow setting proxies on underlying obj.
 			// This removes them recursivly in case of something like newVal=[Proxy(obj)].
 			newVal = removeProxies(newVal);
+			let oldVal = obj[field];
 
-			//if (obj[field] !== newVal) {
-				let oldVal = obj[field];
+			// Set the value.
+			// TODO: This can trigger notification if field was created on obj by defineOwnProperty()!
+			// Should I use .$disableWatch?
+			obj[field] = newVal;
 
-				// TODO: This can trigger notification if field was created on obj by defineOwnProperty()!
-				obj[field] = newVal;
+			// Notify
+			let path = [...proxyObj.getPath_(root), field];
+			root.notify_('set', path, newVal, oldVal);
 
-				let path = [...proxyObj.getPath_(root), field];
-				root.notify_('set', path, obj[field], oldVal);
-			//}
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -128,6 +138,7 @@ class ProxyObject {
 		this.proxy_ = new Proxy(obj, handler);
 
 		/**
+		 * A map of every root that has a subscription to this object and the path from that root to the object.
 		 * Can have multiple paths, one per root.
 		 * @type {WeakMap<ProxyRoot, string[]>} */
 		this.paths_ = new WeakMap();
@@ -174,6 +185,26 @@ class ProxyObject {
 							// Apply array operations on the underlying watched object, so we don't notify a jillion times.
 							let result =  Array.prototype[func].apply(obj, arguments);
 
+							// Rebuild the array indices inside the proxy ojects.
+							// This is covered by the test Watch.arrayShift2()
+							if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) // ops that modify within the array.
+							for (let i=0; i<obj.length; i++) {
+								let itemPo = proxyObjects.get(obj[i]);   // Get the ProxyObject for this array item.
+								if (!itemPo)
+									continue; // because nothing is watching this array element.
+
+								let map = itemPo.getAllRootsAndPaths_(); // Get all roots and the paths that point to this array item.
+								for (let [root, path] of map) {
+									//#IFDEV // sanity checks
+									let index = path[path.length-1];
+									if (parseInt(index)+'' !== index)    // make sure index is a string number.
+										throw new XElementError();
+									//#ENDIF
+
+									path[path.length - 1] = i + '';      // Update each path with the new index.
+								}
+							}
+
 							// Trigger a single notfication change.
 							self.proxy_.$trigger();
 							return result;
@@ -186,12 +217,22 @@ class ProxyObject {
 	}
 
 	/**
+	 * Get a map of all root objects watching this object, and the path from those roots to this object.
+	 * @returns {Map} */
+	getAllRootsAndPaths_() {
+		let result = new Map();
+		for (let root of this.roots_)
+			result.set(root, this.getPath_(root));
+		return result;
+	}
+
+	/**
 	 * @param root {object}
 	 * @returns {string[]} */
 	getPath_(root) {
-		if (!this.paths_.has(root))
-			this.paths_.set(root, []);
-		return this.paths_.get(root);
+		//if (!this.paths_.has(root)) // TODO: why does this create it?
+		//	this.paths_.set(root, []);
+		return this.paths_.get(root) || [];
 	}
 
 	/**

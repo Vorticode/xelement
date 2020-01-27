@@ -213,6 +213,34 @@ Watch: {
 		//assertEq(JSON.stringify(ops[1]), '["delete",["a","1"]]');
 	},
 
+
+	arrayShift2: function () {
+		var o = {
+			items:[
+				{name: 'A'},
+				{name: 'B'}
+			]
+		};
+		var wp = watchProxy(o, ()=>{});
+
+		// Get reference to item before splice.
+		let b = wp.items[1];
+
+		// remove first item.
+		wp.items.splice(0, 1);
+
+
+		// Make sure path of b has been updated.
+		let pr = proxyRoots.get(o);
+		let po = proxyObjects.get(b.$removeProxy);
+		//debugger;
+		let path = po.getPath_(pr);
+		console.log(path);
+
+		assertEq(path[0], 'items');
+		assertEq(path[1], '0');
+	},
+
 	unsubscribe: function() {
 
 		var o = { a: [0, 1] };
@@ -503,7 +531,6 @@ XElement: {
 					</div>`;
 
 				let a = new A_V1();
-				document.body.appendChild(a);
 
 				a.items = ['A', 'B', 'C'];
 
@@ -516,7 +543,39 @@ XElement: {
 
 				assertEq(a.shadowRoot.children[0].value, 'B2');
 				assertEq(a.shadowRoot.children[1].value, 'C');
-			}
+			},
+
+
+			// Test the loop index rebuilding inside the array interception functions.
+			unbindRebind: function () {
+				class A extends XElement {}
+				A.html = `
+				<div>
+					<div id="loop1" x-loop="items: i, item">
+						<input x-val="item.name">
+					</div>
+					<div id="loop2" x-loop="items: item">
+						<div x-text="item.name"></div>
+					</div>		
+				</div>`;
+
+				let a = new A();
+				a.items = [
+					{name: 'A'},
+					{name: 'B'}
+				];
+
+				// remove first item.
+				a.items.splice(0, 1);
+
+				// Then rename an item
+				a.loop1.children[0].value = 'B2';
+				a.loop1.children[0].dispatchEvent(new Event('input'));
+
+				// Make sure other loop updates acordingly.
+				assertEq(a.loop1.children[0].value, 'B2');
+				assertEq(a.loop2.children[0].textContent, 'B2');
+			},
 		},
 
 
@@ -1987,7 +2046,7 @@ XElement: {
 
 					passthrough(item) {
 						if (init) {
-							console.log('redraw');
+							//console.log('redraw');
 							this.redraw++;
 						}
 						return item;
@@ -2015,9 +2074,6 @@ XElement: {
 				window.init = true;
 				var init = true;
 				a.items[0] = 'A2';
-
-				console.log(a.b.redraw);
-				console.log(a.b.loop.children[0].textContent);
 
 				assertEq(a.b.redraw, 1);
 				assertEq(a.b.loop.children[0].textContent, 'A2');
@@ -2112,7 +2168,6 @@ XElement: {
 				}
 
 				let sizes2 = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
-				console.log(sizes, sizes2);
 				assert(arrayEq(sizes, sizes2));
 
 				//console.log(watched.size, watchedEls.size);
@@ -2125,85 +2180,17 @@ XElement: {
 			})();
 		},
 
-		cleanupLB: function () {
-
-			watched = new Map();
-			watchedEls = new Map();
-			proxyRoots = new Map();
-			proxyObjects = new Map();
-
-			class XNode extends XElement {}
-			XNode.html = `
-				<div>
-					<select x-loop="xRung.xFunc.xProgram.xLadderBuilder.variables: v">
-						<option x-text="v"></option>
-					</select>
-				</div>`;
-
-			class XRung extends XElement {}
-			XRung.html = `
-				<div>
-					<x-node x-prop="xRung: this"></x-node>				
-				</div>`;
-
-			class XFunc extends XElement {}
-			XFunc.html = `
-				<div>
-				    <x-rung x-prop="rung: func.rungs[0]; xFunc: this"></x-rung>				
-				</div>`;
-
-			class XProgram extends XElement {}
-			XProgram.html = `
-				<div>
-					<!-- Deleting this x-loop div makes it fail. -->
-					<x-func x-prop="func: program.functions[0]; xProgram: this"></x-func>					
-				</div>`;
-
-			class XLadderBuilder extends XElement {
-
-				constructor() {
-					super();
-					this.variables = ['A', 'B', 'C'];
-
-					this.program = {
-						functions: [
-							{
-								rungs: [
-									{
-										nodes: [1]
-									}
-								]
-							}
-						],
-						rungs: [
-							{
-								nodes: [1]
-							}
-						],
-						nodes: [1]
-					};
-
-					//this.xVariableDrawer.variables.push('D');
-				}
-}
-			XLadderBuilder.html = `
-				<div>
-					<x-program id="xProgram" x-prop="xLadderBuilder: this; program: this.program"></x-program>				
-				</div>`;
-
-			var lb = new XLadderBuilder();
-			document.body.appendChild(lb);
 
 
-			let sizes = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
 
-			lb.variables.push('D');
-			lb.variables.pop();
 
-			let sizes2 = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
-			assert(arrayEq(sizes, sizes2));
 
-		},
+
+
+
+
+
+
 	},
 
 

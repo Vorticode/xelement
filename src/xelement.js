@@ -1041,7 +1041,7 @@ var bindings = {
 	 * Special 2-way binding
 	 * @param self {XElement}
 	 * @param code {string}
-	 * @param el {HTMLElement}
+	 * @param el {HTMLElement|HTMLInputElement}
 	 * @param context {object<string, string>} */
 	val: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
@@ -1068,15 +1068,15 @@ var bindings = {
 			elEvents.add(el, ['input', onInput, null, self]);
 		}
 
-		let setVal = /*XElement.batch*/(/*action, path, value*/) => {
+		function setVal(/*action, path, value*/) {
 			let result = safeEval.call(self, code);
 
 			if (el.type === 'checkbox')
-			// noinspection EqualityComparisonWithCoercionJS
+				// noinspection EqualityComparisonWithCoercionJS
 				el.checked = result == true;
 			else
 				el.value = result;
-		}/*)*/;
+		}
 
 		// Update input value when object property changes.
 		for (let path of paths) {

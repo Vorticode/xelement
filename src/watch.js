@@ -74,6 +74,9 @@ class WatchProperties {
 	 * @param oldVal {*=} */
 	notify_(action, path, value, oldVal) {
 
+		if (action === 'info')
+			return this.subs_;
+
 		let cpath = csv(path);
 
 		// Traverse up the path looking for anything subscribed.
@@ -155,6 +158,7 @@ class WatchProperties {
 
 
 		// Create the full path if it doesn't exist.
+		// TODO: Can this part be removed?
 		traversePath(this.fields_, path, 1);
 
 		// Traverse up the path and watch each object.
