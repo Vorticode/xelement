@@ -588,14 +588,14 @@ XElement: {
 			unbindRebind: function () {
 				class A extends XElement {}
 				A.html = `
-				<div>
-					<div id="loop1" x-loop="items: i, item">
-						<input x-val="item.name">
-					</div>
-					<div id="loop2" x-loop="items: item">
-						<div x-text="item.name"></div>
-					</div>		
-				</div>`;
+					<div>
+						<div id="loop1" x-loop="items: i, item">
+							<input x-val="item.name">
+						</div>
+						<div id="loop2" x-loop="items: item">
+							<div x-text="item.name"></div>
+						</div>		
+					</div>`;
 
 				let a = new A();
 				a.items = [
@@ -614,6 +614,52 @@ XElement: {
 				assertEq(a.loop1.children[0].value, 'B2');
 				assertEq(a.loop2.children[0].textContent, 'B2');
 			},
+
+			unbindDeep: function() {
+				class A extends XElement {}
+				A.html = `
+					<div>
+						<div id="loop1" x-loop="letters: letter">
+							<input x-val="letter.name">
+						</div>
+						<div id="loop2" x-loop="items: item">
+							<div x-loop="item:parts: part">
+								<div x-loop="letters: letter">
+									<input x-val="letter.name">
+								</div>
+							</div>
+						</div>		
+					</div>`;
+
+				let a = new A();
+				a.letters =
+				a.items = [
+					{
+						parts: [
+							{name: 'A'},
+							{name: 'B'}
+						]
+					},
+					{
+						parts: [
+							{name: 'C'},
+							{name: 'D'}
+						]
+					}
+				];
+				document.body.appendChild(a);
+
+				// remove first item.
+				a.items.splice(0, 1);
+
+				// Then rename an item
+				a.loop1.children[0].value = 'B2';
+				a.loop1.children[0].dispatchEvent(new Event('input'));
+
+				// Make sure other loop updates acordingly.
+				// assertEq(a.loop1.children[0].value, 'B2');
+				// assertEq(a.loop2.children[0].textContent, 'B2');
+			}
 		},
 
 

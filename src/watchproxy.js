@@ -208,7 +208,8 @@ class ProxyObject {
 	 * Ths effectively lets us update the path of all of item's subscribers.
 	 * This is necessary for example when an array is spliced and the paths after the splice need to be updated.
 	 * @param item {object|*[]}
-	 * @param path {string[]} */
+	 * @param path {string[]}
+	 * @param visited {WeakSet=} */
 	static rebuildArray(item, path, visited) {
 		path = path || [];
 		visited = visited || new WeakSet();
@@ -238,7 +239,8 @@ class ProxyObject {
 		// This is testesd by the arrayShiftRecurse() test.
 		if (Array.isArray(item))
 			for (let i=0; i<item.length; i++)
-				ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
+				if (Array.isArray(item[i]) || isObj(item[i]))
+					ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
 		else if (isObj(item))
 			for (let i in item)
 				if (Array.isArray(item[i]) || isObj(item[i]))
