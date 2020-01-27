@@ -238,9 +238,10 @@ class ProxyObject {
 		// Recurse through children to update their paths too.
 		// This is testesd by the arrayShiftRecurse() test.
 		if (Array.isArray(item))
-			for (let i=0; i<item.length; i++)
+			for (let i=0; i<item.length; i++) {
 				if (Array.isArray(item[i]) || isObj(item[i]))
 					ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
+			}
 		else if (isObj(item))
 			for (let i in item)
 				if (Array.isArray(item[i]) || isObj(item[i]))
