@@ -774,23 +774,9 @@ class ProxyObject {
 
 							// Rebuild the array indices inside the proxy ojects.
 							// This is covered by the test Watch.arrayShift2()
+							// TODO: This can be faster if we only update the affected array elements.
 							if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) // ops that modify within the array.
-							for (let i=0; i<obj.length; i++) {
-								let itemPo = proxyObjects.get(obj[i]);   // Get the ProxyObject for this array item.
-								if (!itemPo)
-									continue; // because nothing is watching this array element.
-
-								let map = itemPo.getAllRootsAndPaths_(); // Get all roots and the paths that point to this array item.
-								for (let [root, path] of map) {
-									//#IFDEV // sanity checks
-									let index = path[path.length-1];
-									if (parseInt(index)+'' !== index)    // make sure index is a string number.
-										throw new XElementError();
-									//#ENDIF
-
-									path[path.length - 1] = i + '';      // Update each path with the new index.
-								}
-							}
+								ProxyObject.rebuildArray(obj);
 
 							// Trigger a single notfication change.
 							self.proxy_.$trigger();
@@ -801,6 +787,49 @@ class ProxyObject {
 
 
 		}
+	}
+
+	/**
+	 * For item, find all proxyRoots and update their paths such that they end with path.
+	 * Then we recurse and do the same for the children, appending to path as we go.
+	 * Ths effectively lets us update the path of all of item's subscribers.
+	 * This is necessary for example when an array is spliced and the paths after the splice need to be updated.
+	 * @param item {object|*[]}
+	 * @param path {string[]} */
+	static rebuildArray(item, path, visited) {
+		path = path || [];
+		visited = visited || new WeakSet();
+
+		if (visited.has(item))
+			return;
+		visited.add(item);
+
+		if (path.length) {
+			let itemPo = proxyObjects.get(item.$removeProxy || item); // Get the ProxyObject for this array item.
+			if (!itemPo)
+				return; // because nothing is watching this array element.
+
+			// Update all paths
+			let map = itemPo.getAllRootsAndPaths_(); // Get all roots and the paths that point to this array item.
+			for (let [root, oldPath] of map) {
+
+				// Swap end of oldPath with the new path.
+				let start = oldPath.length - path.length;
+				if (start >= 0)
+					for (let j = start; j < oldPath.length; j++)
+						oldPath[j] = path[j - start];
+			}
+		}
+
+		// Recurse through children to update their paths too.
+		// This is testesd by the arrayShiftRecurse() test.
+		if (Array.isArray(item))
+			for (let i=0; i<item.length; i++)
+				ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
+		else if (isObj(item))
+			for (let i in item)
+				if (Array.isArray(item[i]) || isObj(item[i]))
+					ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
 	}
 
 	/**
@@ -2211,15 +2240,17 @@ var bindings = {
 				// Because a notification will cause data-loop's rebuildChildren() to be called
 				// And Sortable has already rearranged the elements.
 				let array = traversePath(newSelf, path, true, newArray, true);
+				ProxyObject.rebuildArray(array);
 				rebindLoopChildren(newSelf, event.to, context, oldSelf); // But we still need to unbind and rebind them in their currnet positions.
-				array.$trigger(); // This won't trigger rebuilding our own children because their order already matches.
+				traversePath(newSelf, path).$trigger(); // This won't trigger rebuilding our own children because their order already matches.
 
 
 				// If origin was a different loop:
 				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
 					let array = traversePath(oldSelf, path, true, oldArray, true);
+					ProxyObject.rebuildArray(array);
 					rebindLoopChildren(oldSelf, event.from, context);
-					array.$trigger();
+					traversePath(oldSelf, path).$trigger();
 				}
 
 

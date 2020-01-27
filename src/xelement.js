@@ -1006,15 +1006,17 @@ var bindings = {
 				// Because a notification will cause data-loop's rebuildChildren() to be called
 				// And Sortable has already rearranged the elements.
 				let array = traversePath(newSelf, path, true, newArray, true);
+				ProxyObject.rebuildArray(array);
 				rebindLoopChildren(newSelf, event.to, context, oldSelf); // But we still need to unbind and rebind them in their currnet positions.
-				array.$trigger(); // This won't trigger rebuilding our own children because their order already matches.
+				traversePath(newSelf, path).$trigger(); // This won't trigger rebuilding our own children because their order already matches.
 
 
 				// If origin was a different loop:
 				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
 					let array = traversePath(oldSelf, path, true, oldArray, true);
+					ProxyObject.rebuildArray(array);
 					rebindLoopChildren(oldSelf, event.from, context);
-					array.$trigger();
+					traversePath(oldSelf, path).$trigger();
 				}
 
 
