@@ -2029,15 +2029,13 @@ XElement: {
 		},
 
 		twoProps: function () {
-
 			class B_P19 extends XElement {}
 			B_P19.html = `
 				<div>
 					<div id="text" x-text="item"></div>
 				</div>`;
 
-
-			// the second prop erases the first.  It works if we swap their order or remove the second one.
+			// It used to be the case that the second x-prop prop erases the first.  But it worked if order was swapped.
 			class A_P19 extends XElement {}
 			A_P19.html = `
 				<div class="ladderBuilder">
@@ -2048,9 +2046,7 @@ XElement: {
 			document.body.appendChild(a);
 
 			a.item = 'hi';
-
-			assertEq(a.b.text.textContent === 'hi');
-
+			assertEq(a.b.text.textContent, 'hi');
 		},
 
 		// When we remove B, make sure that C is also unbound.

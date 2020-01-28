@@ -350,7 +350,6 @@ var unbindEl = (xelement, el) => {
 					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 					delete el.loopHtml_;
 					delete el.items_;
-					//delete el.loopChildren;
 				}
 
 				// New
@@ -418,12 +417,10 @@ var initHtml = (self) => {
 
 
 		// Save definition attributes
-		self.definitionAttributes = {};
 		for (let attr of div.attributes)
 			self.definitionAttributes[attr.name] = attr.value;
 
 		// 2. Remove and save attributes from instantiation.
-		self.instantiationAttributes = {};
 		for (let attr of self.attributes) // From instantiation.
 			self.instantiationAttributes[attr.name] = attr.value;
 
@@ -537,6 +534,11 @@ class XElement extends HTMLElement {
 			throw error;
 		}
 		//#ENDIF
+
+		this.parent = undefined;
+		this.definitionAttributes = {};
+		this.instantiationAttributes = {};
+
 
 		let xname = getXName(this.constructor);
 		let self = this;
@@ -738,7 +740,6 @@ var bindings = {
 				//#ENDIF
 
 				root.loopHtml_ = root.children[0].outerHTML.trim();
-				//root.loopChildren = Array.from(root.children);
 
 				// Remove children before calling rebuildChildren()
 				// That way we don't unbind elements that were never bound.
@@ -889,6 +890,7 @@ var bindings = {
 			el.parent = self;
 
 			var obj = parseObj(code);
+			let newContext = {};
 			for (let prop in obj) {
 
 				//#IFDEV
@@ -904,10 +906,9 @@ var bindings = {
 
 
 				// Add the parent property to the context.
-				let expr2 = expr.replace(/this/g, 'parent'); // TODO: temporary lazy way until I write actual parsing
-				let newContext = {};
+				let expr2 = expr.replace(/this\./g, 'parent\.'); // TODO: temporary lazy way until I write actual parsing
+				expr2 = expr2.replace(/this$/, 'parent');
 				newContext[prop] = expr2;
-				context.unshift(newContext);
 
 				// Create a property so we can access the parent.
 				// This is often deleted and replaced by watch()
@@ -950,6 +951,8 @@ var bindings = {
 				//
 				// el[prop] = safeEval.call(self, expr);
 			}
+
+			context.unshift(newContext);
 		}
 	},
 

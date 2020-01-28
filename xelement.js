@@ -749,8 +749,7 @@ class ProxyObject {
 					get: function() {
 						// Return a new indexOf function.
 						return function (item) {
-							item = item.$removeProxy===undefined ? item : item.$removeProxy;
-							return Array.prototype[func].call(obj, item);
+							return Array.prototype[func].call(obj, removeProxy(item));
 						}
 					}
 				});
@@ -795,7 +794,8 @@ class ProxyObject {
 	 * Ths effectively lets us update the path of all of item's subscribers.
 	 * This is necessary for example when an array is spliced and the paths after the splice need to be updated.
 	 * @param item {object|*[]}
-	 * @param path {string[]} */
+	 * @param path {string[]}
+	 * @param visited {WeakSet=} */
 	static rebuildArray(item, path, visited) {
 		path = path || [];
 		visited = visited || new WeakSet();
@@ -824,8 +824,10 @@ class ProxyObject {
 		// Recurse through children to update their paths too.
 		// This is testesd by the arrayShiftRecurse() test.
 		if (Array.isArray(item))
-			for (let i=0; i<item.length; i++)
-				ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
+			for (let i=0; i<item.length; i++) {
+				if (Array.isArray(item[i]) || isObj(item[i]))
+					ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
+			}
 		else if (isObj(item))
 			for (let i in item)
 				if (Array.isArray(item[i]) || isObj(item[i]))
@@ -1565,8 +1567,15 @@ var unbindEl = (xelement, el) => {
 	var next = xelement===el && el.shadowRoot ? el.shadowRoot : el;
 
 	// Recursively unbind children.
-	for (let child of next.children)
-		unbindEl(xelement, child);
+	for (let child of next.children) {
+
+		// Change xelement reference as we descend into other xelements.
+		// This is needed for test prop.unbindChild()
+		if (child instanceof XElement)
+			unbindEl(child, child);
+		else
+			unbindEl(xelement, child);
+	}
 
 	// Unbind properties
 	if (el.attributes)
