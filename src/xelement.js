@@ -331,8 +331,15 @@ var unbindEl = (xelement, el) => {
 	var next = xelement===el && el.shadowRoot ? el.shadowRoot : el;
 
 	// Recursively unbind children.
-	for (let child of next.children)
-		unbindEl(xelement, child);
+	for (let child of next.children) {
+
+		// Change xelement reference as we descend into other xelements.
+		// This is needed for test prop.unbindChild()
+		if (child instanceof XElement)
+			unbindEl(child, child);
+		else
+			unbindEl(xelement, child);
+	}
 
 	// Unbind properties
 	if (el.attributes)

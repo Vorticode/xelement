@@ -162,8 +162,7 @@ class ProxyObject {
 					get: function() {
 						// Return a new indexOf function.
 						return function (item) {
-							item = item.$removeProxy===undefined ? item : item.$removeProxy;
-							return Array.prototype[func].call(obj, item);
+							return Array.prototype[func].call(obj, removeProxy(item));
 						}
 					}
 				});
