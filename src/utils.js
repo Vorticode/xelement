@@ -13,11 +13,11 @@ class XElementError extends Error {
  * @param deep {boolean=false}
  * @returns {boolean} */
 var arrayEq = (array1, array2, deep) => {
-	if (array1.length !== array2.length)
+	if (!array1 || !array2 || array1.length !== array2.length)
 		return false;
 
-	array2 = array2.$removeProxy || array2;
-	return (array1.$removeProxy || array1).every((value, index) => {
+	array2 = removeProxy(array2);
+	return removeProxy(array1).every((value, index) => {
 		if (deep && Array.isArray(value))
 			return arrayEq(value, array2[index]);
 		return eq(value, array2[index]);

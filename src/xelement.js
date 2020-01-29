@@ -3,11 +3,11 @@ Inherit from XElement to create custom HTML Components.
 
 
 TODO: major bugfixes
-LB Add a bunch of functions/rungs/etc then remove them.  Typing characters still has small redraw leaks.
-Changing sort order breaks items.
 Write a better parser for expr.replace(/this/g, 'parent');
 parseVars("this.passthrough(x)") doesn't find x.
 parseVars("item + passthrough('')") finds "passthrough" as a variable.
+Write a getWatches(el, expr) function that calls replaceVars, addThis, parseVars, an getRootXElement
+	to give back
 Document all properties that bindings.loop() sets on elements.
 
 TODO: next goals:
@@ -140,6 +140,17 @@ var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) 
 
 var parseXAttrib = (name) => name.startsWith('x-') ? name.slice(2) : name.startsWith('data-') ? name.slice(5) : null;
 
+
+var parseXAttrib2 = (name) => {
+	var parts = name.split(/:/g);
+	var functions = {};
+	for (let i=1; i<parts.length; i++) {
+		let [name, code] = parts[i].split('(');
+		functions[name] = code.slice(0, -1); // remove trailing )
+	}
+	return [parts[0], functions];
+};
+
 /**
  * Recursively process all the data- attributes in el and its descendants.
  * @param self {XElement}
@@ -184,7 +195,7 @@ var bindElProps = (xelement, el, context) => {
 
 
 		// Don't inherit within-element context from parent.
-		el.context2 = (xelement.context2 || []).slice();
+		el.propContext = (xelement.propContext || []).slice();
 
 		let prop = getXAttrib(el, 'prop');
 		if (prop) {
@@ -194,10 +205,10 @@ var bindElProps = (xelement, el, context) => {
 			bindings.prop(xelement, prop, el, context); // adds a new context to the beginning of the array.
 
 			// Then we add the new context item added by prop();
-			context = [context[0], ...el.context2];
+			context = [context[0], ...el.propContext];
 		}
 		else
-			context = el.context2.slice();
+			context = el.propContext.slice();
 
 
 
@@ -350,6 +361,8 @@ var unbindEl = (xelement, el) => {
 					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 					delete el.loopHtml_;
 					delete el.items_;
+					delete el.context_;
+					delete el.propContext;
 				}
 
 				// New
@@ -535,6 +548,7 @@ class XElement extends HTMLElement {
 		}
 		//#ENDIF
 
+		// Class properties
 		this.parent = undefined;
 		this.definitionAttributes = {};
 		this.instantiationAttributes = {};
@@ -548,6 +562,18 @@ class XElement extends HTMLElement {
 			customElements.whenDefined(xname).then(() => {
 				initHtml(self);
 			});
+	}
+
+	/**
+	 * TODO: Use this function in more places.
+	 * @param expr {string}
+	 * @param context {object[]}
+	 * @returns {[XElement, string[]][]} Array of arrays, with each sub-array being a root and the path from it.  */
+	getWatchedPaths(expr, context) {
+		expr = addThis(replaceVars(expr, context), context);
+		return parseVars(expr).map(
+			(path)=>getRootXElement(this, path)
+		);
 	}
 }
 
@@ -605,7 +631,7 @@ var bindings = {
 			let attrExpr = addThis(replaceVars(obj[name], context), context);
 
 			let setAttr = /*XElement.batch(*/function (/*action, path, value*/) {
-				var result = safeEval.call(self, attrExpr);
+				var result = safeEval.call(self, attrExpr, {el: el});
 				if (result === false || result === null || result === undefined)
 					el.removeAttribute(name);
 				else
@@ -615,7 +641,8 @@ var bindings = {
 			// If the variables in code, change, execute the code.
 			// Then set the attribute to the value returned by the code.
 			for (let path of parseVars(attrExpr)) {
-				watch(self, path, setAttr);
+				let [root, pathFromRoot] = getRootXElement(self, path);
+				watch(root, pathFromRoot, setAttr);
 				elWatches.add(el, [self,  path, setAttr]);
 			}
 
@@ -636,7 +663,7 @@ var bindings = {
 
 			// This code is called on every update.
 			let updateClass = /*XElement.batch*/() => {
-				let result = safeEval.call(self, classExpr);
+				let result = safeEval.call(self, classExpr, {el: el});
 				if (result)
 					el.classList.add(name);
 				else {
@@ -667,7 +694,7 @@ var bindings = {
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
-			el.textContent = safeEval.call(self, code);
+			el.textContent = safeEval.call(self, code, {el: el});
 		}/*)*/;
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -687,7 +714,7 @@ var bindings = {
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setHtml = /*XElement.batch(*/(/*action, path, value*/) => {
-			el.innerHTML = safeEval.call(self, code);
+			el.innerHTML = safeEval.call(self, code, {el: el});
 		}/*)*/;
 
 		for (let path of parseVars(code)) {
@@ -710,17 +737,20 @@ var bindings = {
 	 * @param el {HTMLElement}
 	 * @param context {object<string, string>} */
 	loop: (self, code, el, context) => {
-
 		context = context || [];
 
 		// Parse code into foreach parts
-		var [foreach, loopVar, indexVar] = parseLoop(code);
+		let [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
 		el.context_ = context;  // Used in sortable.
 
 		// Allow loop attrib to be applied above shadowroot.
-		let root = el.shadowRoot || el;
+		let root = el;
+
+		// If we're not looping over slots, set the root to the shadowRoot.
+		if (el instanceof XElement && !el.instantiationAttributes['x-loop'] && !el.instantiationAttributes['data-loop'])
+			root = root.shadowRoot || root;
 
 		var rebuildChildren = /*XElement.batch(*/(action, path, value, oldVal, indirect) => {
 
@@ -752,7 +782,7 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
-			var newItems = removeProxy(safeEval.call(self, foreach) || []);
+			var newItems = removeProxy(safeEval.call(self, foreach, {el: el}) || []);
 			var oldItems = removeProxy(root.items_ || []);
 
 			// Do nothing if the array hasn't changed.
@@ -966,7 +996,7 @@ var bindings = {
 			var obj = parseObj(code);
 			for (let name in obj) {
 				let expr = addThis(replaceVars(obj[name], context), context);
-				options[name] = safeEval.call(self, expr);
+				options[name] = safeEval.call(self, expr, {el: el});
 			}
 		}
 
@@ -999,9 +1029,9 @@ var bindings = {
 				let oldContext = event.from.context_;
 				let oldForeach = parseLoop(getLoopCode_(event.from))[0];
 				oldForeach = addThis(replaceVars(oldForeach, oldContext), oldContext);
-				let oldArray = safeEval.call(oldSelf, oldForeach).slice();
+				let oldArray = safeEval.call(oldSelf, oldForeach, {el: el}).slice();
 
-				let newArray = oldSelf === newSelf ? oldArray : safeEval.call(newSelf, foreach).slice();
+				let newArray = oldSelf === newSelf ? oldArray : safeEval.call(newSelf, foreach, {el: el}).slice();
 
 				let item;
 				if (event.pullMode === 'clone')
@@ -1081,7 +1111,7 @@ var bindings = {
 		}
 
 		function setVal(/*action, path, value*/) {
-			let result = safeEval.call(self, code);
+			let result = safeEval.call(self, code, {el: el});
 
 			if (el.type === 'checkbox')
 				// noinspection EqualityComparisonWithCoercionJS
@@ -1112,9 +1142,9 @@ var bindings = {
 		if (displayNormal === 'none')
 			displayNormal = '';
 
-		let setVisible = /*XElement.batch*/(/*action, path, value*/) => {
-			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
-		}/*)*/;
+		let setVisible = (/*action, path, value*/) => {
+			el.style.display = safeEval.call(self, code, {el: el}) ? displayNormal : 'none';
+		};
 
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);

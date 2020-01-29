@@ -13,7 +13,7 @@ var varPropOrFunc = '^\\s*' + dotIdentifier + or2 + varBrD + or2 + varBrS + or2 
 
 var isStandaloneVarRegex = new RegExp('^' + identifier + '(' + varProp + ')*$', 'i');
 var isSimpleCallRegex = new RegExp('^' + identifier + '(' + varProp + ')*\\(', 'i');
-var varStartRegex = new RegExp(identifier, 'gi');
+var varStartRegex = new RegExp(identifier + '\\s*\\(?', 'gi');
 var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 
 // https://mathiasbynens.be/notes/javascript-identifiers
@@ -52,6 +52,7 @@ var parseVars = (code, includeThis, allowCall) => {
 	var index = 0;
 
 	while (code.length) {
+		var item = undefined;
 		let regex = varStartRegex; // Reset for looking for start of a variable.
 		let keepGoing = 1;
 		let currentVar = [], matches;
@@ -73,7 +74,7 @@ var parseVars = (code, includeThis, allowCall) => {
 
 				// fitler() removes undefineds from matches.
 				// This lets us get the first non-undefiend parenthetical submatch.
-				let item = matches.filter(Boolean)[1];
+				item = matches.filter(Boolean)[1];
 
 				// Add varible property to current path
 				if (includeThis || item !== 'this') {
@@ -96,7 +97,7 @@ var parseVars = (code, includeThis, allowCall) => {
 		regex.lastIndex = 0; // reset the regex.
 		if (currentVar.length)
 			result.push(currentVar);
-		else
+		else if (item !== 'this') // if we found nothing, stop entirely.
 			break;
 	}
 
@@ -152,8 +153,11 @@ var parseObj = (code) => {
 	let pieces = code.split(/\s*;\s*/); // splitting on comma will divide objects.  TODO, need to support a real parser.  JSON won't understand var names.  eval() will evaluate them.
 	for (let piece of pieces) {
 		var colon = piece.indexOf(':');
-		let key = piece.slice(0, colon).trim();
-		result[key] = piece.slice(colon+1).trim();
+		let value =  piece.slice(colon+1).trim();
+		if (value) {
+			let key = piece.slice(0, colon).trim();
+			result[key] = value;
+		}
 
 		//let [key, value] = piece.split(/\s*:\s*/); // this splits more than once.
 		//result[key] = value;
@@ -175,7 +179,7 @@ var joinObj = (obj) => {
  * @param code {string}
  * @return {[string, string, string]} foreachCode, loopVar, indexVar (optional) */
 var parseLoop = (code) => {
-	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
+	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim()); // split on comma and colon only if there's no subsequent colons.
 	if (result[2])
 		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so indexVar is last.
 
@@ -211,6 +215,7 @@ var parseLoop = (code) => {
 
 /**
  * Add a "this." prefix to code where we can.
+ * TODO: This only works for standalone variables.
  * @param code  {string}
  * @param context {object<string, string>}
  * @param isStandalone {function(string):boolean=} A function to detect whether the code is a stanadlone var.
@@ -227,9 +232,13 @@ var addThis = (code, context, isStandalone, prefix) => {
 
 	// If it starts with this or an item in context, do nothing.
 	code = code.trim();
-	for (let pre of [prefix, ...Object.keys(context || {})])
+	let contextVars = Object.keys(context || {});
+	for (let pre of [prefix, ...contextVars])
 		if (code.match(new RegExp('^' + pre + '(\s*[\.[]|$)'))) // starts with "prefix." or "prefix["
 			return code;
 
 	return prefix + '.' + code;
 };
+
+// Exports
+window.parseLoop = parseLoop; // temporary for EditableSelect.

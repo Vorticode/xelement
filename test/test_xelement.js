@@ -4,9 +4,24 @@ var XElementTests = {
 
 ParseVar : {
 
-	parseVars: function() {
-		var result = parseVars("this.cats[0]+':'+item");
-		// TODO
+	parseVars: {
+		parse1: function() {
+			var paths = parseVars("this.cats[0]+':'+item");
+			assert(arrayEq(paths[0], ['cats', '0']));
+			assert(arrayEq(paths[1], ['item']));
+			assertEq(paths.length, 2);
+		},
+
+		parse2: function() {
+			var paths = parseVars("this.passThrough(x)");
+			assert(arrayEq(paths[0], ['x']));
+			assertEq(paths.length, 1);
+		},
+
+		parse3: function() {
+			var paths = parseVars("passthrough('')");
+			assertEq(paths.length, 0);
+		}
 	},
 
 	replaceVar: function() {
@@ -1855,45 +1870,44 @@ XElement: {
 
 			// Ditto, but with a more complex case.
 			(function () {
-				class XNode extends XElement {}
-				XNode.html = `
+				class C_P15 extends XElement {}
+				C_P15.html = `
 					<div>				
-						<select x-loop="xProgram.xLadderBuilder.variables: drawerVariable">
-							<option x-text="drawerVariable"></option>
+						<select x-loop="parentB.parentA.letters: letter">
+							<option x-text="letter"></option>
 						</select>
 					</div>`;
 
-				// Below:  Looping over x-loop="xLadderBuilder.program.nodes: node" will work.
-				class XProgram extends XElement {}
-				XProgram.html = `
+				class B_P15 extends XElement {}
+				B_P15.html = `
 					<div>		
-						<div id="nodesContainer" x-loop="program.nodes: node">
-						    <x-node x-prop="node: node; xProgram: this"></x-node>
+						<div id="cLoop" x-loop="program.nodes: node">
+						    <x-c_p15 x-prop="node: node; parentB: this"></x-c_p15>
 						</div>
 					</div>`;
 
-				class XLadderBuilder extends XElement {}
-				XLadderBuilder.html = `
+				class A_P15 extends XElement {}
+				A_P15.html = `
 					<div>
 						<div x-loop="variables: i, variable">
 							<div x-text="variable"></div>
 						</div>
-						<x-program id="xProgram" x-prop="xLadderBuilder: this; program: this.program"></x-program>				
+						<x-b_p15 id="b" x-prop="parentA: this; program: this.program"></x-b_p15>				
 					</div>`;
 
-				var lb = new XLadderBuilder();
+				var lb = new A_P15();
 
-				lb.variables = ['A', 'B', 'C'];
+				lb.letters = ['A', 'B', 'C'];
 
 				lb.program = {
 					nodes: [
-						{variables: ['A']}
+						{letters: ['A']}
 					]
 				};
-				lb.variables.push('D');
+				lb.letters.push('D');
 
-				assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children.length, 4);
-				assertEq(lb.xProgram.nodesContainer.children[0].shadowRoot.children[0].children[3].textContent, 'D');
+				assertEq(lb.b.cLoop.children[0].shadowRoot.children[0].children.length, 4);
+				assertEq(lb.b.cLoop.children[0].shadowRoot.children[0].children[3].textContent, 'D');
 			})();
 
 
@@ -1924,7 +1938,7 @@ XElement: {
 
 			// Test:  SecondLevelPropForward.
 			// Make sure second-level subscriptions are forwarded.
-			// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
+			// This depends on getPropSubscribers() descending from B into C to find that A is used.
 			(function () {
 
 				class C_P16 extends XElement {}
@@ -1954,7 +1968,7 @@ XElement: {
 
 			// Test:  ThirdLevelPropForward.
 			// Make sure third-level subscriptions are forwarded.
-			// This depends on getPropSubscribers() descending from B into C to find that xLadderBuilder is used.
+			// This depends on getPropSubscribers() descending from B into C to find that A is used.
 			(function () {
 
 				class D_P17 extends XElement {}
@@ -2325,23 +2339,96 @@ XElement: {
 				proxyObjects = new WeakMap();
 			})();
 		},
-
-
-
-
-
-
 	},
 
 
 
 
 	temp: function () {
+
+
+		// http://jsfiddle.net/nwH8A/
+		class EditableSelect extends XElement {
+			constructor() {
+				super();
+
+				// Map input attributes up to the XElement.
+				let code = 'autocomplete,autofocus,disabled,form,max,maxlength,min,minlength,name,pattern,placeholder,readonly,required,step,type,value'
+					.split(/,/g).map((attr) => attr + ':' + attr).join(';');
+				XElement.bindings.attribs(this, code, this.input, this.propContext);
+
+				// Move initial children
+				this.moveChildren();
+
+				// x-loop is added to the element, watch the source variables and update our own items when they change.
+				// This is necessary because html won't let us put a slot inside a select.
+				code = this.getAttribute('x-loop') || this.getAttribute('data-loop');
+				if (code)
+					for (let [root, path] of this.getWatchedPaths(parseLoop(code), this.propContext))
+						watch(root, path, ()=> this.moveChildren);
+
+				// TODO: Forward events from input and select to xelement.  Then maybe x-val="" binding will work?
+				// input, change, focus, blur
+			}
+
+
+			// Slots inside <select> don't seem to work.
+			// So we manually move them from the root into the select.
+			moveChildren() {
+				this.select.innerHTML = '';
+				for (let el of this.children) {
+					// We clone and hide the originals, because removing them might break rebuildLoop()
+					this.select.appendChild(el.cloneNode(true));
+					el.style.display = 'none';
+				}
+				this.select.selectedIndex = -1;
+			}
+
+			updateValue() {
+				let val = this.select.value;
+				this.select.selectedIndex = -1; // clear select value so it will register if we click the same item again.
+				this.input.value = val;
+			}
+		}
+		EditableSelect.html = `
+			<div>
+				<style>
+					:host { position: relative; display: inline-block; background-color: red; width: 10em }
+					select { width: 100% }
+					
+					/* place input on top of select */
+					input { position: absolute; width: calc(100% - 1.8em); top: 1px; left: 1px; padding: 1px; border: none; z-index: 1 }
+					select:focus, input:focus { outline: none }
+				</style>
+				<slot id="slot"></slot>
+				<select id="select" onchange="updateValue()"></select>
+				<input id="input">
+			</div>`;
+
+
+		let a = createEl(`
+			<x-editableselect name="test" value="hi">
+				<option>1</option>
+				<option>2</option>
+			</x-editableselect>`.trim()
+		);
+		console.log(a);
+		document.body.appendChild(a);
+
+
+		// TODO: Make this work:
+		let b = createEl(`
+			<x-editableselect x-loop="items: item">
+				<option x-text="item"></option>
+			</x-editableselect>`.trim()
+		);
+		b.items = [2, 3, 4];
+
+		b.value = '3';
+
+
+		document.body.appendChild(b);
 	},
-
-
-
-
 
 }
 };

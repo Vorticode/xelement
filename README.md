@@ -13,7 +13,7 @@ class Inventory extends XElement {
     }   
 }
 Inventory.html = `
-    <template id="Inventory">
+    <div>
         <button onclick="addItem()">Add Item</button>
         <div data-loop="items:item">
             <div>
@@ -21,10 +21,12 @@ Inventory.html = `
                 <input data-val="item.qty">
             </div>
         </div>
-    </template>`;
+    </div>`;
 
 var inv = new Inventory();
-document.body.append(inv); // Is used as a DOM element.
+
+// We could alternatively create the element directly within html by adding <x-inventory></xinventory> directly.
+document.body.append(inv);
 ```
 
 Features:
@@ -133,6 +135,51 @@ Any attribute values wrapped in braces {} will have their values evaluated as Ja
 ## Slots
 
 TODO
+
+Anonymous slots:
+
+```html
+<script>
+    class Car extends XElement {}
+    Car.html = `
+        <div>
+            <div>Engine</div>
+            <slot></slot>
+        </div>`;
+</script>
+
+<x-car>
+    <div>wheel</div>
+    <div>wheel</div>
+    <div>wheel</div>
+    <div>wheel</div>
+</x-car>
+```
+
+Named slots:
+
+```html
+<script>
+    class Car extends XElement {}
+    Car.html = `
+        <div>
+            <slot name="engine"></slot>
+            <slot name="wheels"></slot>
+        </div>`;
+</script>
+
+<x-car>
+    <div slot="engine">3.1L V6</div>
+    <div slot="wheels">        
+        <div>wheel</div>
+        <div>wheel</div>
+        <div>wheel</div>
+        <div>wheel</div>
+    </div>
+</x-car>
+```
+
+
 
 ## Data Binding
 

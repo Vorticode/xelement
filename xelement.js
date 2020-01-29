@@ -503,8 +503,11 @@ var parseObj = (code) => {
 	let pieces = code.split(/\s*;\s*/); // splitting on comma will divide objects.  TODO, need to support a real parser.  JSON won't understand var names.  eval() will evaluate them.
 	for (let piece of pieces) {
 		var colon = piece.indexOf(':');
-		let key = piece.slice(0, colon).trim();
-		result[key] = piece.slice(colon+1).trim();
+		let value =  piece.slice(colon+1).trim();
+		if (value) {
+			let key = piece.slice(0, colon).trim();
+			result[key] = value;
+		}
 
 		//let [key, value] = piece.split(/\s*:\s*/); // this splits more than once.
 		//result[key] = value;
@@ -526,7 +529,7 @@ var joinObj = (obj) => {
  * @param code {string}
  * @return {[string, string, string]} foreachCode, loopVar, indexVar (optional) */
 var parseLoop = (code) => {
-	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim());
+	var result = code.split(/[,:](?=[^:]+$)/).map((x)=>x.trim()); // split on comma and colon only if there's no subsequent colons.
 	if (result[2])
 		result = [result[0], result[2], result[1]]; // swap elements 1 and 2, so indexVar is last.
 
@@ -562,6 +565,7 @@ var parseLoop = (code) => {
 
 /**
  * Add a "this." prefix to code where we can.
+ * TODO: This only works for standalone variables.
  * @param code  {string}
  * @param context {object<string, string>}
  * @param isStandalone {function(string):boolean=} A function to detect whether the code is a stanadlone var.
@@ -578,12 +582,16 @@ var addThis = (code, context, isStandalone, prefix) => {
 
 	// If it starts with this or an item in context, do nothing.
 	code = code.trim();
-	for (let pre of [prefix, ...Object.keys(context || {})])
+	let contextVars = Object.keys(context || {});
+	for (let pre of [prefix, ...contextVars])
 		if (code.match(new RegExp('^' + pre + '(\s*[\.[]|$)'))) // starts with "prefix." or "prefix["
 			return code;
 
 	return prefix + '.' + code;
-};;
+};
+
+// Exports
+window.parseLoop = parseLoop; // temporary for EditableSelect.;
 
 "use strict";
 
@@ -1232,6 +1240,10 @@ var unwatch = (obj, path, callback) => {
 	}
 };
 
+
+// Exports
+window.watch = watch;
+window.unwatch = unwatch;
 ;
 
 /*
@@ -1239,11 +1251,11 @@ Inherit from XElement to create custom HTML Components.
 
 
 TODO: major bugfixes
-LB Add a bunch of functions/rungs/etc then remove them.  Typing characters still has small redraw leaks.
-Changing sort order breaks items.
 Write a better parser for expr.replace(/this/g, 'parent');
 parseVars("this.passthrough(x)") doesn't find x.
 parseVars("item + passthrough('')") finds "passthrough" as a variable.
+Write a getWatches(el, expr) function that calls replaceVars, addThis, parseVars, an getRootXElement
+	to give back
 Document all properties that bindings.loop() sets on elements.
 
 TODO: next goals:
@@ -1420,7 +1432,7 @@ var bindElProps = (xelement, el, context) => {
 
 
 		// Don't inherit within-element context from parent.
-		el.context2 = (xelement.context2 || []).slice();
+		el.propContext = (xelement.propContext || []).slice();
 
 		let prop = getXAttrib(el, 'prop');
 		if (prop) {
@@ -1430,10 +1442,10 @@ var bindElProps = (xelement, el, context) => {
 			bindings.prop(xelement, prop, el, context); // adds a new context to the beginning of the array.
 
 			// Then we add the new context item added by prop();
-			context = [context[0], ...el.context2];
+			context = [context[0], ...el.propContext];
 		}
 		else
-			context = el.context2.slice();
+			context = el.propContext.slice();
 
 
 
@@ -1586,7 +1598,8 @@ var unbindEl = (xelement, el) => {
 					el.innerHTML = el.loopHtml_; // revert it back to the look template element.
 					delete el.loopHtml_;
 					delete el.items_;
-					//delete el.loopChildren;
+					delete el.context_;
+					delete el.propContext;
 				}
 
 				// New
@@ -1654,12 +1667,10 @@ var initHtml = (self) => {
 
 
 		// Save definition attributes
-		self.definitionAttributes = {};
 		for (let attr of div.attributes)
 			self.definitionAttributes[attr.name] = attr.value;
 
 		// 2. Remove and save attributes from instantiation.
-		self.instantiationAttributes = {};
 		for (let attr of self.attributes) // From instantiation.
 			self.instantiationAttributes[attr.name] = attr.value;
 
@@ -1774,6 +1785,12 @@ class XElement extends HTMLElement {
 		}
 		//#ENDIF
 
+		// Class properties
+		this.parent = undefined;
+		this.definitionAttributes = {};
+		this.instantiationAttributes = {};
+
+
 		let xname = getXName(this.constructor);
 		let self = this;
 		if (customElements.get(xname))
@@ -1782,6 +1799,18 @@ class XElement extends HTMLElement {
 			customElements.whenDefined(xname).then(() => {
 				initHtml(self);
 			});
+	}
+
+	/**
+	 * TODO: Use this function in more places.
+	 * @param expr {string}
+	 * @param context {object[]}
+	 * @returns {[XElement, string[]][]} Array of arrays, with each sub-array being a root and the path from it.  */
+	getWatchedPaths(expr, context) {
+		expr = addThis(replaceVars(expr, context), context);
+		return parseVars(expr).map(
+			(path)=>getRootXElement(this, path)
+		);
 	}
 }
 
@@ -1948,13 +1977,17 @@ var bindings = {
 		context = context || [];
 
 		// Parse code into foreach parts
-		var [foreach, loopVar, indexVar] = parseLoop(code);
+		let [foreach, loopVar, indexVar] = parseLoop(code);
 		foreach = replaceVars(foreach, context);
 		foreach = addThis(foreach, context);
 		el.context_ = context;  // Used in sortable.
 
 		// Allow loop attrib to be applied above shadowroot.
-		let root = el.shadowRoot || el;
+		let root = el;
+
+		// If we're not looping over slots, set the root to the shadowRoot.
+		if (el instanceof XElement && !el.instantiationAttributes['x-loop'] && !el.instantiationAttributes['data-loop'])
+			root = root.shadowRoot || root;
 
 		var rebuildChildren = /*XElement.batch(*/(action, path, value, oldVal, indirect) => {
 
@@ -1974,7 +2007,6 @@ var bindings = {
 				//#ENDIF
 
 				root.loopHtml_ = root.children[0].outerHTML.trim();
-				//root.loopChildren = Array.from(root.children);
 
 				// Remove children before calling rebuildChildren()
 				// That way we don't unbind elements that were never bound.
@@ -2125,6 +2157,7 @@ var bindings = {
 			el.parent = self;
 
 			var obj = parseObj(code);
+			let newContext = {};
 			for (let prop in obj) {
 
 				//#IFDEV
@@ -2140,10 +2173,9 @@ var bindings = {
 
 
 				// Add the parent property to the context.
-				let expr2 = expr.replace(/this/g, 'parent'); // TODO: temporary lazy way until I write actual parsing
-				let newContext = {};
+				let expr2 = expr.replace(/this\./g, 'parent\.'); // TODO: temporary lazy way until I write actual parsing
+				expr2 = expr2.replace(/this$/, 'parent');
 				newContext[prop] = expr2;
-				context.unshift(newContext);
 
 				// Create a property so we can access the parent.
 				// This is often deleted and replaced by watch()
@@ -2186,6 +2218,8 @@ var bindings = {
 				//
 				// el[prop] = safeEval.call(self, expr);
 			}
+
+			context.unshift(newContext);
 		}
 	},
 

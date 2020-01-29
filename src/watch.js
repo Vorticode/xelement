@@ -288,3 +288,7 @@ var unwatch = (obj, path, callback) => {
 	}
 };
 
+
+// Exports
+window.watch = watch;
+window.unwatch = unwatch;
