@@ -782,6 +782,7 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
+			debugger;
 			var newItems = removeProxy(safeEval.call(self, foreach, {el: el}) || []);
 			var oldItems = removeProxy(root.items_ || []);
 

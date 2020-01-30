@@ -1168,6 +1168,27 @@ XElement: {
 		// TODO: Test loop over non-simple var.
 	},
 
+	loop2: {
+
+		passthrough: function() {
+			class A_L15 extends XElement {
+
+				passthrough(item) {
+					return item;
+				}
+
+			}
+			A_L15.html =`
+				<div x-loop="this.passthrough(this.items) : item">
+					<span x-text="item"></span>
+				</div>`;
+
+			var a = new A_L15();
+			a.items = [1, 2];
+			document.body.append(a);
+		}
+	},
+
 	loopNested: {
 
 		// Nested loop over two separate properties

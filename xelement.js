@@ -16,11 +16,11 @@ class XElementError extends Error {
  * @param deep {boolean=false}
  * @returns {boolean} */
 var arrayEq = (array1, array2, deep) => {
-	if (array1.length !== array2.length)
+	if (!array1 || !array2 || array1.length !== array2.length)
 		return false;
 
-	array2 = array2.$removeProxy || array2;
-	return (array1.$removeProxy || array1).every((value, index) => {
+	array2 = removeProxy(array2);
+	return removeProxy(array1).every((value, index) => {
 		if (deep && Array.isArray(value))
 			return arrayEq(value, array2[index]);
 		return eq(value, array2[index]);
@@ -364,7 +364,7 @@ var varPropOrFunc = '^\\s*' + dotIdentifier + or2 + varBrD + or2 + varBrS + or2 
 
 var isStandaloneVarRegex = new RegExp('^' + identifier + '(' + varProp + ')*$', 'i');
 var isSimpleCallRegex = new RegExp('^' + identifier + '(' + varProp + ')*\\(', 'i');
-var varStartRegex = new RegExp(identifier, 'gi');
+var varStartRegex = new RegExp(identifier + '\\s*\\(?', 'gi');
 var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 
 // https://mathiasbynens.be/notes/javascript-identifiers
@@ -403,6 +403,7 @@ var parseVars = (code, includeThis, allowCall) => {
 	var index = 0;
 
 	while (code.length) {
+		var item = undefined;
 		let regex = varStartRegex; // Reset for looking for start of a variable.
 		let keepGoing = 1;
 		let currentVar = [], matches;
@@ -424,7 +425,7 @@ var parseVars = (code, includeThis, allowCall) => {
 
 				// fitler() removes undefineds from matches.
 				// This lets us get the first non-undefiend parenthetical submatch.
-				let item = matches.filter(Boolean)[1];
+				item = matches.filter(Boolean)[1];
 
 				// Add varible property to current path
 				if (includeThis || item !== 'this') {
@@ -447,7 +448,7 @@ var parseVars = (code, includeThis, allowCall) => {
 		regex.lastIndex = 0; // reset the regex.
 		if (currentVar.length)
 			result.push(currentVar);
-		else
+		else if (item !== 'this') // if we found nothing, stop entirely.
 			break;
 	}
 
@@ -1388,6 +1389,17 @@ var getXAttrib = (el, name) => el.getAttribute && (el.getAttribute('x-' + name) 
 
 var parseXAttrib = (name) => name.startsWith('x-') ? name.slice(2) : name.startsWith('data-') ? name.slice(5) : null;
 
+
+var parseXAttrib2 = (name) => {
+	var parts = name.split(/:/g);
+	var functions = {};
+	for (let i=1; i<parts.length; i++) {
+		let [name, code] = parts[i].split('(');
+		functions[name] = code.slice(0, -1); // remove trailing )
+	}
+	return [parts[0], functions];
+};
+
 /**
  * Recursively process all the data- attributes in el and its descendants.
  * @param self {XElement}
@@ -1868,7 +1880,7 @@ var bindings = {
 			let attrExpr = addThis(replaceVars(obj[name], context), context);
 
 			let setAttr = /*XElement.batch(*/function (/*action, path, value*/) {
-				var result = safeEval.call(self, attrExpr);
+				var result = safeEval.call(self, attrExpr, {el: el});
 				if (result === false || result === null || result === undefined)
 					el.removeAttribute(name);
 				else
@@ -1878,7 +1890,8 @@ var bindings = {
 			// If the variables in code, change, execute the code.
 			// Then set the attribute to the value returned by the code.
 			for (let path of parseVars(attrExpr)) {
-				watch(self, path, setAttr);
+				let [root, pathFromRoot] = getRootXElement(self, path);
+				watch(root, pathFromRoot, setAttr);
 				elWatches.add(el, [self,  path, setAttr]);
 			}
 
@@ -1899,7 +1912,7 @@ var bindings = {
 
 			// This code is called on every update.
 			let updateClass = /*XElement.batch*/() => {
-				let result = safeEval.call(self, classExpr);
+				let result = safeEval.call(self, classExpr, {el: el});
 				if (result)
 					el.classList.add(name);
 				else {
@@ -1930,7 +1943,7 @@ var bindings = {
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
-			el.textContent = safeEval.call(self, code);
+			el.textContent = safeEval.call(self, code, {el: el});
 		}/*)*/;
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -1950,7 +1963,7 @@ var bindings = {
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setHtml = /*XElement.batch(*/(/*action, path, value*/) => {
-			el.innerHTML = safeEval.call(self, code);
+			el.innerHTML = safeEval.call(self, code, {el: el});
 		}/*)*/;
 
 		for (let path of parseVars(code)) {
@@ -1973,7 +1986,6 @@ var bindings = {
 	 * @param el {HTMLElement}
 	 * @param context {object<string, string>} */
 	loop: (self, code, el, context) => {
-
 		context = context || [];
 
 		// Parse code into foreach parts
@@ -2019,7 +2031,7 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
-			var newItems = removeProxy(safeEval.call(self, foreach) || []);
+			var newItems = removeProxy(safeEval.call(self, foreach, {el: el}) || []);
 			var oldItems = removeProxy(root.items_ || []);
 
 			// Do nothing if the array hasn't changed.
@@ -2233,7 +2245,7 @@ var bindings = {
 			var obj = parseObj(code);
 			for (let name in obj) {
 				let expr = addThis(replaceVars(obj[name], context), context);
-				options[name] = safeEval.call(self, expr);
+				options[name] = safeEval.call(self, expr, {el: el});
 			}
 		}
 
@@ -2266,9 +2278,9 @@ var bindings = {
 				let oldContext = event.from.context_;
 				let oldForeach = parseLoop(getLoopCode_(event.from))[0];
 				oldForeach = addThis(replaceVars(oldForeach, oldContext), oldContext);
-				let oldArray = safeEval.call(oldSelf, oldForeach).slice();
+				let oldArray = safeEval.call(oldSelf, oldForeach, {el: el}).slice();
 
-				let newArray = oldSelf === newSelf ? oldArray : safeEval.call(newSelf, foreach).slice();
+				let newArray = oldSelf === newSelf ? oldArray : safeEval.call(newSelf, foreach, {el: el}).slice();
 
 				let item;
 				if (event.pullMode === 'clone')
@@ -2348,7 +2360,7 @@ var bindings = {
 		}
 
 		function setVal(/*action, path, value*/) {
-			let result = safeEval.call(self, code);
+			let result = safeEval.call(self, code, {el: el});
 
 			if (el.type === 'checkbox')
 				// noinspection EqualityComparisonWithCoercionJS
@@ -2379,9 +2391,9 @@ var bindings = {
 		if (displayNormal === 'none')
 			displayNormal = '';
 
-		let setVisible = /*XElement.batch*/(/*action, path, value*/) => {
-			el.style.display = safeEval.call(self, code) ? displayNormal : 'none';
-		}/*)*/;
+		let setVisible = (/*action, path, value*/) => {
+			el.style.display = safeEval.call(self, code, {el: el}) ? displayNormal : 'none';
+		};
 
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -2474,4 +2486,5 @@ Object.defineProperty(XElement, 'html', {
 // Exports
 XElement.bindings = bindings;
 window.XElement = XElement;
+
 })();
