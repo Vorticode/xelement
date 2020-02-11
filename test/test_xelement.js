@@ -21,6 +21,12 @@ ParseVar : {
 		parse3: function() {
 			var paths = parseVars("passthrough('')");
 			assertEq(paths.length, 0);
+		},
+
+		parse4: function() {
+			var paths = parseVars("passthrough(x)");
+			assert(arrayEq(paths[0], ['x']));
+			assertEq(paths.length, 1);
 		}
 	},
 
@@ -2367,88 +2373,46 @@ XElement: {
 
 	temp: function () {
 
-
-		// http://jsfiddle.net/nwH8A/
-		class EditableSelect extends XElement {
-			constructor() {
-				super();
-
-				// Map input attributes up to the XElement.
-				let code = 'autocomplete,autofocus,disabled,form,max,maxlength,min,minlength,name,pattern,placeholder,readonly,required,step,type,value'
-					.split(/,/g).map((attr) => attr + ':' + attr).join(';');
-				XElement.bindings.attribs(this, code, this.input, this.propContext);
-
-				// Move initial children
-				this.moveChildren();
-
-				// x-loop is added to the element, watch the source variables and update our own items when they change.
-				// This is necessary because html won't let us put a slot inside a select.
-				code = this.getAttribute('x-loop') || this.getAttribute('data-loop');
-				if (code)
-					for (let [root, path] of this.getWatchedPaths(parseLoop(code), this.propContext))
-						watch(root, path, ()=> this.moveChildren);
-
-				// TODO: Forward events from input and select to xelement.  Then maybe x-val="" binding will work?
-				// input, change, focus, blur
-			}
-
-
-			// Slots inside <select> don't seem to work.
-			// So we manually move them from the root into the select.
-			moveChildren() {
-				this.select.innerHTML = '';
-				for (let el of this.children) {
-					// We clone and hide the originals, because removing them might break rebuildLoop()
-					this.select.appendChild(el.cloneNode(true));
-					el.style.display = 'none';
-				}
-				this.select.selectedIndex = -1;
-			}
-
-			updateValue() {
-				let val = this.select.value;
-				this.select.selectedIndex = -1; // clear select value so it will register if we click the same item again.
-				this.input.value = val;
-			}
-		}
-		EditableSelect.html = `
+		class XNode extends XElement {}
+		XNode.html = `
 			<div>
 				<style>
-					:host { position: relative; display: inline-block; background-color: red; width: 10em }
-					select { width: 100% }
-					
-					/* place input on top of select */
-					input { position: absolute; width: calc(100% - 1.8em); top: 1px; left: 1px; padding: 1px; border: none; z-index: 1 }
-					select:focus, input:focus { outline: none }
+					:host { position: relative; display: inline-block; min-width: 5rem; padding: .8rem; 
+						border: 1px solid gray; border-radius: .5rem; background-color: #444; margin: .2em }
 				</style>
-				<slot id="slot"></slot>
-				<select id="select" onchange="updateValue()"></select>
-				<input id="input">
+				<span id="nodeType">Node</span>			
 			</div>`;
 
 
-		let a = createEl(`
-			<x-editableselect name="test" value="hi">
-				<option>1</option>
-				<option>2</option>
-			</x-editableselect>`.trim()
-		);
-		console.log(a);
-		document.body.appendChild(a);
+		class XRung extends XElement {}
+		XRung.html = `
+			<div>
+				<style>
+					#barContainer { flex-grow: 1; position: relative; min-height: 30px; padding-bottom: 1em; border: 1px solid gray}
+				</style>				
+				<div id="barContainer" x-loop="rung.nodes: i, node" x-sortable="group: 'nodes'">
+					<x-node x-prop="node: node"></x-node>
+				</div>
+			</div>`;
 
+		class XFunc extends XElement {}
+		XFunc.html = `
+			<div>
+				<div x-loop="func.rungs: rung" >
+			        <x-rung x-prop="rung: rung"></x-rung>
+				</div>
+			</div>`;
 
-		// TODO: Make this work:
-		let b = createEl(`
-			<x-editableselect x-loop="items: item">
-				<option x-text="item"></option>
-			</x-editableselect>`.trim()
-		);
-		b.items = [2, 3, 4];
+		var lb = new XFunc();
+		lb.func = {
+			rungs: [
+				{nodes: [{name: 'Set'}]},
+				{nodes: []}
+			]
+		};
 
-		b.value = '3';
-
-
-		document.body.appendChild(b);
+		window.lb = lb;
+		document.body.appendChild(lb);
 	},
 
 }

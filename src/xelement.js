@@ -337,9 +337,7 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 var unbindEl = (xelement, el) => {
 	el = el || xelement;
 
-	// Only go into shadowroot if coming from the top level.
-	// This way we don't traverse into the shadowroots of other XElements.
-	var next = xelement===el && el.shadowRoot ? el.shadowRoot : el;
+	var next = el.shadowRoot || el;
 
 	// Recursively unbind children.
 	for (let child of next.children) {
@@ -694,7 +692,10 @@ var bindings = {
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
-			el.textContent = safeEval.call(self, code, {el: el});
+			let val = safeEval.call(self, code, {el: el});
+			if (val === undefined || val === null)
+				val = '';
+			el.textContent = val;
 		}/*)*/;
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -714,7 +715,10 @@ var bindings = {
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
 		let setHtml = /*XElement.batch(*/(/*action, path, value*/) => {
-			el.innerHTML = safeEval.call(self, code, {el: el});
+			let val = safeEval.call(self, code, {el: el});
+			if (val === undefined || val === null)
+				val = '';
+			el.innerHTML = val;
 		}/*)*/;
 
 		for (let path of parseVars(code)) {
@@ -782,7 +786,6 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
-			debugger;
 			var newItems = removeProxy(safeEval.call(self, foreach, {el: el}) || []);
 			var oldItems = removeProxy(root.items_ || []);
 
@@ -1042,7 +1045,6 @@ var bindings = {
 
 				newArray.splice(event.newIndex, 0, item);
 
-
 				// Set the newArray without triggering notifications.
 				// Because a notification will cause data-loop's rebuildChildren() to be called
 				// And Sortable has already rearranged the elements.
@@ -1054,13 +1056,18 @@ var bindings = {
 
 				// If origin was a different loop:
 				if (newSelf !== oldSelf && event.pullMode !== 'clone') {
-					let array = traversePath(oldSelf, path, true, oldArray, true);
+
+					let loopCode = getLoopCode_(event.from);
+					let context = event.from.context_;
+					let [foreach/*, loopVar, indexVar*/] = parseLoop(loopCode);
+					foreach = addThis(replaceVars(foreach, context), context);
+					let oldPath = parseVars(foreach)[0];
+
+					let array = traversePath(oldSelf, oldPath, true, oldArray, true);
 					ProxyObject.rebuildArray(array);
 					rebindLoopChildren(oldSelf, event.from, context);
-					traversePath(oldSelf, path).$trigger();
+					traversePath(oldSelf, oldPath).$trigger();
 				}
-
-
 			};
 
 			options.onAdd = function(event) {
@@ -1113,6 +1120,8 @@ var bindings = {
 
 		function setVal(/*action, path, value*/) {
 			let result = safeEval.call(self, code, {el: el});
+			if (result === undefined || result === null)
+				result = '';
 
 			if (el.type === 'checkbox')
 				// noinspection EqualityComparisonWithCoercionJS

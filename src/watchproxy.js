@@ -207,7 +207,7 @@ class ProxyObject {
 	 * Ths effectively lets us update the path of all of item's subscribers.
 	 * This is necessary for example when an array is spliced and the paths after the splice need to be updated.
 	 * @param item {object|*[]}
-	 * @param path {string[]}
+	 * @param path {string[]=}
 	 * @param visited {WeakSet=} */
 	static rebuildArray(item, path, visited) {
 		path = path || [];

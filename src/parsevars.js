@@ -97,7 +97,7 @@ var parseVars = (code, includeThis, allowCall) => {
 		regex.lastIndex = 0; // reset the regex.
 		if (currentVar.length)
 			result.push(currentVar);
-		else if (item !== 'this') // if we found nothing, stop entirely.
+		else if (!matches /*item !== 'this'*/) // if we found nothing, stop entirely.
 			break;
 	}
 
