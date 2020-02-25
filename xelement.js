@@ -1,5 +1,5 @@
 // https://github.com/Vorticode/xelement
-(function() {
+(function() { 
 //%replace%
 //#IFDEV
 class XElementError extends Error {
