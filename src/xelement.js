@@ -1100,11 +1100,13 @@ var bindings = {
 		var paths = parseVars(code);
 		if (paths.length === 1 && isStandaloneVar(code)) {
 			let onInput = () => {
-				let value;
+				let value = '';
 				if (el.type === 'checkbox')
 					value = el.checked;
-				else
-					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
+				else if ('value' in el) // input, select
+					value = el.value;
+				else if ('innerHMTL' in el) // [contenteditable]
+					value = el.innerHTML;
 
 				// We don't use watchlessSet in case other things are subscribed.
 				traversePath(self, paths[0], true, value);
@@ -1126,6 +1128,10 @@ var bindings = {
 			if (el.type === 'checkbox')
 				// noinspection EqualityComparisonWithCoercionJS
 				el.checked = result == true;
+			else if (el.hasAttribute('contenteditable')) {
+				if (result !== el.innerHTML)
+					el.innerHTML = result;
+			}
 			else
 				el.value = result;
 		}
