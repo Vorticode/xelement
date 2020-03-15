@@ -2,6 +2,47 @@
 
 var XElementTests = {
 
+
+Utils: {
+
+	createEl: {
+
+		div: function() {
+			var html = '<div>hi</div>';
+			var el = createEl(html);
+			assertEq(el.outerHTML, html);
+		},
+
+		space: function() {
+			var html = '  ';
+			var text = createEl(html);
+			assertEq(text.textContent, html);
+		},
+
+		multiple: function() {
+			var html = 'hi <div>bye</div>';
+			var text = createEl(html);
+			assertEq(text.textContent, 'hi ');
+		},
+
+		td: function() {
+			var html = '<td>hi</td>';
+			var el = createEl(html);
+			assertEq(el.outerHTML, html);
+		},
+
+		customElement: function() {
+			class XA extends HTMLElement{};
+			customElements.define('x-a', XA);
+
+			var html = '<div><x-a></x-a></div>';
+			var el = createEl(html);
+			assertEq(el.outerHTML, html);
+		}
+
+	}
+},
+
 ParseVar : {
 
 	parseVars: {

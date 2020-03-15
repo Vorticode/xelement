@@ -1,5 +1,5 @@
 // https://github.com/Vorticode/xelement
-(function() { 
+(function() {
 //%replace%
 //#IFDEV
 class XElementError extends Error {
@@ -165,19 +165,37 @@ var WeakMultiMap = function() {
 // };
 
 
-
 var createEl = (html) => {
 	//#IFDEV
 	if (typeof html !== 'string')
 		throw new XElementError('Html argument must be a string.');
 	//#ENDIF
 
-	var div = document.createElement('div');
-	div.innerHTML = html;
+	let tagName = html.trim().match(/<([a-z0-9-]+)/i);
+	if (tagName)
+		tagName = tagName[1];
 
-	//  TODO: skip whitespace, comments
-	return div.removeChild(div.firstChild);
+	// Using a template makes some embed related tests fail to instantiate x-elements.
+	let parentMap = {
+		td: 'tr',
+		tr: 'tbody',
+		tbody: 'table',
+		thead: 'table',
+		tfoot: 'table',
+		source: 'video',
+		area: 'map',
+		legend: 'fieldset',
+		option: 'select',
+		col: 'colgroup',
+		param: 'object'
+	};
+	let parentTag = parentMap[tagName] || 'div';
+
+	var parent = document.createElement(parentTag);
+	parent.innerHTML = html;
+	return parent.removeChild(parent.firstChild);
 };
+
 
 /**
  * Return the array as a quoted csv string.
@@ -1258,6 +1276,7 @@ parseVars("item + passthrough('')") finds "passthrough" as a variable.
 Write a getWatches(el, expr) function that calls replaceVars, addThis, parseVars, an getRootXElement
 	to give back
 Document all properties that bindings.loop() sets on elements.
+Won't bind to properties on the class itself, insead of those defined within constructor.  Because they are called after the super constructor!
 
 TODO: next goals:
 {{var}} in text and attributes, and stylesheets?
@@ -2349,11 +2368,13 @@ var bindings = {
 		var paths = parseVars(code);
 		if (paths.length === 1 && isStandaloneVar(code)) {
 			let onInput = () => {
-				let value;
+				let value = '';
 				if (el.type === 'checkbox')
 					value = el.checked;
-				else
-					value = el.value || el.innerHTML || ''; // works for input, select, textarea, [contenteditable]
+				else if ('value' in el) // input, select
+					value = el.value;
+				else if ('innerHMTL' in el) // [contenteditable]
+					value = el.innerHTML;
 
 				// We don't use watchlessSet in case other things are subscribed.
 				traversePath(self, paths[0], true, value);
@@ -2375,6 +2396,10 @@ var bindings = {
 			if (el.type === 'checkbox')
 				// noinspection EqualityComparisonWithCoercionJS
 				el.checked = result == true;
+			else if (el.hasAttribute('contenteditable')) {
+				if (result !== el.innerHTML)
+					el.innerHTML = result;
+			}
 			else
 				el.value = result;
 		}
@@ -2495,6 +2520,7 @@ Object.defineProperty(XElement, 'html', {
 
 // Exports
 XElement.bindings = bindings;
+XElement.createEl = createEl; // useful for other code.
 window.XElement = XElement;
 
 })();

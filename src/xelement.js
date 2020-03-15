@@ -9,6 +9,7 @@ parseVars("item + passthrough('')") finds "passthrough" as a variable.
 Write a getWatches(el, expr) function that calls replaceVars, addThis, parseVars, an getRootXElement
 	to give back
 Document all properties that bindings.loop() sets on elements.
+Won't bind to properties on the class itself, insead of those defined within constructor.  Because they are called after the super constructor!
 
 TODO: next goals:
 {{var}} in text and attributes, and stylesheets?
@@ -1252,4 +1253,5 @@ Object.defineProperty(XElement, 'html', {
 
 // Exports
 XElement.bindings = bindings;
+XElement.createEl = createEl; // useful for other code.
 window.XElement = XElement;
