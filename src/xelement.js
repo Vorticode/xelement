@@ -757,7 +757,7 @@ var bindings = {
 		if (el instanceof XElement && !el.instantiationAttributes['x-loop'] && !el.instantiationAttributes['data-loop'])
 			root = root.shadowRoot || root;
 
-		var rebuildChildren = /*XElement.batch(*/(action, path, value, oldVal, indirect) => {
+		var rebuildChildren = (action, path, value, oldVal, indirect) => {
 
 			// The modification was actually just a child of the loop variable.
 			// The loop variable itself wasn't assigned a new value.
@@ -892,7 +892,13 @@ var bindings = {
 			// Save the items on the loop element, so we can compare them to their modified values next time the loop is rebuilt.
 			root.items_ = newItems.slice(); // copy TODO: Should this be el not root?
 
-		}/*)*/;
+			// If it's a select element, reapply its x-val when its children change.
+			// TODO: Should this also be done for <textarea> ?
+			if (el.tagName === 'SELECT' && el.hasAttribute('x-val')) {
+				let code = addThis(replaceVars(el.getAttribute('x-val'), context), context);
+				el.value = safeEval.call(self, code, {el: el});
+			}
+		};
 
 		for (let path of parseVars(foreach)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -1255,3 +1261,13 @@ Object.defineProperty(XElement, 'html', {
 XElement.bindings = bindings;
 XElement.createEl = createEl; // useful for other code.
 window.XElement = XElement;
+
+// Used as a passthrough for xelement attrib debugging.
+window.xdebug = (a) => {
+	debugger;
+	return a;
+};
+window.xlog = (a) => {
+	console.log(a);
+	return a;
+};

@@ -239,6 +239,22 @@ Watch: {
 		})();
 	},
 
+	removeProxy: function() {
+
+		(function() {
+			var o = {
+				a: {
+					c: undefined
+				},
+				b: undefined
+			};
+			watch(o, ['a'], ()=>{});
+
+			console.log(o.a.$removeProxy.c);
+		})();
+
+	},
+
 	pop: function() {
 
 		var o = { a: [0, 1] };
