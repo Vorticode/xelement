@@ -1587,13 +1587,13 @@ XElement: {
 				class B_P1 extends XElement {}
 				B_P1.html = `				
 				<div>
-				    <b id="text" data-text="item"></b>
+				    <b id="text" x-text="item"></b>
 				</div>`;
 
 				class A_P1 extends XElement {}
 				A_P1.html = `				
-				<div data-loop="items: item">
-				    <x-b_p1 data-prop="item: item"></x-b_p1>
+				<div x-loop="items: item">
+				    <x-b_p1 x-prop="item: item"></x-b_p1>
 				</div>`;
 
 				var a = new A_P1();
@@ -2136,7 +2136,7 @@ XElement: {
 			// It used to be the case that the second x-prop prop erases the first.  But it worked if order was swapped.
 			class A_P19 extends XElement {}
 			A_P19.html = `
-				<div class="ladderBuilder">
+				<div>
 					<x-b_p19 id="b" x-prop="item: this.item; parentA: this"></x-b_p19>
 				</div>`;
 
@@ -2428,50 +2428,268 @@ XElement: {
 
 
 
-	temp: function () {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+},
+
+
+
+
+unresolved: {
+
+
+	// Test an object that refers to another object twice.
+	doubleRef1: function() {
+
+		let item = {name: 1};
+		var o = {
+			items: [item],
+			item: item
+		};
+
+		let paths =[];
+		let wp = watchProxy(o, function(action, path, value) {
+			// Path will be the path it was set from.
+			console.log(path);
+			paths.push(path);
+		});
+
+		wp.items[0].name = 2;
+		wp.item.name = 3;
+
+
+		assertEqDeep(paths[0], ['items', '0', 'name']);
+		assertEqDeep(paths[1], ['item', 'name']);
+		assertEq(paths.length, 2);
+	},
+
+
+	/*
+	 * TODO: This fails if one ProxyRoot references an object twice from different paths!!!
+	 * Instead we need to track ALL paths from a proxyroot to this object!
+	 */
+	doubleRef2: function() {
+
+		let item = {name: 1};
+		var o = {
+			items: [item],
+			item: item
+		};
+
+		let wp = new WatchProperties(o);
+		wp.subscribe_(['items'], ()=> {
+			console.log('items changed');
+		});
+
+		wp.subscribe_(['item'], ()=> {
+			console.log('item changed');
+		});
+
+		o.item.name = 3;
+		o.items[0].name = 3;
+
+	},
+
+	doubleRef3: function() {
+
+		let item = {name: 1};
+		var o = {
+			items: [item],
+			item: item
+		};
+
+		let watch1 = 0;
+		watch(o, ['items'], ()=> {
+			console.log('items changed');
+			watch1 ++;
+		});
+
+		let watch2 = 0;
+		watch(o, 'item', ()=>  {
+			console.log('item changed');
+			watch2 ++;
+		});
+
+		o.items[0].name = 2;
+		o.item.name = 3;
+
+		assertEq(watch1, 2);
+		assertE1(watch2, 2);
+	},
+
+
+	doubleRef4: function() {
+
+		let item = {name: 1};
+		var o = {
+			items: [item],
+			item: item
+		};
+
+		let watch1 = 0;
+		watch(o, ['items', '0'], ()=> {
+			console.log('items changed');
+			watch1 ++;
+		});
+
+		let watch2 = 0;
+		watch(o, 'item', ()=> {
+			console.log('item changed');
+			watch2 ++;
+		});
+
+		o.items[0].name = 2;
+		o.item.name = 3;
+
+		//assertEq(watch1, 2);
+		//assertE1(watch2, 2);
+	},
+
+	numberPath: function() {
+
+
+		var o = {
+			items: ['a']
+		};
+
+		let watch1 = 0;
+
+		// Path works if we change 0 to '0'
+		watch(o, ['items', 0], ()=> {
+			console.log('items changed');
+			watch1 ++;
+		});
+
+		o.items[0] = 'b';
+
+		assertEq(watch1, 1);
+	},
+
+
+
+	temp3: function () {
 
 		class XNode extends XElement {}
 		XNode.html = `
-			<div>
-				<style>
-					:host { position: relative; display: inline-block; min-width: 5rem; padding: .8rem; 
-						border: 1px solid gray; border-radius: .5rem; background-color: #444; margin: .2em }
-				</style>
-				<span id="nodeType">Node</span>			
+			<div style="display: block">
+				<span x-text="this.node.name"></span>
+				|
+				<span x-text="node.name"></span>
 			</div>`;
 
 
-		class XRung extends XElement {}
-		XRung.html = `
+		class A extends XElement {}
+		A.html = `
 			<div>
-				<style>
-					#barContainer { flex-grow: 1; position: relative; min-height: 30px; padding-bottom: 1em; border: 1px solid gray}
-				</style>				
-				<div id="barContainer" x-loop="rung.nodes: i, node" x-sortable="group: 'nodes'">
-					<x-node x-prop="node: node"></x-node>
+				<div x-loop="nodes: n">
+					<x-node x-prop="node: n"></x-node>
 				</div>
 			</div>`;
 
-		class XFunc extends XElement {}
-		XFunc.html = `
-			<div>
-				<div x-loop="func.rungs: rung" >
-			        <x-rung x-prop="rung: rung"></x-rung>
-				</div>
-			</div>`;
 
-		var lb = new XFunc();
-		lb.func = {
-			rungs: [
-				{nodes: [{name: 'Set'}]},
-				{nodes: []}
-			]
-		};
 
-		window.lb = lb;
-		document.body.appendChild(lb);
+		var a = new A();
+		a.nodes = [
+			{name: 'Set1'},
+			//	{name: 'Set2'},
+			//	{name: 'Set3'}
+		];
+
+		// If this is uncommented, bindings.text.setText() stops being called.
+		// It's as if the watch is removed.
+		// But it's still called if we use x-text without the "this":  x-text="node.name"
+		//
+		// The first one evaluates to this.node.name
+		// The second one evaluates to this.parent.nodes[0].name
+		// splice() calls ProxyObect.rebuildArray() which breaks the first one.
+		//
+		// There's two paths to the node:  ['nodes', '0'] and ['node'].
+		// ProxyObject.rebuildArray() has a bug where it replaces the second one with ['0'].
+		a.nodes.splice(2, 1); // Removes nothing because array isn't that long.
+
+
+		setInterval(()=> {
+			for (let node of a.nodes)
+				node.name = Math.round(Math.random() * 1000);
+		}, 200);
+
+		window.a = a;
+		document.body.appendChild(a);
 	},
 
+
+	// Deleting nodes here causes an error on Object.defineProperty() after lots of recursion.
+	removeNode: function () {
+
+		class B extends XElement {
+			remove() {
+				let index = this.node.a.nodes.indexOf(this);
+				this.node.a.nodes.splice(index, 1);
+			}
+		}
+		B.html = `
+		<div style="display: block">	
+			<button onclick="remove()">x</button>
+			&nbsp;
+			<span x-text="node.name"></span>
+		</div>`;
+
+		class A extends XElement {
+
+			constructor() {
+				super();
+
+				let nodes = [
+					{name: 'Set1'},
+					{name: 'Set2'},
+					{name: 'Set3'}
+				];
+				for (let node of nodes)
+					node.a = this;
+				this.nodes = nodes;
+
+
+				setInterval(()=> {
+					for (let node of nodes)
+						node.name = Math.random();
+				}, 200);
+
+			}
+		}
+
+
+		A.html = `
+		<div x-loop="nodes: node">
+			<x-b x-prop="node: node"></x-b>
+		</div>`;
+
+
+
+		window.a = new A();
+		document.body.appendChild(a);
+	},
 }
+
+
+
+
 };
 

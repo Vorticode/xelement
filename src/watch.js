@@ -114,12 +114,6 @@ class WatchProperties {
 					for (let callback of this.subs_[name])
 						callback.apply(this.obj_, [action, fullSubPath, newSubVal, oldSubVal]); // "this.obj_" so it has the context of the original object.
 			}
-
-		// Old way:
-		// for (let name in this.subs_)
-		// 	if (name.startsWith(cpath))
-		// 		for (let callback of this.subs_[name])
-		// 			callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 	}
 
 	/**
@@ -156,45 +150,9 @@ class WatchProperties {
 		}
 
 
-
 		// Create the full path if it doesn't exist.
 		// TODO: Can this part be removed?
 		traversePath(this.fields_, path, 1);
-
-		// Traverse up the path and watch each object.
-		// This is commented out because it causes too much chaos, virally turning innocent objects into proxies.
-		// This ensures that Object.defineProperty() is called at every level if it hasn't been previously.
-		// But will this lead to callback() being called more than once?  It seems not.
-		/*
-		let parentPath = path; // path to our subscribed field within the parent.
-		let parent = self.fields_;
-		while (parentPath.length > 1) {
-			parent = parent[parentPath[0]]; // go up to next level.
-			let p = parentPath;
-			parentPath = parentPath.slice(1); // remove first from array
-
-			// This works for our trivial case but doesn't handle all cases in LadderBuilder.
-			// I need to find a better condition than !traversePath.
-			//debugger;
-			if (isObj(parent) && parent[parentPath[0]] && !parent[parentPath[0]].$isProxy) {
-
-				// Old way that does it only once.  Which really only fixed a specific case rather than being a general solution.
-				// (function(parent, parentPath) {
-				// 	var d = function (action, path, value) {
-				// 		callback(action, path, value);
-				// 		unwatch(parent, parentPath, d);
-				// 	};
-				// 	watch(parent, parentPath, d);
-				// })(parent, parentPath);
-
-				watch(parent, parentPath, function(action, path, value) {
-					callback(action, p, value);
-				});
-				return;
-
-			}
-		}
-		*/
 
 
 		// Add to subscriptions

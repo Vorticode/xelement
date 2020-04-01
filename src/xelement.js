@@ -692,12 +692,12 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
+		let setText = (/*action, path, value*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
 			el.textContent = val;
-		}/*)*/;
+		};
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
 			watch(root, pathFromRoot, setText);
@@ -715,12 +715,12 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = /*XElement.batch(*/(/*action, path, value*/) => {
+		let setHtml = (/*action, path, value*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
 			el.innerHTML = val;
-		}/*)*/;
+		};
 
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -953,12 +953,21 @@ var bindings = {
 
 				// Create a property so we can access the parent.
 				// This is often deleted and replaced by watch()
-				Object.defineProperty(el, prop, {
+				let descriptor = {
 					configurable: true,
 					get: function () {
 						return safeEval.call(self, expr);
 					}
-				});
+				};
+
+				// let paths = parseVars(expr);
+				// for (let path of paths)
+				// 	watch(self, path, () => {
+				// 		el[prop] = safeEval.call(self, expr);
+				// 	});
+
+
+				Object.defineProperty(el, prop, descriptor);
 
 
 				// Attempt 2:  fails the props test because

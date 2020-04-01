@@ -58,14 +58,15 @@ var handler = {
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
 			for (let root of proxyObj.roots_) {
-				let path = proxyResult.paths_.get(root);
+				//let path = proxyResult.paths_.get(root);
 
 				// Set path for the first time.
-				if (!path) {
+				//if (!path) {
 					let parentPath = proxyObj.getPath_(root);
-					path = [...parentPath, field];
+					let path = [...parentPath, field];
 					proxyResult.paths_.set(root, path);
-				}
+				//}
+
 			}
 
 			// If setting the value to an object or array, also create a proxy around that one.
@@ -140,7 +141,11 @@ class ProxyObject {
 		/**
 		 * A map of every root that has a subscription to this object and the path from that root to the object.
 		 * Can have multiple paths, one per root.
-		 * @type {WeakMap<ProxyRoot, string[]>} */
+		 *
+		 * TODO: This fails if one ProxyRoot references an object twice from different paths!!!
+		 * Instead we need to track ALL paths from a proxyroot to this object!
+		 *
+		 * @type {WeakMap<ProxyRoot, string[][]>} */
 		this.paths_ = new WeakMap();
 
 		/**
@@ -184,11 +189,16 @@ class ProxyObject {
 							// Apply array operations on the underlying watched object, so we don't notify a jillion times.
 							let result =  Array.prototype[func].apply(obj, arguments);
 
-							// Rebuild the array indices inside the proxy ojects.
+							// Rebuild the array indices inside the proxy objects.
 							// This is covered by the test Watch.arrayShift2()
 							// TODO: This can be faster if we only update the affected array elements.
-							if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) // ops that modify within the array.
+							if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) { // ops that modify within the array.
+
+								console.log(self.paths_);
+
 								ProxyObject.rebuildArray(obj);
+
+							}
 
 							// Trigger a single notfication change.
 							self.proxy_.$trigger();
@@ -218,7 +228,7 @@ class ProxyObject {
 		visited.add(item);
 
 		if (path.length) {
-			let itemPo = proxyObjects.get(item.$removeProxy || item); // Get the ProxyObject for this array item.
+			let itemPo = proxyObjects.get(item.$removeProxy || item); // Get the ProxyObject for this item.
 			if (!itemPo)
 				return; // because nothing is watching this array element.
 
@@ -258,15 +268,15 @@ class ProxyObject {
 	}
 
 	/**
+	 * Get the path from the root to this object.
 	 * @param root {object}
 	 * @returns {string[]} */
 	getPath_(root) {
-		//if (!this.paths_.has(root)) // TODO: why does this create it?
-		//	this.paths_.set(root, []);
 		return this.paths_.get(root) || [];
 	}
 
 	/**
+	 * Get the ProxyObject for a given object.
 	 * @param obj {object}
 	 * @param roots {object[]|Set<object>=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
@@ -284,6 +294,34 @@ class ProxyObject {
 		return result;
 	}
 }
+
+
+// Reorganized version of ProxyRoot and ProxyObject that would support multiple paths from root to obj.
+// var Util = {
+//
+// 	/**
+// 	 * Get all roots that have paths to obj. */
+// 	getRoots: function(obj)
+// 	{
+//
+// 	},
+//
+// 	getCallbacks: function(root) {
+//
+// 	},
+//
+// 	/**
+// 	 * Register a path from root to obj. */
+// 	addPath: function(root, path, obj) {
+//
+// 	},
+//
+// 	/**
+// 	 * Get all paths from root to obj. */
+// 	getPaths: function(root, obj) {
+//
+// 	}
+// };
 
 
 /**
@@ -308,6 +346,8 @@ class ProxyRoot {
 		po.roots_.add(this);
 	}
 
+	/**
+	 * Notification sent when any of the root's properties changes. */
 	notify_(/*action, path, value*/) {
 		for (let callback of this.callbacks_)
 			callback.apply(this.root_, arguments);
