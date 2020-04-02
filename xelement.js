@@ -672,14 +672,15 @@ var handler = {
 			// Keep track of paths.
 			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
 			for (let root of proxyObj.roots_) {
-				let path = proxyResult.paths_.get(root);
+				//let path = proxyResult.paths_.get(root);
 
 				// Set path for the first time.
-				if (!path) {
+				//if (!path) {
 					let parentPath = proxyObj.getPath_(root);
-					path = [...parentPath, field];
+					let path = [...parentPath, field];
 					proxyResult.paths_.set(root, path);
-				}
+				//}
+
 			}
 
 			// If setting the value to an object or array, also create a proxy around that one.
@@ -754,7 +755,11 @@ class ProxyObject {
 		/**
 		 * A map of every root that has a subscription to this object and the path from that root to the object.
 		 * Can have multiple paths, one per root.
-		 * @type {WeakMap<ProxyRoot, string[]>} */
+		 *
+		 * TODO: This fails if one ProxyRoot references an object twice from different paths!!!
+		 * Instead we need to track ALL paths from a proxyroot to this object!
+		 *
+		 * @type {WeakMap<ProxyRoot, string[][]>} */
 		this.paths_ = new WeakMap();
 
 		/**
@@ -798,11 +803,16 @@ class ProxyObject {
 							// Apply array operations on the underlying watched object, so we don't notify a jillion times.
 							let result =  Array.prototype[func].apply(obj, arguments);
 
-							// Rebuild the array indices inside the proxy ojects.
+							// Rebuild the array indices inside the proxy objects.
 							// This is covered by the test Watch.arrayShift2()
 							// TODO: This can be faster if we only update the affected array elements.
-							if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) // ops that modify within the array.
+							if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) { // ops that modify within the array.
+
+								console.log(self.paths_);
+
 								ProxyObject.rebuildArray(obj);
+
+							}
 
 							// Trigger a single notfication change.
 							self.proxy_.$trigger();
@@ -832,7 +842,7 @@ class ProxyObject {
 		visited.add(item);
 
 		if (path.length) {
-			let itemPo = proxyObjects.get(item.$removeProxy || item); // Get the ProxyObject for this array item.
+			let itemPo = proxyObjects.get(item.$removeProxy || item); // Get the ProxyObject for this item.
 			if (!itemPo)
 				return; // because nothing is watching this array element.
 
@@ -872,15 +882,15 @@ class ProxyObject {
 	}
 
 	/**
+	 * Get the path from the root to this object.
 	 * @param root {object}
 	 * @returns {string[]} */
 	getPath_(root) {
-		//if (!this.paths_.has(root)) // TODO: why does this create it?
-		//	this.paths_.set(root, []);
 		return this.paths_.get(root) || [];
 	}
 
 	/**
+	 * Get the ProxyObject for a given object.
 	 * @param obj {object}
 	 * @param roots {object[]|Set<object>=} Roots to add to new or existing object.
 	 * @returns {ProxyObject} */
@@ -898,6 +908,34 @@ class ProxyObject {
 		return result;
 	}
 }
+
+
+// Reorganized version of ProxyRoot and ProxyObject that would support multiple paths from root to obj.
+// var Util = {
+//
+// 	/**
+// 	 * Get all roots that have paths to obj. */
+// 	getRoots: function(obj)
+// 	{
+//
+// 	},
+//
+// 	getCallbacks: function(root) {
+//
+// 	},
+//
+// 	/**
+// 	 * Register a path from root to obj. */
+// 	addPath: function(root, path, obj) {
+//
+// 	},
+//
+// 	/**
+// 	 * Get all paths from root to obj. */
+// 	getPaths: function(root, obj) {
+//
+// 	}
+// };
 
 
 /**
@@ -922,6 +960,8 @@ class ProxyRoot {
 		po.roots_.add(this);
 	}
 
+	/**
+	 * Notification sent when any of the root's properties changes. */
 	notify_(/*action, path, value*/) {
 		for (let callback of this.callbacks_)
 			callback.apply(this.root_, arguments);
@@ -1085,12 +1125,6 @@ class WatchProperties {
 					for (let callback of this.subs_[name])
 						callback.apply(this.obj_, [action, fullSubPath, newSubVal, oldSubVal]); // "this.obj_" so it has the context of the original object.
 			}
-
-		// Old way:
-		// for (let name in this.subs_)
-		// 	if (name.startsWith(cpath))
-		// 		for (let callback of this.subs_[name])
-		// 			callback.apply(this.obj_, arguments); // "this.obj_" so it has the context of the original object.
 	}
 
 	/**
@@ -1127,45 +1161,9 @@ class WatchProperties {
 		}
 
 
-
 		// Create the full path if it doesn't exist.
 		// TODO: Can this part be removed?
 		traversePath(this.fields_, path, 1);
-
-		// Traverse up the path and watch each object.
-		// This is commented out because it causes too much chaos, virally turning innocent objects into proxies.
-		// This ensures that Object.defineProperty() is called at every level if it hasn't been previously.
-		// But will this lead to callback() being called more than once?  It seems not.
-		/*
-		let parentPath = path; // path to our subscribed field within the parent.
-		let parent = self.fields_;
-		while (parentPath.length > 1) {
-			parent = parent[parentPath[0]]; // go up to next level.
-			let p = parentPath;
-			parentPath = parentPath.slice(1); // remove first from array
-
-			// This works for our trivial case but doesn't handle all cases in LadderBuilder.
-			// I need to find a better condition than !traversePath.
-			//debugger;
-			if (isObj(parent) && parent[parentPath[0]] && !parent[parentPath[0]].$isProxy) {
-
-				// Old way that does it only once.  Which really only fixed a specific case rather than being a general solution.
-				// (function(parent, parentPath) {
-				// 	var d = function (action, path, value) {
-				// 		callback(action, path, value);
-				// 		unwatch(parent, parentPath, d);
-				// 	};
-				// 	watch(parent, parentPath, d);
-				// })(parent, parentPath);
-
-				watch(parent, parentPath, function(action, path, value) {
-					callback(action, p, value);
-				});
-				return;
-
-			}
-		}
-		*/
 
 
 		// Add to subscriptions
@@ -1959,12 +1957,12 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = /*XElement.batch(*/(/*action, path, value*/) => {
+		let setText = (/*action, path, value*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
 			el.textContent = val;
-		}/*)*/;
+		};
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
 			watch(root, pathFromRoot, setText);
@@ -1982,12 +1980,12 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = /*XElement.batch(*/(/*action, path, value*/) => {
+		let setHtml = (/*action, path, value*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
 			el.innerHTML = val;
-		}/*)*/;
+		};
 
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -2024,7 +2022,7 @@ var bindings = {
 		if (el instanceof XElement && !el.instantiationAttributes['x-loop'] && !el.instantiationAttributes['data-loop'])
 			root = root.shadowRoot || root;
 
-		var rebuildChildren = /*XElement.batch(*/(action, path, value, oldVal, indirect) => {
+		var rebuildChildren = (action, path, value, oldVal, indirect) => {
 
 			// The modification was actually just a child of the loop variable.
 			// The loop variable itself wasn't assigned a new value.
@@ -2159,7 +2157,13 @@ var bindings = {
 			// Save the items on the loop element, so we can compare them to their modified values next time the loop is rebuilt.
 			root.items_ = newItems.slice(); // copy TODO: Should this be el not root?
 
-		}/*)*/;
+			// If it's a select element, reapply its x-val when its children change.
+			// TODO: Should this also be done for <textarea> ?
+			if (el.tagName === 'SELECT' && el.hasAttribute('x-val')) {
+				let code = addThis(replaceVars(el.getAttribute('x-val'), context), context);
+				el.value = safeEval.call(self, code, {el: el});
+			}
+		};
 
 		for (let path of parseVars(foreach)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
@@ -2214,12 +2218,21 @@ var bindings = {
 
 				// Create a property so we can access the parent.
 				// This is often deleted and replaced by watch()
-				Object.defineProperty(el, prop, {
+				let descriptor = {
 					configurable: true,
 					get: function () {
 						return safeEval.call(self, expr);
 					}
-				});
+				};
+
+				// let paths = parseVars(expr);
+				// for (let path of paths)
+				// 	watch(self, path, () => {
+				// 		el[prop] = safeEval.call(self, expr);
+				// 	});
+
+
+				Object.defineProperty(el, prop, descriptor);
 
 
 				// Attempt 2:  fails the props test because
@@ -2523,4 +2536,13 @@ XElement.bindings = bindings;
 XElement.createEl = createEl; // useful for other code.
 window.XElement = XElement;
 
+// Used as a passthrough for xelement attrib debugging.
+window.xdebug = (a) => {
+	debugger;
+	return a;
+};
+window.xlog = (a) => {
+	console.log(a);
+	return a;
+};
 })();

@@ -16,9 +16,10 @@ var handler = {
 			return obj;
 		if (field==='$trigger') {
 			return (path) => {
-				let roots = ProxyObject.get_(obj).roots_;
+				let roots = Util.getRoots(obj);
 				for (let root of roots)
-					root.notify_('set', path || [], obj);
+					Util.notifyCallbacks(root, 'set', path || [], obj);
+					//root.notify_('set', path || [], obj);
 				return roots;
 			}
 		}
@@ -49,6 +50,30 @@ var handler = {
 				throw new XElementError("Double wrapped proxy found.");
 			//#ENDIF
 
+
+			// Get all roots that have pointers to the parent.
+			//let parentProxy = Util.getProxy(obj);
+			Util.addPath(obj, [field], result);
+
+			for (let root of Util.getRoots(obj)) {
+
+				// Get all paths from the roots to the parent.
+				let parentPaths = Util.getPaths(root, obj);
+				for (let parentPath of parentPaths) {
+
+					// Combine each path with the field name.
+					let path = [...parentPath, field];
+
+					// Add to our list of tracked paths.
+					Util.addPath(root, path, result);
+				}
+			}
+
+			return Util.getProxy(result);
+
+
+
+			/*
 			// Get (or create) the single unique instances of obj shared among all roots.
 			// Keeping a shared copy lets us have multiple watchers on the same object,
 			// and notify one when another changes the value.
@@ -67,7 +92,7 @@ var handler = {
 					proxyResult.paths_.set(root, path);
 				//}
 
-			}
+			}*/
 
 			// If setting the value to an object or array, also create a proxy around that one.
 			return proxyResult.proxy_;
@@ -83,13 +108,15 @@ var handler = {
 	 * @param newVal {*}
 	 * @returns {boolean} */
 	set(obj, field, newVal) {
+		newVal = removeProxies(newVal);
 
-		var proxyObj = ProxyObject.get_(obj);
-		for (let root of proxyObj.roots_) {
+		//var proxyObj = Util.getProxy(obj); // ProxyObject.get_(obj);
+
+		//for (let root of proxyObj.roots_) {
+		for (let root of Util.getRoots(obj)) {
 
 			// Don't allow setting proxies on underlying obj.
 			// This removes them recursivly in case of something like newVal=[Proxy(obj)].
-			newVal = removeProxies(newVal);
 			let oldVal = obj[field];
 
 			// Set the value.
@@ -98,8 +125,15 @@ var handler = {
 			obj[field] = newVal;
 
 			// Notify
-			let path = [...proxyObj.getPath_(root), field];
-			root.notify_('set', path, newVal, oldVal);
+			let parentPaths = Util.getPaths(root, obj);
+			for (let parentPath of parentPaths) {
+				let path = [...parentPath, field];
+				Util.notifyCallbacks(root, 'set', path, newVal, oldVal);
+			}
+
+
+			//let path = [...proxyObj.getPath_(root), field];
+			//root.notify_('set', path, newVal, oldVal);
 
 		}
 
@@ -117,17 +151,295 @@ var handler = {
 		else
 			delete obj[field];
 
-		var proxyObj = ProxyObject.get_(obj);
-		for (let root of proxyObj.roots_) {
-			let path = [...proxyObj.getPath_(root), field];
-			root.notify_('delete', path);
+		//let proxyObj = Util.getProxy(obj);
+		let roots = Util.getRoots(obj);
+		for (let root of roots) {
+			let parentPaths = Util.getPaths(root, obj);
+			for (let parentPath of parentPaths) {
+				let path = [...parentPath, field];
+				Util.notifyCallbacks(root, 'set', path);
+			}
 		}
+
+		// var proxyObj = ProxyObject.get_(obj);
+		// for (let root of proxyObj.roots_) {
+		// 	let path = [...proxyObj.getPath_(root), field];
+		// 	root.notify_('delete', path);
+		// }
 
 		return 1; // Proxy requires us to return true.
 	}
 };
 
+
+
+
+
+
+
+
 /**
+ * @property object.$removeProxy; */
+
+// Reorganized version of ProxyRoot and ProxyObject that would support multiple paths from root to obj.
+var Util = {
+
+	/**
+	 * Get or create proxy for an object.
+	 * An object will never have more than one proxy.
+	 * @returns {Proxy} */
+	getProxy: function(obj) {
+		let proxy = Util.proxies.get(obj);
+		if (!proxy) {
+			Util.proxies.set(obj, proxy = new Proxy(obj, handler));
+
+			// TODO: Override array operations on proxy so we can call ProxyObject.rebuildArray(obj).
+
+			if (Array.isArray(obj)) {
+
+				// Because this.proxy_ is a Proxy, we have to replace the functions
+				// on it in this special way by using Object.defineProperty()
+				// Directly assigning this.proxy_.indexOf = ... calls the setter and leads to infinite recursion.
+				for (let func of ['indexOf', 'lastIndexOf', 'includes']) // TODO: Support more array functions.
+
+					Object.defineProperty(proxy, func, {
+						enumerable: false,
+						get: function () {
+							// Return a new indexOf function.
+							return function (item) {
+								return Array.prototype[func].call(obj, removeProxy(item));
+							}
+						}
+					});
+
+				var self = this;
+
+				// Need to intercept all functions like these that perform multiple operations.
+				// That way we set and clear ProxyObj.currentOp while they're happening.
+				// And rebuildChildren() can only be applied at the last one.
+				for (let func of ['push', 'pop', 'splice', 'shift', 'sort', 'reverse', 'unshift'])
+					Object.defineProperty(proxy, func, {
+						enumerable: false,
+						get: function () {
+							// Return a new indexOf function.
+							return function () {
+
+								// Apply array operations on the underlying watched object, so we don't notify a jillion times.
+								let result = Array.prototype[func].apply(obj, arguments);
+
+								// Rebuild the array indices inside the proxy objects.
+								// This is covered by the test Watch.arrayShift2()
+								// TODO: This can be faster if we only update the affected array elements.
+								if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) { // ops that modify within the array.
+
+									//console.log(self.paths_);
+
+									Util.rebuildArray(obj);
+
+								}
+
+								// Trigger a single notfication change, instead of one for eavery sub-operation.
+								proxy.$trigger();
+								return result;
+							}
+						}
+					});
+			}
+		}
+
+		return proxy;
+	},
+
+	/**
+	 * For item, find all proxyRoots and update their paths such that they end with path.
+	 * Then we recurse and do the same for the children, appending to path as we go.
+	 * Ths effectively lets us update the path of all of item's subscribers.
+	 * This is necessary for example when an array is spliced and the paths after the splice need to be updated.
+	 * @param item {object|*[]}
+	 * @param path {string[]=}
+	 * @param visited {WeakSet=} */
+	rebuildArray: function(item, path, visited) {
+		path = path || [];
+		visited = visited || new WeakSet();
+
+		if (visited.has(item))
+			return;
+		visited.add(item);
+
+		if (path.length) {
+
+			let roots = Util.roots.get(item);
+			if (!roots) // because nothing is watching this array element.
+				return;
+
+			for (let root of roots) {
+				let parentPaths = Util.getPaths(root, item);
+				for (let oldPath of parentPaths) {
+
+					// Swap end of oldPath with the new path.
+					let start = oldPath.length - path.length;
+					if (start >= 0)
+						for (let j = start; j < oldPath.length; j++)
+							oldPath[j] = path[j - start];
+				}
+			}
+		}
+
+		// Recurse through children to update their paths too.
+		// This is testesd by the arrayShiftRecurse() test.
+		if (Array.isArray(item))
+			for (let i=0; i<item.length; i++) {
+				if (Array.isArray(item[i]) || isObj(item[i]))
+					Util.rebuildArray(item[i], [...path, i+''], visited);
+			}
+		else if (isObj(item))
+			for (let i in item)
+				if (Array.isArray(item[i]) || isObj(item[i]))
+					Util.rebuildArray(item[i], [...path, i+''], visited);
+	},
+
+	/**
+	 * Get all roots that have paths to obj. */
+	getRoots: function(obj)	{
+		obj = obj.$removeProxy || obj;
+		return Array.from(Util.roots.get(obj) || []);
+	},
+
+	/**
+	 * Register a path from root to obj. */
+	addPath: function(root, path, obj) {
+		obj = obj.$removeProxy || obj;
+		root = root.$removeProxy || root;
+
+		// Add root from obj to path.
+		let a = Util.roots.get(obj);
+		if (!a)
+			Util.roots.set(obj, a = new Set());
+		a.add(root);
+
+		// Get the map from object to paths.
+		let objMap = Util.paths.get(root);
+		if (!objMap)
+			Util.paths.set(root, objMap=new WeakMap());
+
+		// Get the paths
+		let paths = objMap.get(obj);
+		if (!paths)
+			objMap.set(obj, paths = []);
+
+
+		// Add the path if it isn't already registered.
+		for (let existingPath of paths)
+			if (arrayEq(existingPath, path))
+				return;
+		paths.push(path);
+	},
+
+	/**
+	 * Get all paths from root to obj. */
+	getPaths: function(root, obj) {
+		obj = obj.$removeProxy || obj;
+		root = root.$removeProxy || root;
+
+		// Get the map from object to paths.
+		let objMap = Util.paths.get(root);
+		if (!objMap)
+			return [];
+
+		// Get the paths
+		return objMap.get(obj) || [];
+	},
+
+
+	addCallback: function(root, callback) {
+		root = root.$removeProxy || root;
+
+		let callbacks = Util.callbacks.get(root);
+		if (!callbacks)
+			Util.callbacks.set(root, callbacks=[]);
+		callbacks.push(callback);
+	},
+
+	getCallbacks: function(root) {
+		root = root.$removeProxy || root;
+
+		return Util.callbacks.get(root) || [];
+	},
+
+	notifyCallbacks: function(root, action, path, newVal, oldVal) {
+		let callbacks = Util.getCallbacks(root);
+		for (let callback of callbacks)
+			callback(action, path, newVal, oldVal);
+	}
+};
+
+/** @type {WeakMap<object, Proxy>} Map from an object to the Proxy of itself. */
+Util.proxies = new WeakMap();
+
+/** @type {WeakMap<object, Set<object>>} A map from an object to all of its root objects. */
+Util.roots = new WeakMap();
+
+
+/** @type {WeakMap<object, function[]>} A map from roots to the callbacks that should be called when they're changed.. */
+Util.callbacks = new WeakMap();
+
+/**
+ * A map of all paths from a root to an object.
+ * Outer weakmap is indexed by root, inner by object.
+ * @type {WeakMap<object, WeakMap<object, string[][]>>} */
+Util.paths = new WeakMap();
+
+
+
+
+/**
+ * Create a copy of root, where callback() is called whenever anything within object is added, removed, or modified.
+ * Monitors all deeply nested properties including array operations.
+ * Inspired by: stackoverflow.com/q/41299642
+ * @param root {object}
+ * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
+ * @returns {Proxy} */
+var watchProxy = (root, callback) => {
+	//#IFDEV
+	if (!isObj(root))
+		throw new XElementError('Can only watch objects');
+	//#ENDIF
+
+	// Add a path from root to itself, so that when we call Util.getRoots() on a root, we get an empty path.
+	Util.addPath(root, [], root);
+
+	Util.addCallback(root, callback);
+	return Util.getProxy(root);
+
+	// var proxyRoot = ProxyRoot.get_(root);
+	// proxyRoot.callbacks_.push(callback);
+	// return proxyObjects.get(root).proxy_;
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * @deprecated
  * Wrapper around every instance of an object that's being watched.
  * One of these will exist for each object, regardless of how many roots it's in. */
 class ProxyObject {
@@ -172,9 +484,7 @@ class ProxyObject {
 					}
 				});
 
-
 			var self = this;
-
 
 			// Need to intercept all functions like these that perform multiple operations.
 			// That way we set and clear ProxyObj.currentOp while they're happening.
@@ -206,8 +516,6 @@ class ProxyObject {
 						}
 					}
 				});
-
-
 		}
 	}
 
@@ -296,35 +604,8 @@ class ProxyObject {
 }
 
 
-// Reorganized version of ProxyRoot and ProxyObject that would support multiple paths from root to obj.
-// var Util = {
-//
-// 	/**
-// 	 * Get all roots that have paths to obj. */
-// 	getRoots: function(obj)
-// 	{
-//
-// 	},
-//
-// 	getCallbacks: function(root) {
-//
-// 	},
-//
-// 	/**
-// 	 * Register a path from root to obj. */
-// 	addPath: function(root, path, obj) {
-//
-// 	},
-//
-// 	/**
-// 	 * Get all paths from root to obj. */
-// 	getPaths: function(root, obj) {
-//
-// 	}
-// };
-
-
 /**
+ * @deprecated
  * Wrapper around an object that has its descendants being watched.
  * We use a path to get from a ProxyRoot to an instance of a ProxyObject.
  * One ProxyObject may belong to multiple ProxyRoots. */
@@ -366,7 +647,6 @@ class ProxyRoot {
 	}
 }
 
-
 /**
  * @type {WeakMap<object, ProxyRoot>} */
 var proxyRoots = new WeakMap();
@@ -374,23 +654,3 @@ var proxyRoots = new WeakMap();
 /**
  * @type {WeakMap<object, ProxyObject>} */
 var proxyObjects = new WeakMap();  // Map from objects back to their roots.
-
-
-
-
-/**
- * Create a copy of root, where callback() is called whenever anything within object is added, removed, or modified.
- * Monitors all deeply nested properties including array operations.
- * Inspired by: stackoverflow.com/q/41299642
- * @param root {object}
- * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
- * @returns {Proxy} */
-var watchProxy = (root, callback) => {
-	//#IFDEV
-	if (!isObj(root))
-		throw new XElementError('Can only watch objects');
-	//#ENDIF
-	var proxyRoot = ProxyRoot.get_(root);
-	proxyRoot.callbacks_.push(callback);
-	return proxyObjects.get(root).proxy_;
-};

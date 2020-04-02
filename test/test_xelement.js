@@ -122,18 +122,36 @@ ParseVar : {
 
 Watch: {
 
-	init: function() {
-		(function() {
+	watchproxy: {
+
+		simple: function() {
+			var o = {
+				a: [0, 1]
+			};
+
+			var wp = watchProxy(o, (action, path, val)=>{
+				console.log(action, path, val);
+			});
+
+			wp.a[0] = 3;
+
+
+		}
+
+	},
+
+	init: {
+		a: function() {
 			var o = {a: [0, 1]};
 			var wp = new WatchProperties(o);
 			wp.subscribe_(['a'], (action, path, value) => {});
 			assertEq(o.a.length, 2);
 			assertEq(o.a[0], 0);
 			assertEq(o.a[1], 1);
-		})();
+		},
 
 		// Assign proxied.
-		(function() {
+		removeProxy: function() {
 			var b = {
 				items: [{name: 1}]
 			};
@@ -142,10 +160,10 @@ Watch: {
 			// Make sure setting an array with a proxied item inside doesn't add the proxy to the underlying object.
 			b.items = [b.items[0]]; // new array, proxied original object inside.
 			assert(!b.items.$removeProxy[0].$isProxy);
-		})();
+		},
 
 		// Two watchers of the same array, make sure changing it through one path notifies the other.
-		(function() {
+		twoArrays: function() {
 			var b = [1, 2, 3];
 			var ops = [];
 
@@ -161,11 +179,11 @@ Watch: {
 			assertEq(ops.length, 2);
 			assertEq(ops[0], 'b1');
 			assertEq(ops[1], 'b2');
-		})();
+		},
 
 
 		// Watches with roots on both an object and it's sub-property.
-		(function() {
+		twoLevel: function() {
 
 			var a = {
 				b1: {parent: undefined},
@@ -192,10 +210,10 @@ Watch: {
 			assertEq(a.b2[0], 5);
 			assert(called.has('a.b2'));
 			assert(called.has('b1.parent.b2'));
-		})();
+		},
 
 		// Same as above, but with watch() instead of watchProxy.
-		(function() {
+		twoLevel2: function() {
 			var a = {
 				b1: {
 					c: 1,
@@ -222,10 +240,10 @@ Watch: {
 			assertEq(a.b2[0], 5);
 			assert(called.has('a.b2'));
 			assert(called.has('b1.parent.b2'));
-		})();
+		},
 
 		// Test finding proxied items.
-		(function() {
+		find: function() {
 			var b = {
 				items: [{name: 1}]
 			};
@@ -236,7 +254,7 @@ Watch: {
 			});
 
 			b.items.push({name: 2});
-		})();
+		}
 	},
 
 	removeProxy: function() {
@@ -309,14 +327,10 @@ Watch: {
 
 
 		// Make sure path of b has been updated.
-		let pr = proxyRoots.get(o);
-		let po = proxyObjects.get(b.$removeProxy);
-		//debugger;
-		let path = po.getPath_(pr);
+		let path = Util.getPaths(o, b)[0];
 		console.log(path);
 
-		assertEq(path[0], 'items');
-		assertEq(path[1], '0');
+		assertEqDeep(path, ['items', '0']);
 	},
 
 
@@ -347,14 +361,9 @@ Watch: {
 		wp.items.splice(0, 1);
 
 
-		// Make sure path of b has been updated.
-		let pr = proxyRoots.get(o);
-		let po = proxyObjects.get(b.$removeProxy);
-		//debugger;
-		let path = po.getPath_(pr);
-		console.log(path);
+		let path = Util.getPaths(o, b)[0];
 
-		assert(arrayEq(path, ['items', '0', 'parts', '0']));
+		assertEqDeep(path, ['items', '0', 'parts', '0']);
 	},
 
 	unsubscribe: function() {
