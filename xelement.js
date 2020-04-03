@@ -614,6 +614,19 @@ window.parseLoop = parseLoop; // temporary for EditableSelect.;
 
 "use strict";
 
+
+
+/**
+ * @property object.$isProxy
+ * @property object.$removeProxy
+ * @property object.$trigger
+ * */
+
+var arrayRead = ['indexOf', 'lastIndexOf', 'includes'];
+var arrayWrite = ['push', 'pop', 'splice', 'shift', 'sort', 'reverse', 'unshift'];
+
+/**
+ * Handler object used when calling WatchUtil.getProxy() */
 var handler = {
 	/**
 	 * Overridden to wrap returned values in a Proxy, so we can see when they're changed.
@@ -624,28 +637,31 @@ var handler = {
 	get(obj, field) {
 
 		// Special properties
-		if (field==='$isProxy')
-			return true;
-		if (field==='$removeProxy')
-			return obj;
-		if (field==='$trigger') {
-			return (path) => {
-				let roots = ProxyObject.get_(obj).roots_;
-				for (let root of roots)
-					root.notify_('set', path || [], obj);
-				return roots;
+		if (field[0] === '$') {
+			if (field === '$isProxy')
+				return true;
+			if (field === '$removeProxy')
+				return obj;
+			if (field === '$trigger') {
+				return (path) => {
+					let roots = WatchUtil.getRoots(obj);
+					for (let root of roots)
+						WatchUtil.notifyCallbacks(root, 'set', path || [], obj);
+					//root.notify_('set', path || [], obj);
+					return roots;
+				}
 			}
-		}
 
-		// Debugging functions
-		if (field==='$roots')
-			return ProxyObject.get_(obj).roots_;
-		if (field==='$subscribers') {
-			return Array.from(ProxyObject.get_(obj).roots_)
-				.map((x) => x.callbacks_)
-				.reduce((a, b) => [...a, ...b])
-				.map((x) => x('info'))
-				.reduce((a, b) => [...a, ...b])
+			// Debugging functions
+			if (field === '$roots')
+				return WatchUtil.getRoots(obj);
+			if (field === '$subscribers') {
+				return Array.from(WatchUtil.getRoots(obj))
+					.map((x) => x.callbacks_)
+					.reduce((a, b) => [...a, ...b])
+					.map((x) => x('info'))
+					.reduce((a, b) => [...a, ...b])
+			}
 		}
 
 
@@ -663,28 +679,18 @@ var handler = {
 				throw new XElementError("Double wrapped proxy found.");
 			//#ENDIF
 
-			// Get (or create) the single unique instances of obj shared among all roots.
-			// Keeping a shared copy lets us have multiple watchers on the same object,
-			// and notify one when another changes the value.
-			let proxyObj = ProxyObject.get_(obj);
-			let proxyResult = ProxyObject.get_(result, proxyObj.roots_);
+			// Make sure the path from the root to the object's field is tracked:
+			let roots = WatchUtil.getRoots(obj);
+			for (let root of roots) { // Get all paths from the roots to the parent.
+				let parentPaths = WatchUtil.getPaths(root, obj);
+				for (let parentPath of parentPaths) {
 
-			// Keep track of paths.
-			// Paths are built recursively as we descend, by getting the parent path and adding the new field.
-			for (let root of proxyObj.roots_) {
-				//let path = proxyResult.paths_.get(root);
-
-				// Set path for the first time.
-				//if (!path) {
-					let parentPath = proxyObj.getPath_(root);
-					let path = [...parentPath, field];
-					proxyResult.paths_.set(root, path);
-				//}
-
+					// Combine each path with the field name.
+					WatchUtil.addPath(root, [...parentPath, field], result); // Add to our list of tracked paths.
+				}
 			}
 
-			// If setting the value to an object or array, also create a proxy around that one.
-			return proxyResult.proxy_;
+			return WatchUtil.getProxy(result);
 		}
 		return result;
 	},
@@ -697,24 +703,25 @@ var handler = {
 	 * @param newVal {*}
 	 * @returns {boolean} */
 	set(obj, field, newVal) {
+		newVal = removeProxies(newVal);
 
-		var proxyObj = ProxyObject.get_(obj);
-		for (let root of proxyObj.roots_) {
+		// Don't allow setting proxies on underlying obj.
+		// This removes them recursivly in case of something like newVal=[Proxy(obj)].
+		let oldVal = obj[field];
 
-			// Don't allow setting proxies on underlying obj.
-			// This removes them recursivly in case of something like newVal=[Proxy(obj)].
-			newVal = removeProxies(newVal);
-			let oldVal = obj[field];
+		// Set the value.
+		// TODO: This can trigger notification if field was created on obj by defineOwnProperty()!
+		// Should I use .$disableWatch?
+		obj[field] = newVal;
 
-			// Set the value.
-			// TODO: This can trigger notification if field was created on obj by defineOwnProperty()!
-			// Should I use .$disableWatch?
-			obj[field] = newVal;
 
-			// Notify
-			let path = [...proxyObj.getPath_(root), field];
-			root.notify_('set', path, newVal, oldVal);
-
+		let roots = WatchUtil.getRoots(obj);
+		for (let root of roots) { // Notify
+			let parentPaths = WatchUtil.getPaths(root, obj);
+			for (let parentPath of parentPaths) {
+				let path = [...parentPath, field];
+				WatchUtil.notifyCallbacks(root, 'set', path, newVal, oldVal);
+			}
 		}
 
 		return 1; // Proxy requires us to return true.
@@ -731,263 +738,277 @@ var handler = {
 		else
 			delete obj[field];
 
-		var proxyObj = ProxyObject.get_(obj);
-		for (let root of proxyObj.roots_) {
-			let path = [...proxyObj.getPath_(root), field];
-			root.notify_('delete', path);
+		let roots = WatchUtil.getRoots(obj);
+		for (let root of roots) {
+			let parentPaths = WatchUtil.getPaths(root, obj);
+			for (let parentPath of parentPaths) {
+				let path = [...parentPath, field];
+				WatchUtil.notifyCallbacks(root, 'set', path);
+			}
 		}
 
 		return 1; // Proxy requires us to return true.
 	}
 };
 
-/**
- * Wrapper around every instance of an object that's being watched.
- * One of these will exist for each object, regardless of how many roots it's in. */
-class ProxyObject {
-	constructor(obj, roots) {
-
-		/**
-		 * One shared proxy.
-		 * @type Proxy */
-		this.proxy_ = new Proxy(obj, handler);
-
-		/**
-		 * A map of every root that has a subscription to this object and the path from that root to the object.
-		 * Can have multiple paths, one per root.
-		 *
-		 * TODO: This fails if one ProxyRoot references an object twice from different paths!!!
-		 * Instead we need to track ALL paths from a proxyroot to this object!
-		 *
-		 * @type {WeakMap<ProxyRoot, string[][]>} */
-		this.paths_ = new WeakMap();
-
-		/**
-		 *  One object can belong to multiple roots.
-		 * @type {Set<ProxyRoot>} */
-		this.roots_ = new Set(roots || []);
-
-		// Modify array functions to search for unproxied values:
-		// TODO: .$removeProxy doesn't remove these functions from the array!
-		if (Array.isArray(this.proxy_)) {
-
-			// Because this.proxy_ is a Proxy, we have to replace the functions
-			// on it in this special way by using Object.defineProperty()
-			// Directly assigning this.proxy_.indexOf = ... calls the setter and leads to infinite recursion.
-			for (let func of ['indexOf', 'lastIndexOf', 'includes']) // TODO: Support more array functions.
-
-				Object.defineProperty(this.proxy_, func, {
-					enumerable: false,
-					get: function() {
-						// Return a new indexOf function.
-						return function (item) {
-							return Array.prototype[func].call(obj, removeProxy(item));
-						}
-					}
-				});
 
 
-			var self = this;
 
 
-			// Need to intercept all functions like these that perform multiple operations.
-			// That way we set and clear ProxyObj.currentOp while they're happening.
-			// And rebuildChildren() can only be applied at the last one.
-			for (let func of ['push', 'pop', 'splice', 'shift', 'sort', 'reverse', 'unshift'])
-				Object.defineProperty(this.proxy_, func, {
-					enumerable: false,
-					get: function() {
-						// Return a new indexOf function.
-						return function () {
 
-							// Apply array operations on the underlying watched object, so we don't notify a jillion times.
-							let result =  Array.prototype[func].apply(obj, arguments);
+var WatchUtil = {
 
-							// Rebuild the array indices inside the proxy objects.
-							// This is covered by the test Watch.arrayShift2()
-							// TODO: This can be faster if we only update the affected array elements.
-							if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) { // ops that modify within the array.
+	/**
+	 * Get or create proxy for an object.
+	 * An object will never have more than one proxy.
+	 * @returns {Proxy} */
+	getProxy: function(obj) {
+		let proxy = WatchUtil.proxies.get(obj);
+		if (!proxy) {
+			WatchUtil.proxies.set(obj, proxy = new Proxy(obj, handler));
 
-								console.log(self.paths_);
+			if (Array.isArray(obj)) {
 
-								ProxyObject.rebuildArray(obj);
+				// Because this.proxy_ is a Proxy, we have to replace the functions
+				// on it in this special way by using Object.defineProperty()
+				// Directly assigning this.proxy_.indexOf = ... calls the setter and leads to infinite recursion.
+				for (let func of arrayRead) // TODO: Support more array functions.
 
+					Object.defineProperty(proxy, func, {
+						enumerable: false,
+						get: () => // Return a new version of indexOf or the other functions.
+							(item) => Array.prototype[func].call(obj, removeProxy(item))
+					});
+
+				/*
+				 * Intercept array modification functions so that we only send one nofication instead
+				 * of a notification every time an array item is moved (shift, unshift, splice) or the length changes. */
+				for (let func of arrayWrite)
+					Object.defineProperty(proxy, func, {
+						configurable: true,
+						enumerable: false,
+						get: () =>
+
+							// Return a new version of push or the other functions.
+							function () {
+
+								let originalLength = obj.length;
+								var startIndex = 0;
+								if (func === 'push' || func === 'pop')
+									startIndex = originalLength;
+								else if (func === 'splice')
+									startIndex = arguments[0] < 0 ? originalLength - arguments[0] : arguments[0];
+
+
+								// Apply array operations on the underlying watched object, so we don't notify a jillion times.
+								let result = Array.prototype[func].apply(obj, arguments);
+
+								// Rebuild the array indices inside the proxy objects.
+								// This is covered by the test Watch.arrayShift2()
+								// TODO: This can be faster if we only update the affected array elements.
+								if (['splice', 'shift', 'sort', 'reverse', 'unshift'].includes(func)) { // ops that modify within the array.
+									WatchUtil.rebuildArray(obj, startIndex, null, null);
+								}
+
+								// Trigger a notification for every array element changed, instead of one for eavery sub-operation.
+								// Commented out because it messes up xloops.
+								/*
+								let roots = WatchUtil.getRoots(obj);
+								for (let root of roots) {
+									let parentPaths = WatchUtil.getPaths(root, obj);
+									for (let parentPath of parentPaths) {
+										for (var i = startIndex; i < proxy.length; i++)
+											WatchUtil.notifyCallbacks(root, 'set', [...parentPath, i + ''], obj[i]);
+										for (i; i<originalLength; i++)
+											WatchUtil.notifyCallbacks(root, 'delete', [...parentPath, i + '']);
+									}
+								}
+								*/
+
+								// Old version that notifies for the whole array instead of only the items changed:
+								proxy.$trigger();
+
+								return result;
 							}
-
-							// Trigger a single notfication change.
-							self.proxy_.$trigger();
-							return result;
-						}
-					}
-				});
-
-
+					});
+			}
 		}
-	}
+
+		return proxy;
+	},
 
 	/**
 	 * For item, find all proxyRoots and update their paths such that they end with path.
 	 * Then we recurse and do the same for the children, appending to path as we go.
 	 * Ths effectively lets us update the path of all of item's subscribers.
 	 * This is necessary for example when an array is spliced and the paths after the splice need to be updated.
-	 * @param item {object|*[]}
+	 * @param obj {object|*[]}
+	 * @param startIndex {int?} If set, only rebuild array elements at and after this index.
 	 * @param path {string[]=}
 	 * @param visited {WeakSet=} */
-	static rebuildArray(item, path, visited) {
+	rebuildArray: function(obj, startIndex, path, visited) {
 		path = path || [];
 		visited = visited || new WeakSet();
+		if (startIndex === undefined)
+			startIndex = 0;
 
-		if (visited.has(item))
+		if (visited.has(obj))
 			return;
-		visited.add(item);
+		visited.add(obj);
 
 		if (path.length) {
-			let itemPo = proxyObjects.get(item.$removeProxy || item); // Get the ProxyObject for this item.
-			if (!itemPo)
-				return; // because nothing is watching this array element.
 
-			// Update all paths
-			let map = itemPo.getAllRootsAndPaths_(); // Get all roots and the paths that point to this array item.
-			for (let [root, oldPath] of map) {
+			let roots = WatchUtil.roots.get(obj);
+			if (!roots) // because nothing is watching this array element.
+				return;
 
-				// Swap end of oldPath with the new path.
-				let start = oldPath.length - path.length;
-				if (start >= 0)
-					for (let j = start; j < oldPath.length; j++)
-						oldPath[j] = path[j - start];
+			for (let root of roots) {
+				let parentPaths = WatchUtil.getPaths(root, obj);
+				for (let i in parentPaths) {
+					let oldPath = parentPaths[i];
+
+					// Swap end of oldPath with the new path if the new path  points from root to obj.
+					let start = oldPath.length - path.length;
+					if (start >= 0) {
+
+						// Create the newPath.
+						let newPath = oldPath.slice();
+						for (let j = start; j < oldPath.length; j++)
+							newPath[j] = path[j - start];
+
+
+						// See if newPath is a valid path from root to obj.
+						let item = root;
+						for (let field of newPath) {
+							item = item[field];
+							if (!item)
+								break;
+						}
+
+						// Update the path.
+						if (item === obj)
+							parentPaths[i] = newPath;
+					}
+				}
 			}
 		}
 
+
 		// Recurse through children to update their paths too.
 		// This is testesd by the arrayShiftRecurse() test.
-		if (Array.isArray(item))
-			for (let i=0; i<item.length; i++) {
-				if (Array.isArray(item[i]) || isObj(item[i]))
-					ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
+		if (Array.isArray(obj))
+			for (let i=startIndex; i<obj.length; i++) {
+				if (Array.isArray(obj[i]) || isObj(obj[i]))
+					WatchUtil.rebuildArray(obj[i], 0, [...path, i+''], visited);
 			}
-		else if (isObj(item))
-			for (let i in item)
-				if (Array.isArray(item[i]) || isObj(item[i]))
-					ProxyObject.rebuildArray(item[i], [...path, i+''], visited);
-	}
+		else if (isObj(obj))
+			for (let i in obj)
+				if (Array.isArray(obj[i]) || isObj(obj[i]))
+					WatchUtil.rebuildArray(obj[i], 0, [...path, i+''], visited);
+	},
 
 	/**
-	 * Get a map of all root objects watching this object, and the path from those roots to this object.
-	 * @returns {Map} */
-	getAllRootsAndPaths_() {
-		let result = new Map();
-		for (let root of this.roots_)
-			result.set(root, this.getPath_(root));
-		return result;
-	}
-
-	/**
-	 * Get the path from the root to this object.
-	 * @param root {object}
-	 * @returns {string[]} */
-	getPath_(root) {
-		return this.paths_.get(root) || [];
-	}
-
-	/**
-	 * Get the ProxyObject for a given object.
-	 * @param obj {object}
-	 * @param roots {object[]|Set<object>=} Roots to add to new or existing object.
-	 * @returns {ProxyObject} */
-	static get_(obj, roots) {
+	 * Get all roots that have paths to obj.
+	 * @param obj
+	 * @returns {Set.<Object>|Array} An iterable list. */
+	getRoots: function(obj)	{
 		obj = obj.$removeProxy || obj;
-
-		var result = proxyObjects.get(obj);
-		if (!result)
-			proxyObjects.set(obj, result = new ProxyObject(obj, roots));
-
-		// Merge in new roots
-		else if (roots)
-			result.roots_ = new Set([...result.roots_, ...roots]);
-
-		return result;
-	}
-}
-
-
-// Reorganized version of ProxyRoot and ProxyObject that would support multiple paths from root to obj.
-// var Util = {
-//
-// 	/**
-// 	 * Get all roots that have paths to obj. */
-// 	getRoots: function(obj)
-// 	{
-//
-// 	},
-//
-// 	getCallbacks: function(root) {
-//
-// 	},
-//
-// 	/**
-// 	 * Register a path from root to obj. */
-// 	addPath: function(root, path, obj) {
-//
-// 	},
-//
-// 	/**
-// 	 * Get all paths from root to obj. */
-// 	getPaths: function(root, obj) {
-//
-// 	}
-// };
-
-
-/**
- * Wrapper around an object that has its descendants being watched.
- * We use a path to get from a ProxyRoot to an instance of a ProxyObject.
- * One ProxyObject may belong to multiple ProxyRoots. */
-class ProxyRoot {
-	constructor(root) {
-
-		/**
-		 * Root element we're watching.
-		 * @type object */
-		this.root_ = root;
-
-		/**
-		 * Functions to call when an object changes.
-		 * @type {function[]} */
-		this.callbacks_ = [];
-
-		// Add root to the ProxyObjects.
-		var po = ProxyObject.get_(root);
-		po.roots_.add(this);
-	}
+		return WatchUtil.roots.get(obj) || [];
+	},
 
 	/**
-	 * Notification sent when any of the root's properties changes. */
-	notify_(/*action, path, value*/) {
-		for (let callback of this.callbacks_)
-			callback.apply(this.root_, arguments);
-	}
-
-	/**
-	 * @param root {object}
-	 * @returns {ProxyRoot} */
-	static get_(root) {
+	 * Register a path from root to obj. */
+	addPath: function(root, path, obj) {
+		obj = obj.$removeProxy || obj;
 		root = root.$removeProxy || root;
 
-		var po = proxyRoots.get(root);
-		if (!po)
-			proxyRoots.set(root, po = new ProxyRoot(root));
-		return po;
+		// Add root from obj to path.
+		let a = WatchUtil.roots.get(obj);
+		if (!a)
+			WatchUtil.roots.set(obj, a = new Set());
+		a.add(root);
+
+		// Get the map from object to paths.
+		let objMap = WatchUtil.paths.get(root);
+		if (!objMap)
+			WatchUtil.paths.set(root, objMap=new WeakMap());
+
+		// Get the paths
+		let paths = objMap.get(obj);
+		if (!paths)
+			objMap.set(obj, [path]);
+
+		// Add the path if it isn't already registered.
+		// TODO: This could possibly be faster if the javascript Set could index by arrays.
+		else {
+			for (let existingPath of paths) {
+
+				// If the new path begins with existingPath, don't add it.
+				// Because now we're just expanding more paths from circular references.
+				// TODO: If slow this could be sped up by doing this inline.
+				let newPath = path;
+				if (newPath.length > existingPath.length)
+					newPath = path.slice(0, existingPath.length);
+
+				if (arrayEq(existingPath, newPath))
+					return;
+			}
+			paths.push(path);
+		}
+	},
+
+	/**
+	 * Get all paths from root to obj. */
+	getPaths: function(root, obj) {
+		obj = obj.$removeProxy || obj;
+		root = root.$removeProxy || root;
+
+		// Get the map from object to paths.
+		let objMap = WatchUtil.paths.get(root);
+		if (!objMap)
+			return [];
+
+		// Get the paths
+		return objMap.get(obj) || [];
+	},
+
+
+	addCallback: function(root, callback) {
+		root = root.$removeProxy || root;
+
+		let callbacks = WatchUtil.callbacks.get(root);
+		if (!callbacks)
+			WatchUtil.callbacks.set(root, callbacks=[]);
+		callbacks.push(callback);
+	},
+
+	getCallbacks: function(root) {
+		root = root.$removeProxy || root;
+		return WatchUtil.callbacks.get(root) || [];
+	},
+
+	notifyCallbacks: function(root, action, path, newVal, oldVal) {
+		let callbacks = WatchUtil.getCallbacks(root);
+		for (let callback of callbacks)
+			callback(action, path, newVal, oldVal);
 	}
-}
+};
 
+/** @type {WeakMap<object, Proxy>} Map from an object to the Proxy of itself. */
+WatchUtil.proxies = new WeakMap();
+
+/** @type {WeakMap<object, Set<object>>} A map from an object to all of its root objects. */
+WatchUtil.roots = new WeakMap();
+
+
+/** @type {WeakMap<object, function[]>} A map from roots to the callbacks that should be called when they're changed.. */
+WatchUtil.callbacks = new WeakMap();
 
 /**
- * @type {WeakMap<object, ProxyRoot>} */
-var proxyRoots = new WeakMap();
-
-/**
- * @type {WeakMap<object, ProxyObject>} */
-var proxyObjects = new WeakMap();  // Map from objects back to their roots.
+ * A map of all paths from a root to an object.
+ * Outer weakmap is indexed by root, inner by object.
+ * @type {WeakMap<object, WeakMap<object, string[][]>>} */
+WatchUtil.paths = new WeakMap();
 
 
 
@@ -1004,10 +1025,15 @@ var watchProxy = (root, callback) => {
 	if (!isObj(root))
 		throw new XElementError('Can only watch objects');
 	//#ENDIF
-	var proxyRoot = ProxyRoot.get_(root);
-	proxyRoot.callbacks_.push(callback);
-	return proxyObjects.get(root).proxy_;
-};;
+
+	// Add a path from root to itself, so that when we call WatchUtil.getRoots() on a root, we get an empty path.
+	WatchUtil.addPath(root, [], root);
+
+	WatchUtil.addCallback(root, callback);
+	return WatchUtil.getProxy(root);
+};
+
+;
 
 
 var removeProxy = (obj) => isObj(obj) ? obj.$removeProxy || obj : obj;
@@ -2026,8 +2052,27 @@ var bindings = {
 
 			// The modification was actually just a child of the loop variable.
 			// The loop variable itself wasn't assigned a new value.
-			if (indirect)
+			if (indirect) {
+
+				/*
+				// If deleting a single item from a list.
+				// Commented out because this would only work with simple variables.
+				// Maybe later I can find a better way.
+				if (action==='delete') {
+
+					debugger;
+					let loopItem = traversePath(self, path.slice(0, -1));
+					//if (loopItem === el) {
+						let index = path.slice(-1)[0];
+						let loopEl = el.shadowRoot || el;
+						let child = loopEl.children[index];
+						unbindEl(child);
+						root.removeChild(child);
+					//}
+				}*/
 				return;
+
+			}
 
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
@@ -2330,7 +2375,7 @@ var bindings = {
 				// Because a notification will cause data-loop's rebuildChildren() to be called
 				// And Sortable has already rearranged the elements.
 				let array = traversePath(newSelf, path, true, newArray, true);
-				ProxyObject.rebuildArray(array);
+				WatchUtil.rebuildArray(array); // TODO: Send startIndex
 				rebindLoopChildren(newSelf, event.to, context, oldSelf); // But we still need to unbind and rebind them in their currnet positions.
 				traversePath(newSelf, path).$trigger(); // This won't trigger rebuilding our own children because their order already matches.
 
@@ -2345,7 +2390,7 @@ var bindings = {
 					let oldPath = parseVars(foreach)[0];
 
 					let array = traversePath(oldSelf, oldPath, true, oldArray, true);
-					ProxyObject.rebuildArray(array);
+					WatchUtil.rebuildArray(array);
 					rebindLoopChildren(oldSelf, event.from, context);
 					traversePath(oldSelf, oldPath).$trigger();
 				}

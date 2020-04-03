@@ -15,10 +15,10 @@ class Inventory extends XElement {
 Inventory.html = `
     <div>
         <button onclick="addItem()">Add Item</button>
-        <div data-loop="items:item">
+        <div x-loop="items:item">
             <div>
-                <input data-val="item.name">
-                <input data-val="item.qty">
+                <input x-val="item.name">
+                <input x-val="item.qty">
             </div>
         </div>
     </div>`;
@@ -32,7 +32,7 @@ document.body.append(inv);
 Features:
 
 - Model-View-Vie Model (MVVM) pattern for convenient data binding.
-- Only **8KB** minified!  Or smaller when gzipped.
+- Only **15KB** minified!  Or smaller when gzipped.
 - Zero dependencies.  Just include xelement.js or xelement.min.js.
 - Doesn't take over your whole project.  Use it only where you need it.
 - Uses standard html.  No need to learn a templating language.
@@ -183,17 +183,17 @@ Named slots:
 
 ## Data Binding
 
-XElement performs data-binding with any element that has an attribute name with the *data-* prefix.
+XElement performs data-binding with any element that has an attribute name with the `x-` prefix.  If your IDE doesn't like custom attribute names, you can instead use the `data-` prefix for all attributes.
 
 ### Attributes
 
-Attributes are bound to class properties with the `data-name` attribute, where *name* can be any valid html attribute.  The value of these attributes can be any valid html code:
+Attributes are bound to class properties with the `x-name` attribute, where *name* can be any valid html attribute.  The value of these attributes can be any valid html code:
 
 ```javascript
 class Car extends XElement {}
 Car.html = `
-    <div data-title="this.hoverText + 'Do it now!'">
-        <input data-required="mustHaveDriver">
+    <div x-title="this.hoverText + 'Do it now!'">
+        <input x-required="mustHaveDriver">
     </div>`;
 var car = new Car();
 car.mustHaveDriver = true;  // Sets required attribute on input.
@@ -201,7 +201,59 @@ car.mustHaveDriver = false; // Removes required attribute.
 car.hoverText = 'Get in! '; // Sets title to "Get in! Do it now!"
 ```
 
-Variables are automatically created on the class instance if they don't already exist.  Note that the `this.` prefix is optional when the expression is a standalone variable and nothing more.  Complex expressions require the `this.` prefix when referencing class properties
+### Text and Html
+
+TODO
+
+### Val
+
+`x-val` is used to bind input, select, textarea, and contenteditable form elements to a class field.  
+
+If the bound variable is standalone (see below), then a special two-way data binding for form elements.  It's two way because not only is the html updated when the class property changes, but the class property is also changed when a user interacts with the bound form element.
+
+### Visible
+
+The `x-visible` attribute sets an element to be display: none if it evaluates to a false-like value.
+
+### Classes
+
+The `x-classes` attribute allows toggling classes on or off  when an expression evaluates to true or false.  The code below renders the span as `<span class="big isScary">It's a monster!</span>`
+
+```javascript
+class Monster extends XElement {}
+Monster.html = `
+    <div>
+        <span x-classes="big: this.height>10, scary: isScary">It's a monster!</span>
+    </div>`;
+var m = new Monster();
+m.height = 11;
+m.isScary = true;
+```
+
+### Loop
+
+```javascript
+class Car extends XElement {}
+Car.html = `
+    <div data-loop="wheels: wheel">
+        <span x-text="wheel.name"></span>
+    </div>`;
+var car = new Car();
+car.wheels = [
+    {name: 'front-left'}, 
+    {name: 'front-right'},
+    {name: 'rear-left'},
+    {name: 'rear-right'}
+];
+```
+
+
+
+## Special Cases
+
+### Automatic "this"
+
+In x- binding attributes, variables are automatically created on the class instance if they don't already exist.  Note that the `this.` prefix is optional when the expression is a standalone variable and nothing more.  Complex expressions require the `this.` prefix when referencing class properties
 
 #### What counts as a standalone variable?
 
@@ -219,69 +271,51 @@ These expressions are not standalone variables:
 - cats[myCat]
 - window.location
 
-### Text and Html
+### Duplicate References
 
-TODO
-
-### Val
-
-`data-val` is a special two-way data binding for form elements.  It's two way because not only is the html updated when the class property changes, but the class property is also changed when a user interacts with a `data-val` bound form element:
-
-### Visible
-
-The `data-visible` attribute sets an element to be display: none if it evaluates to a false-like value.
-
-### Classes
-
-The `data-classes` attribute allows toggling classes on or off  when an expression evaluates to true or false.  The code below renders the span as `<span class="big isScary">It's a monster!</span>`
+Be careful when binding to an object that contains the same instance of another object twice:
 
 ```javascript
-class Monster extends XElement {}
-Monster.html = `
+class CatHouse extends XElement {}
+CatHouse.html = `
     <div>
-        <span data-classes="big: this.height>10, scary: isScary">It's a monster!</span>
+        <span id="span" x-text="this.cat1.name"></span>
     </div>`;
-var m = new Monster();
-m.height = 11;
-m.isScary = true;
+
+var c = new CatHouse();
+document.body.appendChild(c);
+
+var myCat = {name: 'Fluffy'};
+c.cat1 = myCat;
+c.cat2 = myCat;
+
+c.cat2.name = 'Fluffy Jr.'; // Fails to update span b/c the binding is on cats.cat1!
+c.cat1.name = 'Fluffy Jr.'; // works
 ```
 
-
-
-### Loop
-
-```javascript
-class Car extends XElement {}
-Car.html = `
-    <div data-loop="wheels: wheel">
-        <span data-text="wheel.name"></span>
-    </div>`;
-var car = new Car();
-car.wheels = [
-    {name: 'front-left'}, 
-    {name: 'front-right'},
-    {name: 'rear-left'},
-    {name: 'rear-right'}
-];
-```
-
-
+Updating the myCat instance at the cat2 path fails because only the cat1 reference is watched.  Nothing subscribes to the cat2 instance so changes made to it are not tracked.
 
 ## Events
 
 TODO
 
-## WAtch
+## Watch
 
 ### Proxies
 
-TODO: isProxy, removeProxy
+TODO: $isProxy, $removeProxy
+
+
+
+## Styling
+
+TODO
 
 ## Missing / Future Features
 
 - XElement can only bind to JavaScript variables names that use standard ascii.
 - Performance improvements
-- More data- binding attributes.
+- More x- binding attributes.
 - Support for non-beta versions of Microsoft Edge.
 
 

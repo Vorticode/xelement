@@ -120,193 +120,107 @@ ParseVar : {
 	}
 },
 
-Watch: {
 
-	watchproxy: {
-
-		simple: function() {
-			var o = {
-				a: [0, 1]
-			};
-
-			var wp = watchProxy(o, (action, path, val)=>{
-				console.log(action, path, val);
-			});
-
-			wp.a[0] = 3;
+WatchProxy: {
 
 
-		}
-
-	},
-
-	init: {
-		a: function() {
-			var o = {a: [0, 1]};
-			var wp = new WatchProperties(o);
-			wp.subscribe_(['a'], (action, path, value) => {});
-			assertEq(o.a.length, 2);
-			assertEq(o.a[0], 0);
-			assertEq(o.a[1], 1);
-		},
-
-		// Assign proxied.
-		removeProxy: function() {
-			var b = {
-				items: [{name: 1}]
-			};
-			watch(b, 'items', ()=>{});
-
-			// Make sure setting an array with a proxied item inside doesn't add the proxy to the underlying object.
-			b.items = [b.items[0]]; // new array, proxied original object inside.
-			assert(!b.items.$removeProxy[0].$isProxy);
-		},
-
-		// Two watchers of the same array, make sure changing it through one path notifies the other.
-		twoArrays: function() {
-			var b = [1, 2, 3];
-			var ops = [];
-
-			var b1 = watchProxy(b, function(action, path, value) {
-				ops.push('b1');
-			});
-			var b2 = watchProxy(b, function(action, path, value) {
-				ops.push('b2');
-			});
-
-			b2[0] = 5;
-
-			assertEq(ops.length, 2);
-			assertEq(ops[0], 'b1');
-			assertEq(ops[1], 'b2');
-		},
-
-
-		// Watches with roots on both an object and it's sub-property.
-		twoLevel: function() {
-
-			var a = {
-				b1: {parent: undefined},
-				b2: [1, 2]
-			};
-			a.b1.parent = a;
-			var called = new Set();
-
-			var aW = watchProxy(a, (action, path, value) => {
-				called.add('a.b2');
-			});
-
-			var bW = watchProxy(a.b1, (action, path, value) => {
-				called.add('b1.parent.b2');
-			});
-
-			// Trigger proxies to be created via get, just in case that's needed.
-			var v = aW.b1.parent.b2[0];
-			v = bW.parent;
-			v = v.b2[0];
-
-			var b2 = bW.parent.b2[0] = 5;
-
-			assertEq(a.b2[0], 5);
-			assert(called.has('a.b2'));
-			assert(called.has('b1.parent.b2'));
-		},
-
-		// Same as above, but with watch() instead of watchProxy.
-		twoLevel2: function() {
-			var a = {
-				b1: {
-					c: 1,
-					parent: undefined
-				},
-				b2: [1, 2]
-			};
-			a.b1.parent = a;
-			var called = new Set();
-
-			var cb1 = function(action, path, value) {
-				called.add('a.b2');
-			};
-			watch(a, ['b2'], cb1);
-
-			var cb2 = function(action, path, value) {
-				called.add('b1.parent.b2');
-			};
-			watch(a.b1, ['parent', 'b2'], cb2);
-
-
-			a.b1.parent.b2[0] = 5;
-
-			assertEq(a.b2[0], 5);
-			assert(called.has('a.b2'));
-			assert(called.has('b1.parent.b2'));
-		},
-
-		// Test finding proxied items.
-		find: function() {
-			var b = {
-				items: [{name: 1}]
-			};
-			watch(b, 'items', ()=>{
-				var item = b.items[0];
-				var i = b.items.indexOf(item);
-				assertEq(i, 0);
-			});
-
-			b.items.push({name: 2});
-		}
-	},
-
-	removeProxy: function() {
-
-		(function() {
-			var o = {
-				a: {
-					c: undefined
-				},
-				b: undefined
-			};
-			watch(o, ['a'], ()=>{});
-
-			console.log(o.a.$removeProxy.c);
-		})();
-
-	},
-
-	pop: function() {
-
-		var o = { a: [0, 1] };
+	init: function() {
+		var o = {a: [0, 1]};
 		var wp = new WatchProperties(o);
-		wp.subscribe_(['a', 0], (action, path, value) => {});
-		wp.subscribe_(['a', 1], (action, path, value) => {});
+		wp.subscribe_(['a'], (action, path, value) => {});
+		assertEq(o.a.length, 2);
+		assertEq(o.a[0], 0);
+		assertEq(o.a[1], 1);
+	},
 
-		assert(wp.subs_);
-		o.a.pop();
+	simple: function() {
+		var o = {
+			a: [0, 1]
+		};
 
-		assert(wp.subs_); // doesn't remove the watch.  But I think that's correct behavior.
+		let log = [];
+		var wp = watchProxy(o, (action, path, val)=>{
+			log.push([action, path, val]);
+		});
+
+		wp.a[0] = 3;
+		assertEqDeep(log, [['set', ['a', '0'], 3]]);
+	},
+
+
+
+	// Two watchers of the same array, make sure changing it through one path notifies the other.
+	twoArrays: function() {
+		var b = [1, 2, 3];
+		var ops = [];
+
+		var b1 = watchProxy(b, function(action, path, value) {
+			ops.push('b1');
+		});
+		var b2 = watchProxy(b, function(action, path, value) {
+			ops.push('b2');
+		});
+
+		b2[0] = 5;
+
+		assertEq(ops.length, 2);
+		assertEq(ops[0], 'b1');
+		assertEq(ops[1], 'b2');
+	},
+
+
+	// Watches with roots on both an object and it's sub-property.
+	twoLevel: function() {
+
+		var a = {
+			b1: {parent: undefined},
+			b2: [1, 2]
+		};
+		a.b1.parent = a;
+		var called = new Set();
+
+		var aW = watchProxy(a, (action, path, value) => {
+			called.add('a.b2');
+		});
+
+		var bW = watchProxy(a.b1, (action, path, value) => {
+			called.add('b1.parent.b2');
+		});
+
+		// Trigger proxies to be created via get, just in case that's needed.
+		var v = aW.b1.parent.b2[0];
+		v = bW.parent;
+		v = v.b2[0];
+
+		var b2 = bW.parent.b2[0] = 5;
+
+		assertEq(a.b2[0], 5);
+		assert(called.has('a.b2'));
+		assert(called.has('b1.parent.b2'));
 	},
 
 	arrayShift: function() {
 
 		var o = { a: [0, 1] };
-		var wp = new WatchProperties(o);
 		var ops = [];
-		wp.subscribe_(['a'], function(action, path, value) {
-			ops.push(Array.from(arguments));
+
+		var wp = watchProxy(o, function(action, path, value) {
+			ops.push([action, path, value]);
 		});
 
-		o.a.shift(); // remove the 0 from the beginning.
+		wp.a.shift(); // remove the 0 from the beginning.
 
-		assertEq(o.a.length, 1);
-		assertEq(o.a[0], 1);
+		assertEq(wp.a.length, 1);
+		assertEq(wp.a[0], 1);
 
 		// Make sure we only have one op
-		assertEq(JSON.stringify(ops[0].slice(0, 3)), '["set",["a"],[1]]');
+		assertEqDeep(ops[0].slice(0, 3), ["set", [], [1]]);
 		assertEq(ops.length, 1);
 
-		// Old, from when we notified of every sub-operation:
-		//assertEq(JSON.stringify(ops[0]), '["set",["a","0"],1]');
-		//assertEq(JSON.stringify(ops[1]), '["delete",["a","1"]]');
+		// assertEqDeep(ops, [
+		// 	['set', ['a', '0'], 1],
+		// 	['delete', ['a', '1'], undefined]
+		// ]);
 	},
 
 
@@ -327,8 +241,7 @@ Watch: {
 
 
 		// Make sure path of b has been updated.
-		let path = Util.getPaths(o, b)[0];
-		console.log(path);
+		let path = WatchUtil.getPaths(o, b)[0];
 
 		assertEqDeep(path, ['items', '0']);
 	},
@@ -361,9 +274,139 @@ Watch: {
 		wp.items.splice(0, 1);
 
 
-		let path = Util.getPaths(o, b)[0];
+		let path = WatchUtil.getPaths(o, b)[0];
 
 		assertEqDeep(path, ['items', '0', 'parts', '0']);
+	},
+
+	// Test an object that refers to another object twice.
+	doubleRef: function() {
+
+		let item = {name: 1};
+		var o = {
+			item: item,
+			items: [item]
+		};
+
+		let paths =[];
+		let wp = watchProxy(o, function(action, path, value) {
+			// Path will be the path it was set from.
+			paths.push(path);
+		});
+
+		// wp.items[0].name has never been accessed so it isn't registered:
+		wp.item.name = 3;
+		assertEqDeep(paths, [
+			['item', 'name']
+		]);
+
+
+		// watchProxy knows about wp.items[0].name now that it's been accessed the first time.
+		paths = [];
+		var a = wp.items[0].name;
+		wp.item.name = 3;
+		assertEqDeep(paths, [
+			['item', 'name'],
+			['items', '0', 'name']
+		]);
+
+
+		// Set the value via p.items[0].name
+		paths = [];
+		wp.items[0].name = 2;
+		assertEqDeep(paths, [
+			['item', 'name'],
+			['items', '0', 'name']
+		]);
+	},
+
+},
+
+Watch: {
+
+
+	// Assign proxied.
+	removeProxy: function() {
+		var b = {
+			items: [{name: 1}]
+		};
+		watch(b, 'items', ()=>{});
+
+		// Make sure setting an array with a proxied item inside doesn't add the proxy to the underlying object.
+		b.items = [b.items[0]]; // new array, proxied original object inside.
+		assert(!b.items.$removeProxy[0].$isProxy);
+	},
+
+	removeProxy2: function() {
+		var o = {
+			a: {
+				c: undefined
+			},
+			b: undefined
+		};
+		watch(o, ['a'], ()=>{});
+
+		// o is an object with Object.defineProperty()'s defined and isn't a proxy.
+		//assertEqDeep(o.$removeProxy, {a: {c: undefined}, b: undefined});
+		assertEqDeep(o.a.$removeProxy, {c: undefined});
+		assertEq(o.a.$removeProxy.c, undefined);
+	},
+
+	// Same as WatchProxy.TwoLevel, but with watch() instead of watchProxy.
+	twoLevel: function() {
+		var a = {
+			b1: {
+				c: 1,
+				parent: undefined
+			},
+			b2: [1, 2]
+		};
+		a.b1.parent = a;
+		var called = new Set();
+
+		var cb1 = function(action, path, value) {
+			called.add('a.b2');
+		};
+		watch(a, ['b2'], cb1);
+
+		var cb2 = function(action, path, value) {
+			called.add('b1.parent.b2');
+		};
+		watch(a.b1, ['parent', 'b2'], cb2);
+
+
+		a.b1.parent.b2[0] = 5;
+
+		assertEq(a.b2[0], 5);
+		assert(called.has('a.b2'));
+		assert(called.has('b1.parent.b2'));
+	},
+
+	// Test finding proxied items.
+	indexOf: function() {
+		var b = {
+			items: [{name: 1}]
+		};
+		watch(b, 'items', ()=>{
+			var item = b.items[0];
+			var i = b.items.indexOf(item);
+			assertEq(i, 0);
+		});
+
+		b.items.push({name: 2});
+	},
+
+	pop: function() {
+
+		var o = { a: [0, 1] };
+		var wp = new WatchProperties(o);
+		wp.subscribe_(['a', 0], (action, path, value) => {});
+		wp.subscribe_(['a', 1], (action, path, value) => {});
+
+		assert(wp.subs_);
+		o.a.pop();
+
+		assert(wp.subs_); // doesn't remove the watch.  But I think that's correct behavior.
 	},
 
 	unsubscribe: function() {
@@ -530,7 +573,6 @@ XElement: {
 			var div = document.createElement('div');
 			div.innerHTML = '<x-s2><b slot="f1">Hello</b><s slot="f2">Goodbye</s></x-s2>';
 			var s2 = div.childNodes[0];
-			//document.body.append(div); // for visual inspection
 
 			assertEq(s2.shadowRoot.children[0].children[0].assignedNodes()[0].outerHTML, '<b slot="f1">Hello</b>');
 			assertEq(s2.shadowRoot.children[1].children[0].assignedNodes()[0].outerHTML, '<s slot="f2">Goodbye</s>');
@@ -538,7 +580,7 @@ XElement: {
 		}
 	},
 
-	simpleBinding: {
+	binding: {
 
 		// data-html bind
 		text: function () {
@@ -703,13 +745,7 @@ XElement: {
 			},
 
 			unbindDeep: function() {
-				class A extends XElement {
-
-					passthrough() {
-						console.log(1);
-						return '';
-					}
-				}
+				class A extends XElement {}
 				A.html = `
 					<div>
 						<div id="loop1" x-loop="letters: letter">
@@ -718,7 +754,7 @@ XElement: {
 						<div id="loop2" x-loop="items: item">
 							<div x-loop="item.parts: part">
 								<div x-loop="letters: letter">
-									<div x-text="letter.name + this.passthrough()"></div>
+									<div x-text="letter.name"></div>
 								</div>
 							</div>
 						</div>		
@@ -866,6 +902,31 @@ XElement: {
 				assertEq(c.span.getAttribute('class'), 'b');
 			})();
 		},
+
+
+
+
+		/** One item bound to two different properties. */
+		doubleXRef() {
+			var myCat = {name: 'Fluffy'};
+
+			class CatHouse extends XElement {}
+			CatHouse.html = `
+				<div>
+					<span id="span" x-text="this.cats.cat1.name"></span>
+				</div>`;
+
+			var c = new CatHouse();
+			c.cats = {
+				cat1: myCat,
+				cat2: myCat
+			};
+
+			// Make sure changing the second one updates the first.
+			c.cats.cat2.name = 'Fluffy Jr.';
+
+			assertEq(c.span.textContent, 'Fluffy Jr.');
+		},
 	},
 
 	loop: function () {
@@ -879,7 +940,6 @@ XElement: {
 
 			var b = new BL1();
 			b.items = [1, 2];
-			//document.body.appendChild(b);
 			assertEq(b.shadowRoot.innerHTML, '<span data-text="item">1</span><span data-text="item">2</span>');
 
 			b.items.pop();
@@ -1257,7 +1317,6 @@ XElement: {
 
 			var a = new A_L15();
 			a.items = [1, 2];
-			document.body.append(a);
 		}
 	},
 
@@ -2150,7 +2209,6 @@ XElement: {
 				</div>`;
 
 			var a = new A_P19();
-			document.body.appendChild(a);
 
 			a.item = 'hi';
 			assertEq(a.b.text.textContent, 'hi');
@@ -2465,30 +2523,16 @@ XElement: {
 unresolved: {
 
 
-	// Test an object that refers to another object twice.
-	doubleRef1: function() {
-
-		let item = {name: 1};
-		var o = {
-			items: [item],
-			item: item
-		};
-
-		let paths =[];
-		let wp = watchProxy(o, function(action, path, value) {
-			// Path will be the path it was set from.
-			console.log(path);
-			paths.push(path);
-		});
-
-		wp.items[0].name = 2;
-		wp.item.name = 3;
 
 
-		assertEqDeep(paths[0], ['items', '0', 'name']);
-		assertEqDeep(paths[1], ['item', 'name']);
-		assertEq(paths.length, 2);
-	},
+
+
+
+
+
+
+
+
 
 
 	/*
@@ -2499,23 +2543,41 @@ unresolved: {
 
 		let item = {name: 1};
 		var o = {
-			items: [item],
-			item: item
+			item1: item,
+			item2: item
 		};
 
 		let wp = new WatchProperties(o);
-		wp.subscribe_(['items'], ()=> {
-			console.log('items changed');
+		wp.subscribe_(['item1'], ()=> {
+			console.log('item1 changed');
 		});
+		//WatchUtil.addPath(o, ['items', '0'], o.items[0]);
 
-		wp.subscribe_(['item'], ()=> {
-			console.log('item changed');
+		wp.subscribe_(['item2'], ()=> {
+			console.log('item2 changed');
 		});
+		//WatchUtil.addPath(o, ['item'], o.item);
 
-		o.item.name = 3;
-		o.items[0].name = 3;
+		let paths;
+		//paths = WatchUtil.getPaths(o, o.items);
+		//paths = o.items[0];
+		//console.log(paths);
+
+		//o.items[1].name = 3;
+
+		//WatchUtil.addPath(o, ['items', '0'], o.items[0]);
+
+		o.item1.name = 3;
+		//o.items[1].name = 3;
 
 	},
+
+
+
+
+
+
+
 
 	doubleRef3: function() {
 
@@ -2572,29 +2634,47 @@ unresolved: {
 		//assertE1(watch2, 2);
 	},
 
-	numberPath: function() {
 
 
-		var o = {
-			items: ['a']
+
+
+
+	rebuildArray: function () {
+		var item = {name: 'Set1'};
+
+		// Two different paths to item, one in an array:
+		var a = {
+			items: {
+				first: [item],
+				second: item
+			}
 		};
 
-		let watch1 = 0;
 
-		// Path works if we change 0 to '0'
-		watch(o, ['items', 0], ()=> {
-			console.log('items changed');
-			watch1 ++;
+		watch(a, ['items'], (action, path, newVal, oldVal)=> {
+			if (paths)
+				paths.push(path);
 		});
 
-		o.items[0] = 'b';
+		// register path;
+		var b = a.items.first[0].name;
+		b = a.items.second.name;
 
-		assertEq(watch1, 1);
+		a.items.first.splice(2, 1); // Removes nothing because array isn't that long.
+		var paths = [];
+
+
+		a.items.second.name = Math.round(Math.random() * 1000);
+		console.log(paths);
+
+		assertEqDeep(paths, [
+			["items", "first", "0", "name"],
+			["items", "second", "name"]
+		]);
+
 	},
 
-
-
-	temp3: function () {
+	rebuildArrayDiffPaths: function () {
 
 		class XNode extends XElement {}
 		XNode.html = `
@@ -2628,7 +2708,7 @@ unresolved: {
 		//
 		// The first one evaluates to this.node.name
 		// The second one evaluates to this.parent.nodes[0].name
-		// splice() calls ProxyObect.rebuildArray() which breaks the first one.
+		// splice() calls WatchUtil.rebuildArray() which breaks the first one.
 		//
 		// There's two paths to the node:  ['nodes', '0'] and ['node'].
 		// ProxyObject.rebuildArray() has a bug where it replaces the second one with ['0'].
@@ -2655,11 +2735,11 @@ unresolved: {
 			}
 		}
 		B.html = `
-		<div style="display: block">	
-			<button onclick="remove()">x</button>
-			&nbsp;
-			<span x-text="node.name"></span>
-		</div>`;
+			<div style="display: block">	
+				<button onclick="remove()">x</button>
+				&nbsp;
+				<span x-text="node.name"></span>
+			</div>`;
 
 		class A extends XElement {
 
@@ -2686,9 +2766,9 @@ unresolved: {
 
 
 		A.html = `
-		<div x-loop="nodes: node">
-			<x-b x-prop="node: node"></x-b>
-		</div>`;
+			<div x-loop="nodes: node">
+				<x-b x-prop="node: node"></x-b>
+			</div>`;
 
 
 

@@ -179,20 +179,21 @@ var bindElProps = (xelement, el, context) => {
 	// Handle data-prop and
 	if (el instanceof XElement) {
 
+		// Bind instantiation attributes (to the parent, not ourselves)
+		if (el !== xelement)
+			for (let attrName in el.instantiationAttributes) {
+				let val = el.instantiationAttributes[attrName];
+				let name = parseXAttrib(attrName);
+				if (name && name !== 'prop') { // prop handled in init so it happens first.
+					if (bindings[name]) // attr.value is code.
+						bindings[name](xelement, val, el, context);
 
-		for (let attrName in el.instantiationAttributes) {
-			let val = el.instantiationAttributes[attrName];
-			let name = parseXAttrib(attrName);
-			if (name && name !== 'prop') { // prop handled in init so it happens first.
-				if (bindings[name]) // attr.value is code.
-					bindings[name](xelement, val, el, context);
-
-				//#IFDEV
-				else
-					throw new XElementError(attrName);
-				//#ENDIF
+					//#IFDEV
+					else
+						throw new XElementError(attrName);
+					//#ENDIF
+				}
 			}
-		}
 
 
 		// Don't inherit within-element context from parent.
@@ -761,8 +762,27 @@ var bindings = {
 
 			// The modification was actually just a child of the loop variable.
 			// The loop variable itself wasn't assigned a new value.
-			if (indirect)
+			if (indirect) {
+
+				/*
+				// If deleting a single item from a list.
+				// Commented out because this would only work with simple variables.
+				// Maybe later I can find a better way.
+				if (action==='delete') {
+
+					debugger;
+					let loopItem = traversePath(self, path.slice(0, -1));
+					//if (loopItem === el) {
+						let index = path.slice(-1)[0];
+						let loopEl = el.shadowRoot || el;
+						let child = loopEl.children[index];
+						unbindEl(child);
+						root.removeChild(child);
+					//}
+				}*/
 				return;
+
+			}
 
 			// The code we'll loop over.
 			// We store it here because innerHTML is lost if we unbind and rebind.
@@ -1065,7 +1085,7 @@ var bindings = {
 				// Because a notification will cause data-loop's rebuildChildren() to be called
 				// And Sortable has already rearranged the elements.
 				let array = traversePath(newSelf, path, true, newArray, true);
-				ProxyObject.rebuildArray(array);
+				WatchUtil.rebuildArray(array); // TODO: Send startIndex
 				rebindLoopChildren(newSelf, event.to, context, oldSelf); // But we still need to unbind and rebind them in their currnet positions.
 				traversePath(newSelf, path).$trigger(); // This won't trigger rebuilding our own children because their order already matches.
 
@@ -1080,7 +1100,7 @@ var bindings = {
 					let oldPath = parseVars(foreach)[0];
 
 					let array = traversePath(oldSelf, oldPath, true, oldArray, true);
-					ProxyObject.rebuildArray(array);
+					WatchUtil.rebuildArray(array);
 					rebindLoopChildren(oldSelf, event.from, context);
 					traversePath(oldSelf, oldPath).$trigger();
 				}
