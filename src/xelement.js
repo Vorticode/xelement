@@ -725,7 +725,7 @@ var bindings = {
 
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
-			watch(self, pathFromRoot, setHtml);
+			watch(root, pathFromRoot, setHtml);
 			elWatches.add(el, [root,  pathFromRoot, setHtml]);
 		}
 
@@ -1141,7 +1141,7 @@ var bindings = {
 					value = el.checked;
 				else if ('value' in el) // input, select
 					value = el.value;
-				else if ('innerHMTL' in el) // [contenteditable]
+				else if (typeof el.innerHTML === 'string') // textarea, [contenteditable].  'innerHTML' in el evaluates to false, for unknown reasons.
 					value = el.innerHTML;
 
 				// We don't use watchlessSet in case other things are subscribed.

@@ -1312,11 +1312,36 @@ XElement: {
 			}
 			A_L15.html =`
 				<div x-loop="this.passthrough(this.items) : item">
-					<span x-text="item"></span>
+					<span x-text="item.name"></span>
 				</div>`;
 
 			var a = new A_L15();
 			a.items = [1, 2];
+		},
+
+
+		/**
+		 * This used to throw a "bad index" error when bindings.html called watch(self,) instead of watch(root,)
+		 * I'm keeping this test around in case it triggers any other weird errors. */
+		doubleBind: function() {
+
+			class B_L16 extends XElement {}
+			B_L16.html = `
+				<div>												
+					<div x-loop="a.items: item">
+						<div x-attribs="title: item" x-html="item"></div>
+					</div>					
+				</div>`;
+
+			class A_L16 extends XElement {}
+			A_L16.html = `
+				<div>					
+					<x-b_L16 x-prop="a: this"></x-b_L16>						
+				</div>`;
+
+			var lb = new A_L16();
+			lb.items = [1];
+			lb.items = []; // Unwatch all items.
 		}
 	},
 
@@ -2275,42 +2300,41 @@ XElement: {
 			// Test how many times text redraw happens.
 			// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 			// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
-			(function () {
-				class B_R1 extends XElement {
-					constructor() {
-						super();
-						this.redraw = 0;
-					}
-
-					passthrough(item) {
-						if (init)
-							this.redraw++;
-						return item;
-					}
+			class B_R1 extends XElement {
+				constructor() {
+					super();
+					this.redraw = 0;
 				}
 
-				B_R1.html = `
-					<div x-loop="a.items: item">
-						<span x-text="item + this.passthrough('')"></span>			
-					</div>`;
+				passthrough(item) {
+					if (init)
+						this.redraw++;
+					return item;
+				}
+			}
 
-				class A_R1 extends XElement {}
-				A_R1.html = `
-					<div>
-						<x-b_r1 id="b" x-prop="a: this"></x-b_r1>		
-					</div>`;
+			B_R1.html = `
+				<div x-loop="a.items: item">
+					<span x-text="item + this.passthrough('')"></span>			
+				</div>`;
 
-				var a = new A_R1();
-				a.items = ['A', 'B', 'C'];
+			class A_R1 extends XElement {}
+			A_R1.html = `
+				<div>
+					<x-b_r1 id="b" x-prop="a: this"></x-b_r1>		
+				</div>`;
 
-				var init = true;
-				a.items.shift();
+			var a = new A_R1();
+			a.items = ['A', 'B', 'C'];
 
-				// We only need to reassign the text of elements 1 and 2 to be 2 and 3.
-				//console.log(a.b.redraw);
-				assertEq(a.b.shadowRoot.children[0].textContent, 'B');
-				assertLte(a.b.redraw, 4);
-			})();
+			var init = true;
+			a.items.shift();
+
+			// We only need to reassign the text of elements 1 and 2 to be 2 and 3.
+			//console.log(a.b.redraw);
+			assertEq(a.b.shadowRoot.children[0].textContent, 'B');
+			assertLte(a.b.redraw, 4);
+
 		},
 
 		redraw2: function () {
@@ -2318,37 +2342,36 @@ XElement: {
 			// Test how many times text redraw happens.
 			// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 			// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
-			(function () {
-				class A_R2 extends XElement {
-					constructor() {
-						super();
-						this.redraw = 0;
-					}
-
-					passthrough(item) {
-						if (init)
-							this.redraw++;
-						return item;
-					}
+			class A_R2 extends XElement {
+				constructor() {
+					super();
+					this.redraw = 0;
 				}
 
-				A_R2.html = `
-					<div>
-						<div id="loop" x-loop="items: item">
-							<span x-text="item + this.passthrough('')"></span>			
-						</div>
-					</div>`;
+				passthrough(item) {
+					if (init)
+						this.redraw++;
+					return item;
+				}
+			}
 
-				var a = new A_R2();
-				a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
+			A_R2.html = `
+				<div>
+					<div id="loop" x-loop="items: item">
+						<span x-text="item + this.passthrough('')"></span>			
+					</div>
+				</div>`;
 
-				var init = true;
-				a.items[0] = 'A2';
+			var a = new A_R2();
+			a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-				// Make sure we just set the value and don't rebuild the loop.
-				assertEq(a.redraw, 1);
-				assertEq(a.loop.children[0].textContent, 'A2');
-			})();
+			var init = true;
+			a.items[0] = 'A2';
+
+			// Make sure we just set the value and don't rebuild the loop.
+			assertEq(a.redraw, 1);
+			assertEq(a.loop.children[0].textContent, 'A2');
+
 		},
 
 
@@ -2356,45 +2379,44 @@ XElement: {
 			// Test how many times text redraw happens.
 			// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
 			// Make sure data-prop doesn't cause the whole subscribed loop to rebuilt each time, leading to 100s of unnecessary updates.
-			(function () {
-				class B extends XElement {
-					constructor() {
-						super();
-						this.redraw = 0;
-					}
-
-					passthrough(item) {
-						if (init) {
-							//console.log('redraw');
-							this.redraw++;
-						}
-						return item;
-					}
+			class B_R3 extends XElement {
+				constructor() {
+					super();
+					this.redraw = 0;
 				}
 
-				B.html = `
-					<div>
-						<div id="loop" x-loop="parentA.items: item">
-							<span x-text="item + this.passthrough('')"></span>			
-						</div>
-					</div>`;
+				passthrough(item) {
+					if (init) {
+						//console.log('redraw');
+						this.redraw++;
+					}
+					return item;
+				}
+			}
 
-				class A extends XElement {}
-				A.html = `
-					<div>
-						<x-b id="b" x-prop="parentA: this"></x-b>
-					</div>`;
+			B_R3.html = `
+				<div>
+					<div id="loop" x-loop="parentA.items: item">
+						<span x-text="item + this.passthrough('')"></span>			
+					</div>
+				</div>`;
 
-				var a = new A();
-				a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
+			class A_R3 extends XElement {}
+			A_R3.html = `
+				<div>
+					<x-b_r3 id="b" x-prop="parentA: this"></x-b_r3>
+				</div>`;
 
-				window.init = true;
-				var init = true;
-				a.items[0] = 'A2';
+			var a = new A_R3();
+			a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-				assertEq(a.b.redraw, 1);
-				assertEq(a.b.loop.children[0].textContent, 'A2');
-			})();
+			window.init = true;
+			var init = true;
+			a.items[0] = 'A2';
+
+			assertEq(a.b.redraw, 1);
+			assertEq(a.b.loop.children[0].textContent, 'A2');
+
 		},
 	},
 

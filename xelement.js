@@ -1470,20 +1470,21 @@ var bindElProps = (xelement, el, context) => {
 	// Handle data-prop and
 	if (el instanceof XElement) {
 
+		// Bind instantiation attributes (to the parent, not ourselves)
+		if (el !== xelement)
+			for (let attrName in el.instantiationAttributes) {
+				let val = el.instantiationAttributes[attrName];
+				let name = parseXAttrib(attrName);
+				if (name && name !== 'prop') { // prop handled in init so it happens first.
+					if (bindings[name]) // attr.value is code.
+						bindings[name](xelement, val, el, context);
 
-		for (let attrName in el.instantiationAttributes) {
-			let val = el.instantiationAttributes[attrName];
-			let name = parseXAttrib(attrName);
-			if (name && name !== 'prop') { // prop handled in init so it happens first.
-				if (bindings[name]) // attr.value is code.
-					bindings[name](xelement, val, el, context);
-
-				//#IFDEV
-				else
-					throw new XElementError(attrName);
-				//#ENDIF
+					//#IFDEV
+					else
+						throw new XElementError(attrName);
+					//#ENDIF
+				}
 			}
-		}
 
 
 		// Don't inherit within-element context from parent.
@@ -2015,7 +2016,7 @@ var bindings = {
 
 		for (let path of parseVars(code)) {
 			let [root, pathFromRoot] = getRootXElement(self, path);
-			watch(self, pathFromRoot, setHtml);
+			watch(root, pathFromRoot, setHtml);
 			elWatches.add(el, [root,  pathFromRoot, setHtml]);
 		}
 
@@ -2431,7 +2432,7 @@ var bindings = {
 					value = el.checked;
 				else if ('value' in el) // input, select
 					value = el.value;
-				else if ('innerHMTL' in el) // [contenteditable]
+				else if (typeof el.innerHTML === 'string') // textarea, [contenteditable].  'innerHTML' in el evaluates to false, for unknown reasons.
 					value = el.innerHTML;
 
 				// We don't use watchlessSet in case other things are subscribed.
