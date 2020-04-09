@@ -10,6 +10,7 @@ Write a getWatches(el, expr) function that calls replaceVars, addThis, parseVars
 	to give back
 Document all properties that bindings.loop() sets on elements.
 Won't bind to properties on the class itself, insead of those defined within constructor.  Because they are called after the super constructor!
+Can't have recursive embeds.  This should work if they're within a loop.
 
 TODO: next goals:
 {{var}} in text and attributes, and stylesheets?
@@ -422,6 +423,13 @@ var initHtml = (self) => {
 		if (!self.constructor.html_)
 			throw new XElementError('XElement .html property must be set to a non-empty string.');
 		//#ENDIF
+
+		// 0. If being initialized as x-loop child, just save the html for when the loop creates its children.
+		//    Otherwise recursive xelement embeds won't work.
+		if (self.parentNode && getXAttrib(self.parentNode, 'loop')) {
+			self.parentNode.loopHtml = self.constructor.html_.trim();
+			return false;
+		}
 
 		// 1. Create temporary element.
 		disableBind++;
@@ -1080,6 +1088,9 @@ var bindings = {
 					item = oldArray.splice(event.oldIndex, 1)[0];
 
 				newArray.splice(event.newIndex, 0, item);
+				
+				// Without removeProxies(), array items in the original object can be set to proxies, then indexOf() and other functions will fail.
+				newArray = removeProxies(newArray);
 
 				// Set the newArray without triggering notifications.
 				// Because a notification will cause data-loop's rebuildChildren() to be called
