@@ -162,6 +162,10 @@ class WatchProperties {
 		self.subs_[cpath].push(callback);
 	}
 
+	/**
+	 *
+	 * @param path{string[]|string}
+	 * @param {function?} callback Unsubscribe this callback.  If not specified, all callbacks willb e unsubscribed. */
 	unsubscribe_(path, callback) {
 
 		// Make sure path is an array.
@@ -182,25 +186,29 @@ class WatchProperties {
 				this.subs_[cpath].splice(callbackIndex, 1); // splice() modifies array in-place
 			}
 
-			// Remove the whole subscription array if it's empty.
-			if (!callback || !this.subs_[cpath].length)
+			// If removing all callbacks, or if all callbacks have been removed:
+			if (!callback || !this.subs_[cpath].length) {
+
+				// Remove the whole subscription array if there's no more callbacks
 				delete this.subs_[cpath];
 
-			// Undo the Object.defineProperty() call when there are no more subscriptions to it.
-			let propCpath = csv([path[0]]);
+				// Undo the Object.defineProperty() call when there are no more subscriptions to it.
+				// If there are no subscriptions that start with propCPath
+				// TODO This can be VERY SLOW when an object has many subscribers.  Such as an x-loop with hundreds of children.
+				// If the loop tries to remove every child at once the complexity is O(n^2) because each child must search every key in this.subs_.
+				// We need to find a faster way.
+				let propCpath = csv([path[0]]);
+				if (!hasKeyStartingWith(this.subs_, propCpath)) {
 
-			// If here are no subscriptions that start with prpocPath
-			if (!keysStartWith(this.subs_, propCpath).filter((x) => x.length).length) {
+					delete this.obj_[path[0]]; // Remove the defined property.
+					this.obj_[path[0]] = this.fields_[path[0]]; // reset original unproxied value to object.
 
-				delete this.obj_[path[0]]; // Remove the defined property.
-				this.obj_[path[0]] = this.fields_[path[0]]; // reset original unproxied value to object.
-
-				delete this.fields_[path[0]];
+					delete this.fields_[path[0]];
+				}
 			}
 		}
 	}
 }
-
 
 /**
  * Keeps track of which objects we're watching.

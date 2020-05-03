@@ -13,6 +13,7 @@ var code = [
 	fs.readFileSync('../src/parsevars.js', 'utf8'),
 	fs.readFileSync('../src/watchproxy.js', 'utf8'),
 	fs.readFileSync('../src/watch.js', 'utf8'),
+	fs.readFileSync('../src/bindings.js', 'utf8'),
 	fs.readFileSync('../src/xelement.js', 'utf8')
 ];
 code =

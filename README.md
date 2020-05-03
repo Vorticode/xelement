@@ -72,7 +72,6 @@ If the html property is set to a valid CSS selector, XElement will pull its html
 <script>
     class Hello extends XElement {}
     HelloWorld.html = '#hello';
-}
 </script>
 ```
 
@@ -270,6 +269,36 @@ These expressions are not standalone variables:
 - cats[3].purr()
 - cats[myCat]
 - window.location
+
+### Loop Children and .initialized
+
+In the code below, an instance of B is created whenever new A() is called, but it's immediately removed because the loop doesn't have any children.  In B's constructor we check to make sure initialization has completed before we use any of B's properties:
+
+```javascript
+class A extends XElement{}
+A.html = `
+	<div x-loop="items: item">
+		<x-b></x-b>
+	</div>`;
+
+class B extends XElement{
+    constructor() {
+        super();
+        
+        if (!this.initialized)
+            return;
+        
+        // This will fail without the initialization check above.
+        this.text = 'Hi!';
+    }
+}
+B.html = `<div><span id="text"></span></div>`;
+
+var a = new A();
+a.items = [1];
+```
+
+
 
 ### Duplicate References
 

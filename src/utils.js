@@ -28,6 +28,15 @@ var eq = (item1, item2) => {
 	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
 };
 
+/**
+ * Returns true if obj has at least one key defined.
+ * @param {object} obj
+ * @returns {boolean} */
+var hasKeys = (obj) => {
+	for (let item in obj)
+		return true;
+	return false;
+};
 
 var WeakMultiMap = function() {
 
@@ -230,14 +239,12 @@ var isValidAttribute = (el, name) => {
  * Find object values by keys that start with prefix.
  * @param obj {object}
  * @param prefix {string}
- * @returns {Array} */
-var keysStartWith = (obj, prefix) => {
-
-	var result = [];
+ * @returns {boolean} */
+var hasKeyStartingWith = (obj, prefix) => {
 	for (let key in obj)
 		if (key.startsWith(prefix))
-			result.push(obj[key]);
-	return result;
+			return true;
+	return false;
 };
 
 /**
