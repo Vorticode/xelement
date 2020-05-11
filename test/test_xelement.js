@@ -45,6 +45,11 @@ Utils: {
 
 ParseVar : {
 
+	isStandalone: function() {
+		assert(isStandaloneVar('hi'));
+		assert(!isStandaloneVar('true')); // reserved word.  We don't want it to become this.true
+	},
+
 	parseVars: {
 		parse1: function() {
 			var paths = parseVars("this.cats[0]+':'+item");
@@ -117,7 +122,7 @@ ParseVar : {
 	addThis: function() {
 		var result = addThis('this');
 		assertEq(result, 'this'); // don't add it twice!
-	}
+	},
 },
 
 
@@ -214,8 +219,8 @@ WatchProxy: {
 		assertEq(wp.a[0], 1);
 
 		// Make sure we only have one op
-		assertEqDeep(ops[0].slice(0, 3), ["set", [], [1]]);
-		assertEq(ops.length, 1);
+		assertEqDeep(ops[0].slice(0, 3), ["set", ['a', '0'], 1]);
+		assertEq(ops.length, 2);
 
 		// assertEqDeep(ops, [
 		// 	['set', ['a', '0'], 1],
@@ -1172,7 +1177,6 @@ XElement: {
 				'</div>';
 
 			var b = new BL10();
-			window.b = b;
 			b.items = [{name: 1}, {name: 2}];
 
 			b.items.splice(0, 1);
@@ -1957,9 +1961,6 @@ XElement: {
 				</div>`;
 
 				var xa = new BD11();
-
-				window.debug = true;
-
 				// the data-prop gets called on x-b's child template node before x-b#loop can build its children.
 
 				xa.cars = [{wheels: [1, 2]}];
@@ -2289,7 +2290,7 @@ XElement: {
 			}
 
 			// Make sure it's no longer redrawn after it's removed.
-			assertEq(a.redraw, 1);
+			assertEq(a.redraw, 0);
 		},
 
 	},
@@ -2374,7 +2375,6 @@ XElement: {
 
 		},
 
-
 		redraw3: function () {
 			// Test how many times text redraw happens.
 			// When we shift off the first element, element 2 becomes 1, 3, becomes 2, and so on.
@@ -2410,7 +2410,6 @@ XElement: {
 			var a = new A_R3();
 			a.items = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-			window.init = true;
 			var init = true;
 			a.items[0] = 'A2';
 
@@ -2418,6 +2417,83 @@ XElement: {
 			assertEq(a.b.loop.children[0].textContent, 'A2');
 
 		},
+
+
+		redrawLoop: () => {
+			var count = 0;
+			window.incr = (a) => {
+				if (d)
+					debugger;
+				count++;
+				return a;
+			};
+
+			class A_R4 extends XElement {}
+			A_R4.html = `
+				<div>
+					<div x-loop="items: item">
+						<p x-text="incr(item)"></p>
+					</div>
+				</div>`;
+
+			var a = new A_R4();
+			a.items = ['a', 'b', 'c', 'd'];
+			document.body.appendChild(a);
+
+			var d = true;
+			count = 0;
+			a.items.push('e');
+
+
+			console.log(count);
+
+			//assertEq(count, 4);
+
+		},
+
+		redrawNestedLoop: () => {
+			var count = 0;
+			window.incr = (a) => {
+				if (d)
+					debugger;
+				count++;
+				return a;
+			};
+
+			class A_R4 extends XElement {}
+			A_R4.html = `
+				<div x-loop="lists: list">
+					<div x-loop="list.items: item">
+						<p x-text="incr(item)"></p>
+					</div>
+				</div>`;
+
+			var a = new A_R4();
+			a.lists = [
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']},
+				{items: ['a', 'b', 'c', 'd']}
+			];
+			document.body.appendChild(a);
+			//a.lists.push({items: ['a', 'b']});
+
+			var d = true;
+			count = 0;
+			a.lists.push({items: ['a']});
+
+
+			console.log(count);
+
+			//assertEq(count, 4);
+
+		}
 	},
 
 	cleanup: {

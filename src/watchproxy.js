@@ -180,8 +180,10 @@ var WatchUtil = {
 
 								let originalLength = obj.length;
 								var startIndex = 0;
-								if (func === 'push' || func === 'pop')
+								if (func === 'push')
 									startIndex = originalLength;
+								else if (func === 'pop')
+									startIndex = originalLength - 1;
 								else if (func === 'splice')
 									startIndex = arguments[0] < 0 ? originalLength - arguments[0] : arguments[0];
 
@@ -198,7 +200,11 @@ var WatchUtil = {
 
 								// Trigger a notification for every array element changed, instead of one for eavery sub-operation.
 								// Commented out because it messes up xloops.
-								/*
+
+
+
+
+
 								let roots = WatchUtil.getRoots(obj);
 								for (let root of roots) {
 									let parentPaths = WatchUtil.getPaths(root, obj);
@@ -209,10 +215,9 @@ var WatchUtil = {
 											WatchUtil.notifyCallbacks(root, 'delete', [...parentPath, i + '']);
 									}
 								}
-								*/
 
 								// Old version that notifies for the whole array instead of only the items changed:
-								proxy.$trigger();
+								//proxy.$trigger();
 
 								return result;
 							}
@@ -304,7 +309,7 @@ var WatchUtil = {
 
 	/**
 	 * Register a path from root to obj. */
-	addPath: function(root, path, obj) {
+	addPath: function(root, newPath, obj) {
 		obj = obj.$removeProxy || obj;
 		root = root.$removeProxy || root;
 
@@ -322,40 +327,47 @@ var WatchUtil = {
 		// Get the paths
 		let paths = objMap.get(obj);
 		if (!paths)
-			objMap.set(obj, [path]);
+			objMap.set(obj, [newPath]);
 
 		// Add the path if it isn't already registered.
 		// TODO: This could possibly be faster if the javascript Set could index by arrays.
 		else {
 			for (let existingPath of paths) {
 
+				var l = existingPath.length;
+				if (newPath.length < existingPath.length)
+					continue;
+
 				// If the new path begins with existingPath, don't add it.
 				// Because now we're just expanding more paths from circular references.
-				// TODO: If slow this could be sped up by doing this inline.
-				let newPath = path;
-				if (newPath.length > existingPath.length)
-					newPath = path.slice(0, existingPath.length);
-
-				if (arrayEq(existingPath, newPath))
+				// Inline version of arrayEq() because it's faster.
+				var same = true;
+				for (let i=0; i<l; i++)
+					if (same = !(existingPath[i] !== newPath[i]))
+						break;
+				if (same)
 					return;
 			}
-			paths.push(path);
+			paths.push(newPath);
 		}
 	},
 
 	/**
 	 * Get all paths from root to obj. */
 	getPaths: function(root, obj) {
-		obj = obj.$removeProxy || obj;
-		root = root.$removeProxy || root;
 
+		//#IFDEV
+		if (root.$isProxy)
+			throw new Error("Can't be proxy.");
+		//#ENDIF
+			
 		// Get the map from object to paths.
 		let objMap = WatchUtil.paths.get(root);
 		if (!objMap)
 			return [];
 
 		// Get the paths
-		return objMap.get(obj) || [];
+		return objMap.get(obj.$removeProxy || obj) || [];
 	},
 
 

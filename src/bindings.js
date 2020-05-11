@@ -63,7 +63,7 @@ var bindings = {
 			// Create properties and watch for changes.
 			for (let path of parseVars(classExpr)) {
 				let [root, pathFromRoot] = getRootXElement(self, path);
-				watch(root, path, updateClass);
+				watch(root, pathFromRoot, updateClass);
 				elWatches.add(el, [root, pathFromRoot, updateClass]);
 			}
 
@@ -79,7 +79,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = (/*action, path, value*/) => {
+		let setText = (/*action, path, value, oldVal*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
@@ -102,7 +102,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = (/*action, path, value*/) => {
+		let setHtml = (/*action, path, value, oldVal*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
@@ -148,8 +148,10 @@ var bindings = {
 
 			// The modification was actually just a child of the loop variable.
 			// The loop variable itself wasn't assigned a new value.
+			// Although indirect will also be true if adding or removing an item from the array.
+			// If foreach is non-standaline, we don't know how the path will be evaluated to the array used by foreach.
+			// So this is of no use right now.
 			if (indirect) {
-
 				/*
 				// If deleting a single item from a list.
 				// Commented out because this would only work with simple variables.
@@ -166,8 +168,7 @@ var bindings = {
 						root.removeChild(child);
 					//}
 				}*/
-				return;
-
+				//return;
 			}
 
 			// The code we'll loop over.
@@ -193,6 +194,8 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
+			// We don't know how the path will be evaluated to the array used by foreach, so we re-evaluate it to find out.
+			// TODO: Skip this step and just use the path directly for standalone paths.
 			var newItems = removeProxy(safeEval.call(self, foreach, {el: el}) || []);
 			var oldItems = removeProxy(root.items_ || []);
 
@@ -262,7 +265,7 @@ var bindings = {
 
 
 			// Rebind events on any elements that had their index change.
-			for (let i=0; i< root.children.length; i++) {
+			for (let i=0; i<root.children.length; i++) {
 				let child = root.children[i];
 				if (child.index_ !== i) {
 

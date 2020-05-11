@@ -395,9 +395,14 @@ var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 // https://mathiasbynens.be/notes/javascript-identifiers
 // We exclude 'let,package,interface,implements,private,protected,public,static,yield' because testing shows Chrome accepts these as valid var names.
 var nonVars = 'length,NaN,Infinity,caller,callee,prototype,arguments,true,false,null,undefined,break,case,catch,continue,debugger,default,delete,do,else,finally,for,function,if,in,instanceof,new,return,switch,throw,try,typeof,var,void,while,with,class,const,enum,export,extends,import,super'.split(/,/g);
+var nonVars2 = 'super,NaN,Infinity,true,false,null,undefined'.split(/,/g); // Don't add "this." prefix to thse automatically.
 
+/**
+ * A stanalone var can automatically have "this." prepended to it.
+ * @param {string} code
+ * @returns {boolean} */
 var isStandaloneVar = (code) => {
-	return !!code.trim().match(isStandaloneVarRegex);
+	return !nonVars2.includes(code) && !!code.trim().match(isStandaloneVarRegex);
 };
 var isStandaloneCall = (code) => {
 	// if it starts with a variable followed by ( and has no more than one semicolon.
@@ -409,7 +414,7 @@ var isStandaloneCall = (code) => {
 	if (semi !== -1 && semi !== code.length-1)
 		return false;
 
-	return !!code.match(isSimpleCallRegex);
+	return !nonVars2.includes(code) && !!code.match(isSimpleCallRegex);
 };
 
 /**
@@ -801,8 +806,10 @@ var WatchUtil = {
 
 								let originalLength = obj.length;
 								var startIndex = 0;
-								if (func === 'push' || func === 'pop')
+								if (func === 'push')
 									startIndex = originalLength;
+								else if (func === 'pop')
+									startIndex = originalLength - 1;
 								else if (func === 'splice')
 									startIndex = arguments[0] < 0 ? originalLength - arguments[0] : arguments[0];
 
@@ -819,7 +826,11 @@ var WatchUtil = {
 
 								// Trigger a notification for every array element changed, instead of one for eavery sub-operation.
 								// Commented out because it messes up xloops.
-								/*
+
+
+
+
+
 								let roots = WatchUtil.getRoots(obj);
 								for (let root of roots) {
 									let parentPaths = WatchUtil.getPaths(root, obj);
@@ -830,10 +841,9 @@ var WatchUtil = {
 											WatchUtil.notifyCallbacks(root, 'delete', [...parentPath, i + '']);
 									}
 								}
-								*/
 
 								// Old version that notifies for the whole array instead of only the items changed:
-								proxy.$trigger();
+								//proxy.$trigger();
 
 								return result;
 							}
@@ -1132,7 +1142,7 @@ class WatchProperties {
 				for (let callback of this.subs_[parentCPath])
 					// "this.obj_" so it has the context of the original object.
 					// We set indirect to true, which data-loop's rebuildChildren() uses to know it doesn't need to do anything.
-					callback.apply(this.obj_, [...arguments, true])
+					callback.apply(this.obj_, arguments)
 			parentPath.pop();
 		}
 
@@ -1369,7 +1379,7 @@ var bindings = {
 			// Create properties and watch for changes.
 			for (let path of parseVars(classExpr)) {
 				let [root, pathFromRoot] = getRootXElement(self, path);
-				watch(root, path, updateClass);
+				watch(root, pathFromRoot, updateClass);
 				elWatches.add(el, [root, pathFromRoot, updateClass]);
 			}
 
@@ -1454,7 +1464,11 @@ var bindings = {
 
 			// The modification was actually just a child of the loop variable.
 			// The loop variable itself wasn't assigned a new value.
+			// Although indirect will also be true if adding or removing an item from the array.
+			// If foreach is non-standaline, we don't know how the path will be evaluated to the array used by foreach.
+			// So this is of no use right now.
 			if (indirect) {
+
 
 				/*
 				// If deleting a single item from a list.
@@ -1472,7 +1486,7 @@ var bindings = {
 						root.removeChild(child);
 					//}
 				}*/
-				return;
+				//return;
 
 			}
 
@@ -1499,6 +1513,8 @@ var bindings = {
 				throw new XElementError('x-loop="' + code + '" rebuildChildren() called before bindEl().');
 			//#ENDIF
 
+			// We don't know how the path will be evaluated to the array used by foreach, so we re-evaluate it to find out.
+			// TODO: Skip this step and just use the path directly for standalone paths.
 			var newItems = removeProxy(safeEval.call(self, foreach, {el: el}) || []);
 			var oldItems = removeProxy(root.items_ || []);
 
@@ -1933,7 +1949,7 @@ x-elements in loops get fully initialized then replaced.  Is this still true?
 
 
 
-Make shadowdom optional.
+Finish making shadowdom optional.
 
 implement other binding functions.
 allow loop over slots if data-loop is on the instantiation.
@@ -2509,43 +2525,6 @@ class XElement extends HTMLElement {
 }
 
 
-/*
-let queuedOps = new Set();
-let queueDepth = 0;
-
-XElement.enqueue = function(callback) {
-	return function() {
-		if (queueDepth === 0)
-			return callback();
-		else
-			queuedOps.add(callback);
-	};
-};
-
-// Untested.  It might not be possible to use this without screwing things up.
-XElement.batch = function(callback) {
-	return function() {
-		if (queueDepth)
-			queuedOps.add(callback);
-		else {
-			queueDepth++;
-
-			let result = callback(...arguments);
-
-			queueDepth--;
-			if (queueDepth === 0) {
-				for (let op of queuedOps)
-					op();
-				queuedOps = new Set();
-			}
-
-			return result;
-		}
-	}
-};
-*/
-
-
 
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
@@ -2592,6 +2571,7 @@ Object.defineProperty(XElement, 'html', {
 XElement.bindings = bindings;
 XElement.createEl = createEl; // useful for other code.
 XElement.getXParent = getXParent;
+XElement.removeProxy = removeProxy;
 window.XElement = XElement;
 
 // Used as a passthrough for xelement attrib debugging.

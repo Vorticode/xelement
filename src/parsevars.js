@@ -19,9 +19,14 @@ var varPropRegex  = new RegExp(varPropOrFunc, 'gi');
 // https://mathiasbynens.be/notes/javascript-identifiers
 // We exclude 'let,package,interface,implements,private,protected,public,static,yield' because testing shows Chrome accepts these as valid var names.
 var nonVars = 'length,NaN,Infinity,caller,callee,prototype,arguments,true,false,null,undefined,break,case,catch,continue,debugger,default,delete,do,else,finally,for,function,if,in,instanceof,new,return,switch,throw,try,typeof,var,void,while,with,class,const,enum,export,extends,import,super'.split(/,/g);
+var nonVars2 = 'super,NaN,Infinity,true,false,null,undefined'.split(/,/g); // Don't add "this." prefix to thse automatically.
 
+/**
+ * A stanalone var can automatically have "this." prepended to it.
+ * @param {string} code
+ * @returns {boolean} */
 var isStandaloneVar = (code) => {
-	return !!code.trim().match(isStandaloneVarRegex);
+	return !nonVars2.includes(code) && !!code.trim().match(isStandaloneVarRegex);
 };
 var isStandaloneCall = (code) => {
 	// if it starts with a variable followed by ( and has no more than one semicolon.
@@ -33,7 +38,7 @@ var isStandaloneCall = (code) => {
 	if (semi !== -1 && semi !== code.length-1)
 		return false;
 
-	return !!code.match(isSimpleCallRegex);
+	return !nonVars2.includes(code) && !!code.match(isSimpleCallRegex);
 };
 
 /**

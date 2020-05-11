@@ -88,7 +88,7 @@ class WatchProperties {
 				for (let callback of this.subs_[parentCPath])
 					// "this.obj_" so it has the context of the original object.
 					// We set indirect to true, which data-loop's rebuildChildren() uses to know it doesn't need to do anything.
-					callback.apply(this.obj_, [...arguments, true])
+					callback.apply(this.obj_, arguments)
 			parentPath.pop();
 		}
 
@@ -104,15 +104,17 @@ class WatchProperties {
 				let subPath = name.slice(cpath.length > 0 ? cpath.length + 1 : cpath.length); // +1 for ','
 				let oldSubPath = JSON.parse('[' + subPath + ']');
 
-				let fullSubPath = JSON.parse('[' + name + ']');
-
 				let oldSubVal = removeProxy(traversePath(oldVal, oldSubPath));
 				let newSubVal = removeProxy(traversePath(newVal, oldSubPath));
 
-
-				if (oldSubVal !== newSubVal)
-					for (let callback of this.subs_[name])
-						callback.apply(this.obj_, [action, fullSubPath, newSubVal, oldSubVal]); // "this.obj_" so it has the context of the original object.
+				if (oldSubVal !== newSubVal) {
+					let callbacks = this.subs_[name];
+					if (callbacks.length) {
+						let fullSubPath = JSON.parse('[' + name + ']');
+						for (let callback of callbacks)  // [below] "this.obj_" so it has the context of the original object.
+							callback.apply(this.obj_, [action, fullSubPath, newSubVal, oldSubVal]);
+					}
+				}
 			}
 	}
 

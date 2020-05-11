@@ -3,6 +3,9 @@ Inherit from XElement to create custom HTML Components.
 
 
 TODO: major bugfixes
+Removing a node that contains an xelement doesn't remove its items from elWatches or elsewhere?
+	How to unittest this, since I can't inspect what's in weakmap?
+	This can be tested in the test app by opening multiple programs.
 Write a better parser for expr.replace(/this/g, 'parent');
 parseVars("this.passthrough(x)") doesn't find x.
 parseVars("item + passthrough('')") finds "passthrough" as a variable.
@@ -22,7 +25,7 @@ x-elements in loops get fully initialized then replaced.  Is this still true?
 
 
 
-Make shadowdom optional.
+Finish making shadowdom optional.
 
 implement other binding functions.
 allow loop over slots if data-loop is on the instantiation.
@@ -598,43 +601,6 @@ class XElement extends HTMLElement {
 }
 
 
-/*
-let queuedOps = new Set();
-let queueDepth = 0;
-
-XElement.enqueue = function(callback) {
-	return function() {
-		if (queueDepth === 0)
-			return callback();
-		else
-			queuedOps.add(callback);
-	};
-};
-
-// Untested.  It might not be possible to use this without screwing things up.
-XElement.batch = function(callback) {
-	return function() {
-		if (queueDepth)
-			queuedOps.add(callback);
-		else {
-			queueDepth++;
-
-			let result = callback(...arguments);
-
-			queueDepth--;
-			if (queueDepth === 0) {
-				for (let op of queuedOps)
-					op();
-				queuedOps = new Set();
-			}
-
-			return result;
-		}
-	}
-};
-*/
-
-
 
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
@@ -681,6 +647,7 @@ Object.defineProperty(XElement, 'html', {
 XElement.bindings = bindings;
 XElement.createEl = createEl; // useful for other code.
 XElement.getXParent = getXParent;
+XElement.removeProxy = removeProxy;
 window.XElement = XElement;
 
 // Used as a passthrough for xelement attrib debugging.
