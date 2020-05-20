@@ -331,7 +331,8 @@ WatchProxy: {
 			a: document
 		};
 		var wp = watchProxy(o, function(action, path, value) {});
-		wp.a.getElementById('test');
+		o.a.getElementById('test');
+		wp.a.getElementById('test'); // Will throw if fails because a is a proxy instead of an HTMLDocument.
 	}
 
 },
@@ -366,8 +367,8 @@ Watch: {
 		assertEq(o.a.$removeProxy.c, undefined);
 	},
 
-	// Same as WatchProxy.TwoLevel, but with watch() instead of watchProxy.
-	twoLevel: function() {
+	// Same as WatchProxy.twoLevel, but with watch() instead of watchProxy.
+	twoLevel2: function() {
 		var a = {
 			b1: {
 				c: 1,
@@ -465,6 +466,15 @@ Watch: {
 		// Make sure we can subscribe back again.
 		wp.subscribe_(['a'], cb);
 		assert(o.a.$isProxy);
+	},
+
+	// Same as WatchProxy.htmlelement, but with watch() instead of watchProxy.
+	htmlelement2: function() {
+		var o = {
+			a: document
+		};
+		watch(o, 'a', function(action, path, value) {});
+		o.a.getElementById('test'); // Will throw if fails because a is a proxy instead of an HTMLDocument.
 	}
 },
 

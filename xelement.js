@@ -211,8 +211,8 @@ var createEl = (html) => {
 	parent.innerHTML = html;
 	var result = parent.removeChild(parent.firstChild);
 
-	createElMap[html] = result;
-	return result.cloneNode(true); // clone so that subsequent changes don't break our cache.
+	createElMap[html] = result.cloneNode(true);
+	return result; // clone so that subsequent changes don't break our cache.
 };
 
 
@@ -660,10 +660,10 @@ var handler = {
 
 		// Special properties
 		if (field[0] === '$') {
+			if (field === '$removeProxy') // most common paths first.
+				return obj;
 			if (field === '$isProxy')
 				return true;
-			if (field === '$removeProxy')
-				return obj;
 			if (field === '$trigger') {
 				return (path) => {
 					let roots = WatchUtil.getRoots(obj);
@@ -690,9 +690,16 @@ var handler = {
 
 		let result = obj[field];
 
+		// Make sure to call functions on the unproxied version
+		if (typeof result === 'function') {
+			let obj2 = obj.$removeProxy || obj;
+			return obj2[field].bind(obj2);
+		}
+
 		// We only wrap objects and arrays in proxies.
 		// Primitives and functions we leave alone.
-		if (isObj(result) && !(result instanceof Node)) {
+		// if (result && typeof result === 'object' && !(result instanceof Node)) {
+		if (result && typeof result === 'object') { // isObj() inline to hopefully be faster.
 
 			// Remove any proxies.
 			result = result.$removeProxy || result;
