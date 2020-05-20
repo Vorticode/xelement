@@ -171,7 +171,14 @@ var WeakMultiMap = function() {
 // };
 
 
+var createElMap = {};
+
 var createEl = (html) => {
+	let existing = createElMap[html];
+	if (existing)
+		return existing.cloneNode(true);
+
+
 	//#IFDEV
 	if (typeof html !== 'string')
 		throw new XElementError('Html argument must be a string.');
@@ -199,7 +206,10 @@ var createEl = (html) => {
 
 	var parent = document.createElement(parentTag);
 	parent.innerHTML = html;
-	return parent.removeChild(parent.firstChild);
+	var result = parent.removeChild(parent.firstChild);
+
+	createElMap[html] = result;
+	return result.cloneNode(true); // clone so that subsequent changes don't break our cache.
 };
 
 

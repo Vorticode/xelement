@@ -56,7 +56,7 @@ var handler = {
 
 		// We only wrap objects and arrays in proxies.
 		// Primitives and functions we leave alone.
-		if (isObj(result)) {
+		if (isObj(result) && !(result instanceof Node)) {
 
 			// Remove any proxies.
 			result = result.$removeProxy || result;
@@ -414,6 +414,7 @@ WatchUtil.paths = new WeakMap();
 /**
  * Create a copy of root, where callback() is called whenever anything within object is added, removed, or modified.
  * Monitors all deeply nested properties including array operations.
+ * Watches will not extend into HTML elements and nodes.
  * Inspired by: stackoverflow.com/q/41299642
  * @param root {object}
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.

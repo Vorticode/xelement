@@ -325,6 +325,15 @@ WatchProxy: {
 		]);
 	},
 
+	// Make sure proxies don't extend into html elements and nodes.
+	htmlelement: function() {
+		var o = {
+			a: document
+		};
+		var wp = watchProxy(o, function(action, path, value) {});
+		wp.a.getElementById('test');
+	}
+
 },
 
 Watch: {

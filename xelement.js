@@ -174,7 +174,14 @@ var WeakMultiMap = function() {
 // };
 
 
+var createElMap = {};
+
 var createEl = (html) => {
+	let existing = createElMap[html];
+	if (existing)
+		return existing.cloneNode(true);
+
+
 	//#IFDEV
 	if (typeof html !== 'string')
 		throw new XElementError('Html argument must be a string.');
@@ -202,7 +209,10 @@ var createEl = (html) => {
 
 	var parent = document.createElement(parentTag);
 	parent.innerHTML = html;
-	return parent.removeChild(parent.firstChild);
+	var result = parent.removeChild(parent.firstChild);
+
+	createElMap[html] = result;
+	return result.cloneNode(true); // clone so that subsequent changes don't break our cache.
 };
 
 
@@ -682,7 +692,7 @@ var handler = {
 
 		// We only wrap objects and arrays in proxies.
 		// Primitives and functions we leave alone.
-		if (isObj(result)) {
+		if (isObj(result) && !(result instanceof Node)) {
 
 			// Remove any proxies.
 			result = result.$removeProxy || result;
@@ -935,7 +945,7 @@ var WatchUtil = {
 
 	/**
 	 * Register a path from root to obj. */
-	addPath: function(root, path, obj) {
+	addPath: function(root, newPath, obj) {
 		obj = obj.$removeProxy || obj;
 		root = root.$removeProxy || root;
 
@@ -953,40 +963,47 @@ var WatchUtil = {
 		// Get the paths
 		let paths = objMap.get(obj);
 		if (!paths)
-			objMap.set(obj, [path]);
+			objMap.set(obj, [newPath]);
 
 		// Add the path if it isn't already registered.
 		// TODO: This could possibly be faster if the javascript Set could index by arrays.
 		else {
 			for (let existingPath of paths) {
 
+				var l = existingPath.length;
+				if (newPath.length < existingPath.length)
+					continue;
+
 				// If the new path begins with existingPath, don't add it.
 				// Because now we're just expanding more paths from circular references.
-				// TODO: If slow this could be sped up by doing this inline.
-				let newPath = path;
-				if (newPath.length > existingPath.length)
-					newPath = path.slice(0, existingPath.length);
-
-				if (arrayEq(existingPath, newPath))
+				// Inline version of arrayEq() because it's faster.
+				var same = true;
+				for (let i=0; i<l; i++)
+					if (same = !(existingPath[i] !== newPath[i]))
+						break;
+				if (same)
 					return;
 			}
-			paths.push(path);
+			paths.push(newPath);
 		}
 	},
 
 	/**
 	 * Get all paths from root to obj. */
 	getPaths: function(root, obj) {
-		obj = obj.$removeProxy || obj;
-		root = root.$removeProxy || root;
 
+		//#IFDEV
+		if (root.$isProxy)
+			throw new Error("Can't be proxy.");
+		//#ENDIF
+			
 		// Get the map from object to paths.
 		let objMap = WatchUtil.paths.get(root);
 		if (!objMap)
 			return [];
 
 		// Get the paths
-		return objMap.get(obj) || [];
+		return objMap.get(obj.$removeProxy || obj) || [];
 	},
 
 
@@ -1033,6 +1050,7 @@ WatchUtil.paths = new WeakMap();
 /**
  * Create a copy of root, where callback() is called whenever anything within object is added, removed, or modified.
  * Monitors all deeply nested properties including array operations.
+ * Watches will not extend into HTML elements and nodes.
  * Inspired by: stackoverflow.com/q/41299642
  * @param root {object}
  * @param callback {function(action:string, path:string[], value:string?)} Action is 'set' or 'delete'.
@@ -1158,15 +1176,17 @@ class WatchProperties {
 				let subPath = name.slice(cpath.length > 0 ? cpath.length + 1 : cpath.length); // +1 for ','
 				let oldSubPath = JSON.parse('[' + subPath + ']');
 
-				let fullSubPath = JSON.parse('[' + name + ']');
-
 				let oldSubVal = removeProxy(traversePath(oldVal, oldSubPath));
 				let newSubVal = removeProxy(traversePath(newVal, oldSubPath));
 
-
-				if (oldSubVal !== newSubVal)
-					for (let callback of this.subs_[name])
-						callback.apply(this.obj_, [action, fullSubPath, newSubVal, oldSubVal]); // "this.obj_" so it has the context of the original object.
+				if (oldSubVal !== newSubVal) {
+					let callbacks = this.subs_[name];
+					if (callbacks.length) {
+						let fullSubPath = JSON.parse('[' + name + ']');
+						for (let callback of callbacks)  // [below] "this.obj_" so it has the context of the original object.
+							callback.apply(this.obj_, [action, fullSubPath, newSubVal, oldSubVal]);
+					}
+				}
 			}
 	}
 
@@ -1395,7 +1415,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	text: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setText = (/*action, path, value*/) => {
+		let setText = (/*action, path, value, oldVal*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
@@ -1418,7 +1438,7 @@ var bindings = {
 	 * @param context {object<string, string>} */
 	html: (self, code, el, context) => {
 		code = addThis(replaceVars(code, context), context);
-		let setHtml = (/*action, path, value*/) => {
+		let setHtml = (/*action, path, value, oldVal*/) => {
 			let val = safeEval.call(self, code, {el: el});
 			if (val === undefined || val === null)
 				val = '';
@@ -1468,8 +1488,6 @@ var bindings = {
 			// If foreach is non-standaline, we don't know how the path will be evaluated to the array used by foreach.
 			// So this is of no use right now.
 			if (indirect) {
-
-
 				/*
 				// If deleting a single item from a list.
 				// Commented out because this would only work with simple variables.
@@ -1487,7 +1505,6 @@ var bindings = {
 					//}
 				}*/
 				//return;
-
 			}
 
 			// The code we'll loop over.
@@ -1584,7 +1601,7 @@ var bindings = {
 
 
 			// Rebind events on any elements that had their index change.
-			for (let i=0; i< root.children.length; i++) {
+			for (let i=0; i<root.children.length; i++) {
 				let child = root.children[i];
 				if (child.index_ !== i) {
 
@@ -1930,6 +1947,9 @@ Inherit from XElement to create custom HTML Components.
 
 
 TODO: major bugfixes
+Removing a node that contains an xelement doesn't remove its items from elWatches or elsewhere?
+	How to unittest this, since I can't inspect what's in weakmap?
+	This can be tested in the test app by opening multiple programs.
 Write a better parser for expr.replace(/this/g, 'parent');
 parseVars("this.passthrough(x)") doesn't find x.
 parseVars("item + passthrough('')") finds "passthrough" as a variable.
