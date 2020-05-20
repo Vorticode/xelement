@@ -208,8 +208,8 @@ var createEl = (html) => {
 	parent.innerHTML = html;
 	var result = parent.removeChild(parent.firstChild);
 
-	createElMap[html] = result;
-	return result.cloneNode(true); // clone so that subsequent changes don't break our cache.
+	createElMap[html] = result.cloneNode(true);
+	return result; // clone so that subsequent changes don't break our cache.
 };
 
 
