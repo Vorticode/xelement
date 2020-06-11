@@ -51,8 +51,12 @@ var handler = {
 		}
 
 
-
 		let result = obj[field];
+
+
+		// Return the underlying array's iterator, to make for(...of) loops work.
+		if (field === Symbol.iterator)
+			return result;
 
 		// Make sure to call functions on the unproxied version
 		if (typeof result === 'function') {

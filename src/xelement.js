@@ -499,8 +499,23 @@ var initHtml = (self) => {
 
 		var root = self.shadowRoot || self;
 
+		// 7. replace link tags with inline styles, if the style has already been added to the outermost document.
+		// This prevents making an http request for each one when the server doesn't have caching.  (e.g. during development)
+		for (let link of root.querySelectorAll('link')) {
+			for (let stylesheet of document.styleSheets)
+				if (stylesheet.href === link.href) {
+					link.parentNode.replaceChild(
+						XElement.createEl(
+							'<style>' +
+							Array.from(stylesheet.cssRules).map(x => x.cssText).join('\n') +
+							'</style>'),
+						link);
+					break;
+				}
+		}
 
-		// 7. Create class properties that reference any html element with an id tag.
+
+		// 8. Create class properties that reference any html element with an id tag.
 		for (let node of root.querySelectorAll('[id]')) {
 			let id = node.getAttribute('id');
 
@@ -535,7 +550,7 @@ var initHtml = (self) => {
 
 		if (disableBind === 0) {
 
-			// 8. Bind all data- and event attributes
+			// 9. Bind all data- and event attributes
 			// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
 			bindElProps(self, self);
 

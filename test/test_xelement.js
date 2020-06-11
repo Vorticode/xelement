@@ -333,6 +333,23 @@ WatchProxy: {
 		var wp = watchProxy(o, function(action, path, value) {});
 		o.a.getElementById('test');
 		wp.a.getElementById('test'); // Will throw if fails because a is a proxy instead of an HTMLDocument.
+	},
+
+	/**
+	 * Make sure that hanler.get return's the underlying array's iterator.
+	 * This uses the `if (field === Symbol.iterator)` code in watchproxy.js */
+	forOf: function() {
+		var o = {a: [{b: 1}]};
+		var called = 0;
+		var wp = watchProxy(o, () => {
+			called++;
+		});
+
+		// For of implicity removes the proxy so we're not notified of the change!
+		for (let a2 of wp.a)
+			a2.b = 2;
+
+		assertEq(called, 1);
 	}
 
 },
@@ -475,7 +492,7 @@ Watch: {
 		};
 		watch(o, 'a', function(action, path, value) {});
 		o.a.getElementById('test'); // Will throw if fails because a is a proxy instead of an HTMLDocument.
-	}
+	},
 },
 
 XElement: {
