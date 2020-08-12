@@ -1,3 +1,10 @@
+/**
+ * We use rollup.js to combine the javascript files into a single file:  https://rollupjs.org/guide/en/
+ * Then Terser to minify them into a smaller file.
+ * Both terser and rollup are committed into the build folder.  Only node.js is required to run this script:
+ * node build2.js
+ */
+
 
 const fs = require('fs');
 const rollup = require('./rollup/rollup.js');
@@ -5,68 +12,26 @@ const Terser = require("./terser.min.js"); // We use terser 3.14.1, because ters
 
 
 async function rollupBuild() {
-	// see below for details on the options
-	const inputOptions = {
-		input: '../src/xelement.js'
-	};
-	const outputOptions = {
-		output: {
-			file: '../xelement2.js'
-		}
-	};
-
 
 	// create a bundle
-	const bundle = await rollup.rollup(inputOptions);
-
-	console.log(bundle.watchFiles); // an array of file names this bundle depends on
-
-	// generate output specific code in-memory
-	// you can call this function multiple times on the same bundle object
-	const { output } = await bundle.generate(outputOptions);
-
-	for (const chunkOrAsset of output) {
-		if (chunkOrAsset.type === 'asset') {
-			// For assets, this contains
-			// {
-			//   fileName: string,              // the asset file name
-			//   source: string | Uint8Array    // the asset source
-			//   type: 'asset'                  // signifies that this is an asset
-			// }
-			//console.log('Asset', chunkOrAsset);
-		} else {
-			// For chunks, this contains
-			// {
-			//   code: string,                  // the generated JS code
-			//   dynamicImports: string[],      // external modules imported dynamically by the chunk
-			//   exports: string[],             // exported variable names
-			//   facadeModuleId: string | null, // the id of a module that this chunk corresponds to
-			//   fileName: string,              // the chunk file name
-			//   implicitlyLoadedBefore: string[]; // entries that should only be loaded after this chunk
-			//   imports: string[],             // external modules imported statically by the chunk
-			//   isDynamicEntry: boolean,       // is this chunk a dynamic entry point
-			//   isEntry: boolean,              // is this chunk a static entry point
-			//   isImplicitEntry: boolean,      // should this chunk only be loaded after other chunks
-			//   map: string | null,            // sourcemaps if present
-			//   modules: {                     // information about the modules in this chunk
-			//     [id: string]: {
-			//       renderedExports: string[]; // exported variable names that were included
-			//       removedExports: string[];  // exported variable names that were removed
-			//       renderedLength: number;    // the length of the remaining code in this module
-			//       originalLength: number;    // the original length of the code in this module
-			//     };
-			//   },
-			//   name: string                   // the name of this chunk as used in naming patterns
-			//   referencedFiles: string[]      // files referenced via import.meta.ROLLUP_FILE_URL_<id>
-			//   type: 'chunk',                 // signifies that this is a chunk
-			// }
-			//console.log('Chunk', chunkOrAsset.modules);
+	const bundle = await rollup.rollup({
+		input: '../src/xelement.js'
+	});
+	await bundle.write({
+		output:	{
+			file: '../dist/xelement.module.js',
+			format: 'es' // es6 module for use as <script type="module">
 		}
-	}
 
-	// or write the bundle to disk
-	await bundle.write(outputOptions);
+	});
+	await bundle.write({
+		output: {
+			file: '../dist/xelement.js',
+			format: 'umd', // Universal Module Definition, works as amd, cjs and iife all in one
+			name: 'XElement'
+		}
 
+	});
 
 	terserBuild();
 }
@@ -91,7 +56,7 @@ function terserBuild() {
 	//
 	// fs.writeFileSync('../xelement.js', code);
 
-	var code = [fs.readFileSync('../xelement2.js')].join('');
+	var code = [fs.readFileSync('../dist/xelement.js')].join('');
 
 	// Do replacements
 	var replacementFuncs = [
@@ -223,7 +188,7 @@ function terserBuild() {
 	var result = Terser.minify(code, options);
 
 	console.log(result.error || 'Successfully created xelement.js and xelement.min.js');
-	fs.writeFileSync('../xelement2.min.js', result.code);
+	fs.writeFileSync('../dist/xelement.min.js', result.code);
 }
 
 rollupBuild();

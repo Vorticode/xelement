@@ -304,5 +304,8 @@ var Tests = {
 	}
 };
 
-export default Tests;
-export { AssertError, assert, assertEq, assertEqDeep, assertNeq, assertLte };
+
+// Make global so that event attribute code can call Tests.
+window.Tests = Tests;
+
+export { Tests, AssertError, assert, assertEq, assertEqDeep, assertNeq, assertLte };

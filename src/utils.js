@@ -1,4 +1,10 @@
-import { removeProxy } from '../src/watch.js';
+/**
+ * Shortened version of this answer: stackoverflow.com/a/18751951
+ * @type {string[]} */
+var eventNames = Object.keys(document.__proto__.__proto__)
+	.filter((x) => x.startsWith('on'))
+	.map(   (x) => x.slice(2));
+
 
 //#IFDEV
 class XElementError extends Error {
@@ -7,6 +13,9 @@ class XElementError extends Error {
 	}
 }
 //#ENDIF
+
+
+var removeProxy = (obj) => (obj && obj.$removeProxy) || obj;
 
 /**
  * Return true if the two arrays have the same items in the same order.
@@ -22,13 +31,11 @@ var arrayEq = (array1, array2, deep) => {
 	return removeProxy(array1).every((value, index) => {
 		if (deep && Array.isArray(value))
 			return arrayEq(value, array2[index]);
-		return eq(value, array2[index]);
+
+		return removeProxy(value) === removeProxy(array2[index])
 	})
 };
 
-var eq = (item1, item2) => {
-	return removeProxy(item1) === removeProxy(item2);
-};
 
 /**
  * Returns true if obj has at least one key defined.
@@ -40,181 +47,6 @@ var hasKeys = (obj) => {
 	return false;
 };
 
-/**
- * A WeakMap with multiple values per key. */
-var WeakMultiMap = function() {
-
-	let self = this;
-	self.items = new WeakMap();
-
-	/**
-	 * Add an item to the map.  If it already exists, add another at the same key.
-	 * @param key
-	 * @param value */
-	self.add = function(key, value) {
-		let itemSet = self.items.get(key);
-		if (!itemSet)
-			self.items.set(key, [value]);
-		else
-			itemSet.push(value);
-	};
-
-	/**
-	 * Retrieve an item from the set that matches key and all values specified.
-	 * @param key
-	 * @returns {*|undefined} */
-	self.get = function(key) {
-		return self.items.get(key)[0];
-	};
-
-	self.getAll = function(key) {
-		return self.items.get(key) || [];
-	};
-
-	// remove last item added.
-	self.remove = function(key) {
-		let itemSet = self.items.get(key);
-		if (!itemSet)
-			return undefined;
-		if (itemSet.length === 1) // remove on last item
-			self.items.delete(key);
-		return itemSet.pop();
-	};
-
-	self.removeAll = function(key) {
-		return self.items.delete(key);
-	}
-
-};
-
-
-// Multi key lookup version.  Might not need this added complexity.
-// var WeakMultiMap2 = function() {
-//
-// 	let self = this;
-// 	self.items = new WeakMap();
-//
-// 	// TODO: write an internal function that combines common elements of these functions
-//
-//
-// 	/**
-// 	 * Add an item to the map.  If it already exists, add another at the same key.
-// 	 * @param key
-// 	 * @param values */
-// 	self.add = function(key, ...values) {
-// 		let itemSet = self.items.get(key);
-// 		if (!itemSet)
-// 			self.items.set(key, [values]);
-// 		else
-// 			itemSet.push(values);
-// 	};
-//
-// 	/**
-// 	 * Retrieve an item from the set that matches key and all values specified.
-// 	 * @param key
-// 	 * @param values
-// 	 * @returns {*|undefined} */
-// 	self.get = function(key, ...values) {
-// 		let itemSet = self.items.get(key);
-// 		if (itemSet) {
-// 			for (let item of itemSet) {
-// 				if (arrayEq(item.slice(0, values.length), values, true))
-// 					return item;
-// 			}
-// 		}
-// 		return undefined;
-// 	};
-//
-// 	self.getAll = function(key, ...values) {
-// 		let result = [];
-// 		let itemSet = self.items.get(key);
-// 		if (itemSet) {
-// 			for (let item of itemSet) {
-// 				let matches = true;
-// 				for (let i = 0; i < values.length; i++) {
-// 					if (!eq(item[i], values[i])) {
-// 						matches = false;
-// 						break;
-// 					}
-// 				}
-//
-// 				// Return the first item in the array that matches.
-// 				if (matches)
-// 					result.push(item);
-// 			}
-// 		}
-//
-//
-// 		return result;
-// 	};
-//
-// 	// remove first match
-// 	self.remove = function(key, ...values) {
-// 		let itemSet = self.items.get(key);
-// 		if (itemSet) {
-// 			for (let j=0; j<itemSet.length; j++) {
-// 				let item = itemSet[j];
-// 				let matches = true;
-// 				for (var i = 0; i < values.length; i++) {
-// 					if (!eq(item[i], values[i])) {
-// 						matches = false;
-// 						break;
-// 					}
-// 				}
-//
-// 				// Return the first item in the array that matches.
-// 				if (matches) {
-// 					itemSet.splice(j, 1);
-// 					return item;
-// 				}
-// 			}
-// 		}
-// 		return undefined;
-// 	};
-//
-// };
-
-
-var createElMap = {};
-
-var createEl = (html) => {
-	let existing = createElMap[html];
-	if (existing)
-		return existing.cloneNode(true);
-
-
-	//#IFDEV
-	if (typeof html !== 'string')
-		throw new XElementError('Html argument must be a string.');
-	//#ENDIF
-
-	let tagName = html.trim().match(/<([a-z0-9-]+)/i);
-	if (tagName)
-		tagName = tagName[1];
-
-	// Using a template makes some embed related tests fail to instantiate x-elements.
-	let parentMap = {
-		td: 'tr',
-		tr: 'tbody',
-		tbody: 'table',
-		thead: 'table',
-		tfoot: 'table',
-		source: 'video',
-		area: 'map',
-		legend: 'fieldset',
-		option: 'select',
-		col: 'colgroup',
-		param: 'object'
-	};
-	let parentTag = parentMap[tagName] || 'div';
-
-	var parent = document.createElement(parentTag);
-	parent.innerHTML = html;
-	var result = parent.removeChild(parent.firstChild);
-
-	createElMap[html] = result.cloneNode(true);
-	return result; // clone so that subsequent changes don't break our cache.
-};
 
 
 /**
@@ -318,69 +150,53 @@ var traversePath = (obj, path, create, value, watchless) => {
 	return obj;
 };
 
+
+export { arrayEq, hasKeys, csv, isObj, isValidAttribute, hasKeyStartingWith, traversePath, eventNames, XElementError };
+export {removeProxy};
 /**
- * Shortened version of this answer: stackoverflow.com/a/18751951
- * @type {string[]} */
-var eventNames = Object.keys(document.__proto__.__proto__)
-	.filter((x) => x.startsWith('on'))
-	.map(   (x) => x.slice(2));
-
-
-var Cache = function() {
-	var self = this;
-	this.map = new Map();
-
-	this.get = function(key, val) {
-		let result = self.map.get(key);
-		if (!result) {
-			self.map.set(key, result = val());
-		}
-		return result;
-	};
-
-	this.remove = function(key) {
-		// TODO
-	};
-};
-
-var safeEvalCache = new Cache();
-
-
-/**
- * Evaluate expr, but allow undefined variables.
- * @param expr {string}
- * @param args {object}
- * @param isStatements {boolean=false}
+ * Operates recursively to remove all proxies.
+ * TODO: This is used by watchproxy and should be moved there?
+ * @param obj {*}
+ * @param visited {WeakSet=} Used internally.
  * @returns {*} */
-function safeEval(expr, args, isStatements) {
+var removeProxies = (obj, visited) => {
+	if (obj === null || obj === undefined)
+		return obj;
 
-	let code = isStatements ? expr : 'return (' + expr + ')';
-	if (args && Object.keys(args).length) {
+	if (obj.$isProxy) {
+		obj = obj.$removeProxy;
 
-		// Convert args object to var a=arguments[0][name] assignments
-		let argAssignments = [];
-		for (let name in args)
-			argAssignments.push(name + '=arguments[0]["' + name.replace(/"/g, '\"') + '"]');
-
-		code = 'var ' + argAssignments.join(',') + ';' + code;
+		//#IFDEV
+		if (obj.$isProxy) // If still a proxy.  There should never be more than 1 level deep of proxies.
+			throw new XElementError("Double wrapped proxy found.");
+		//#ENDIF
 	}
 
-	try {
-		//return Function('return (' + expr + ')').call(this);
-		let lazyEval = function() {
-			return Function(code);
-		};
-		return safeEvalCache.get(code, lazyEval).call(this, args);
-	}
-	catch (e) { // Don't fail for null values.
-		if (!(e instanceof TypeError) || (!e.message.match('undefined'))) {
-			//#IFDEV
-			e.message += ' in expression "' + code + '"';
-			//#ENDIF
-			throw e;
+	if (typeof obj === 'object') {
+		if (!visited)
+			visited = new WeakSet();
+		else if (visited.has(obj))
+			return obj; // visited this object before in a cyclic data structure.
+		visited.add(obj);
+
+		// Recursively remove proxies from every property of obj:
+		for (let name in Object.keys(obj)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
+			let t = obj[name];
+			let v = removeProxies(t, visited);
+
+			// If a proxy was removed from something created with Object.defineOwnProperty()
+			if (v !== t) {
+				if (Object.getOwnPropertyDescriptor(obj, name).writable) // we never set writable=true when we defineProperty.
+					obj[name] = v;
+				else {
+					// It's a defined property.  Set it on the underlying object.
+					let wp = watch.objects.get(obj);
+					let node = wp ? wp.fields_ : obj;
+					node[name] = v
+				}
+			}
 		}
 	}
-	return undefined;
-}
-
-export { createEl, eq, arrayEq, hasKeys, WeakMultiMap, csv, isObj, isValidAttribute, hasKeyStartingWith, traversePath, safeEval, eventNames, XElementError };
+	return obj;
+};
+export {removeProxies};

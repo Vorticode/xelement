@@ -1,7 +1,4 @@
-import { isObj} from '../src/utils.js';
-import { removeProxy, removeProxies } from '../src/watch.js';
-
-
+import { removeProxies, isObj, removeProxy } from './utils.js';
 
 /**
  * @property object.$isProxy
@@ -450,5 +447,4 @@ var watchProxy = (root, callback) => {
 	return WatchUtil.getProxy(root);
 };
 
-export default watchProxy;
-export { WatchUtil };
+export { watchProxy, WatchUtil };

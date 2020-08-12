@@ -42,12 +42,6 @@
 		if (!this.customElements)
 			document.write('<script src="//unpkg.com/document-register-element"><\x2fscript>');
 	</script>
-
-
-	<!--
-	<script src="../xelement.js"></script>
-	-->
-
 </head>
 <body>
 	<form id="tests">
@@ -56,19 +50,17 @@
 
 		<script type="module">
 
-			import XElement from './../src/xelement.js';
-			import { createEl } from './../src/utils.js';
-
-			import Tests from './test.js';
-			window.Tests = Tests;
-			import XElementTests from './test_xelement.js';
+			import { XElement } from './../src/xelement.js';
+			import { createEl } from '../src/createEl.js';
+			import { Tests } from './test.js';
+			import { XElementTests } from './test_xelement.js';
 
 
 			//Tests.debugOnAssertFail = true;
 			Tests.throwError = true;
 			var table = Tests.getTable(XElementTests, 'XElementTests');
 			var table2 = createEl('<table class="tests" cellspacing="0">' + table + '</table>');
-			document.body.appendChild(table2);
+			document.getElementById('tests').appendChild(table2);
 
 			Tests.runTests(document.querySelector('table.tests'));
 		</script>

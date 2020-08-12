@@ -1,56 +1,5 @@
-import {csv, hasKeyStartingWith, isObj, traversePath, XElementError} from '../src/utils.js';
-import watchProxy from './watchproxy.js';
-
-
-var removeProxy = (obj) => isObj(obj) ? obj.$removeProxy || obj : obj;
-
-
-/**
- * Operates recursively to remove all proxies.
- * TODO: This is used by watchproxy and should be moved there?
- * @param obj {*}
- * @param visited {WeakSet=} Used internally.
- * @returns {*} */
-var removeProxies = (obj, visited) => {
-	if (obj === null || obj === undefined)
-		return obj;
-
-	if (obj.$isProxy) {
-		obj = obj.$removeProxy;
-
-		//#IFDEV
-		if (obj.$isProxy) // If still a proxy.  There should never be more than 1 level deep of proxies.
-			throw new XElementError("Double wrapped proxy found.");
-		//#ENDIF
-	}
-
-	if (typeof obj === 'object') {
-		if (!visited)
-			visited = new WeakSet();
-		else if (visited.has(obj))
-			return obj; // visited this object before in a cyclic data structure.
-		visited.add(obj);
-
-		// Recursively remove proxies from every property of obj:
-		for (let name in Object.keys(obj)) { // Don't mess with inherited properties.  E.g. defining a new outerHTML.
-			let t = obj[name];
-			let v = removeProxies(t, visited);
-
-			// If a proxy was removed from something created with Object.defineOwnProperty()
-			if (v !== t) {
-				if (Object.getOwnPropertyDescriptor(obj, name).writable) // we never set writable=true when we defineProperty.
-					obj[name] = v;
-				else {
-					// It's a defined property.  Set it on the underlying object.
-					let wp = watch.objects.get(obj);
-					let node = wp ? wp.fields_ : obj;
-					node[name] = v
-				}
-			}
-		}
-	}
-	return obj;
-};
+import {csv, hasKeyStartingWith, removeProxy, traversePath, XElementError} from '../src/utils.js';
+import { watchProxy } from './watchProxy.js';
 
 /**
  * Allow subcribing only to specific properties of an object.
@@ -268,4 +217,4 @@ watch.cleanup = () => watch.objects = new WeakMap();
 
 
 
-export { watch, unwatch, WatchProperties, removeProxy, removeProxies };
+export { watch, unwatch, WatchProperties};

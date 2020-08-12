@@ -1,9 +1,10 @@
-import { createEl, arrayEq, XElementError } from '../src/utils.js';
-import { isStandaloneVar, parseVars, replaceVars, addThis } from '../src/parsevars.js';
-import watchProxy, { WatchUtil } from '../src/watchproxy.js';
-import { removeProxy, watch, unwatch, WatchProperties } from '../src/watch.js';
-import XElement, { bindEl, unbindEl, elWatches, elEvents } from '../src/xelement.js';
-import { assert, assertEq, assertEqDeep, assertNeq, assertLte } from './test.js';
+import {arrayEq, removeProxy, XElementError} from '../src/utils.js';
+import {addThis, isStandaloneVar, parseVars, replaceVars} from '../src/parsevars.js';
+import {watchProxy, WatchUtil} from '../src/watchproxy.js';
+import {watch, WatchProperties} from '../src/watch.js';
+import {elEvents, elWatches, unbindEl, XElement} from '../src/xelement.js';
+import {assert, assertEq, assertEqDeep, assertLte} from './test.js';
+import {createEl} from "../src/createEl.js";
 
 var XElementTests = {
 
@@ -2873,4 +2874,4 @@ unresolved: {
 // Required so we can run tests from eval'd code.
 window.XElementTests = XElementTests;
 
-export default XElementTests;
+export { XElementTests };

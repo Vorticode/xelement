@@ -80,10 +80,13 @@ lazy modifier for input binding, to only trigger update after change.
 
 */
 
-import {createEl, eventNames, isValidAttribute, safeEval, traversePath, WeakMultiMap} from './utils.js';
-import {addThis, isStandaloneCall, parseVars, replaceVars} from './parsevars.js';
-import {removeProxy, unwatch} from './watch.js';
-import bindings from './bindings.js';
+import {safeEval} from './safeEval.js';
+import {eventNames, isValidAttribute, traversePath, removeProxy} from './utils.js';
+import {addThis, isStandaloneCall, parseVars, replaceVars} from './parseVars.js';
+import {unwatch} from './watch.js';
+import {bindings} from './bindings.js';
+import {WeakMultiMap} from "./WeakMultiMap.js";
+import {createEl} from "./createEl.js";
 
 /**
  * A map between elements and the callback functions subscribed to them.
@@ -668,9 +671,7 @@ XElement.cleanup = () => {
 	elEvents = new WeakMultiMap();
 };
 
-
-export default XElement;
-export { getRootXElement, getXParent, elWatches, elEvents, bindEl, unbindEl };
+export { XElement, getRootXElement, getXParent, elWatches, elEvents, bindEl, unbindEl };
 export {removeProxy, unwatch};
 
 // Used as a passthrough for xelement attrib debugging.

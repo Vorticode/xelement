@@ -1,7 +1,9 @@
-import {arrayEq, createEl, safeEval, traversePath, XElementError} from './utils.js';
-import {addThis, isStandaloneVar, parseLoop, parseObj, parseVars, replaceVars, trimThis} from './parsevars.js';
-import {removeProxy, watch} from './watch.js';
-import XElement, { elEvents, elWatches, bindEl, unbindEl, getRootXElement, getXParent } from './xelement.js';
+import {safeEval} from './safeEval.js';
+import {arrayEq, traversePath, removeProxy, XElementError} from './utils.js';
+import {addThis, isStandaloneVar, parseLoop, parseObj, parseVars, replaceVars, trimThis} from './parseVars.js';
+import {watch} from './watch.js';
+import {XElement, elEvents, elWatches, bindEl, unbindEl, getRootXElement, getXParent } from './xelement.js';
+import {createEl} from "./createEl.js";
 
 // TODO: write a function to replace common code among these.
 var bindings = {
@@ -606,4 +608,4 @@ var getLoopElArray_ = (loopEl, xparent) => {
 	return safeEval.call(xparent, foreach, {el: loopEl});
 };
 
-export default bindings;
+export {bindings};
