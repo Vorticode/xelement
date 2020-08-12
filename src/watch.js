@@ -268,9 +268,4 @@ watch.cleanup = () => watch.objects = new WeakMap();
 
 
 
-
-// Exports
-window.watch = watch;
-window.unwatch = unwatch;
-
 export { watch, unwatch, WatchProperties, removeProxy, removeProxies };

@@ -669,11 +669,9 @@ XElement.cleanup = () => {
 };
 
 
-window.XElement = XElement;
-
 export default XElement;
 export { getRootXElement, getXParent, elWatches, elEvents, bindEl, unbindEl };
-
+export {removeProxy, unwatch};
 
 // Used as a passthrough for xelement attrib debugging.
 window.xdebug = (a) => {

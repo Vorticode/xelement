@@ -1,7 +1,7 @@
 import {arrayEq, createEl, safeEval, traversePath, XElementError} from './utils.js';
 import {addThis, isStandaloneVar, parseLoop, parseObj, parseVars, replaceVars, trimThis} from './parsevars.js';
 import {removeProxy, watch} from './watch.js';
-import {elEvents, elWatches, bindEl, unbindEl, getRootXElement, getXParent } from './xelement.js';
+import XElement, { elEvents, elWatches, bindEl, unbindEl, getRootXElement, getXParent } from './xelement.js';
 
 // TODO: write a function to replace common code among these.
 var bindings = {

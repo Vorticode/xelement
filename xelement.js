@@ -1,6 +1,8 @@
 // https://github.com/Vorticode/xelement
 (function() {
 //%replace%
+import { removeProxy } from '../src/watch.js';
+
 //#IFDEV
 class XElementError extends Error {
 	constructor(msg) {
@@ -28,7 +30,7 @@ var arrayEq = (array1, array2, deep) => {
 };
 
 var eq = (item1, item2) => {
-	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
+	return removeProxy(item1) === removeProxy(item2);
 };
 
 /**
@@ -41,6 +43,8 @@ var hasKeys = (obj) => {
 	return false;
 };
 
+/**
+ * A WeakMap with multiple values per key. */
 var WeakMultiMap = function() {
 
 	let self = this;
@@ -382,7 +386,7 @@ function safeEval(expr, args, isStatements) {
 	return undefined;
 }
 
-;
+export { createEl, eq, arrayEq, hasKeys, WeakMultiMap, csv, isObj, isValidAttribute, hasKeyStartingWith, traversePath, safeEval, eventNames, XElementError };;
 
 // Regex for matching javascript variables.  Made from pieces of this regex:  https://www.regexpal.com/?fam=112426
 var identifier = '([$a-z_][$a-z0-9_]*)';       // A regular variable name.
@@ -632,9 +636,12 @@ var addThis = (code, context, isStandalone, prefix) => {
 };
 
 // Exports
-window.parseLoop = parseLoop; // temporary for EditableSelect.;
+window.parseLoop = parseLoop; // temporary for EditableSelect.
 
-"use strict";
+export { isStandaloneVar, isStandaloneCall, parseVars, trimThis, replaceVars, parseObj, parseLoop, addThis };;
+
+import { isObj} from '../src/utils.js';
+import { removeProxy, removeProxies } from '../src/watch.js';
 
 
 
@@ -1036,6 +1043,13 @@ var WatchUtil = {
 		let callbacks = WatchUtil.getCallbacks(root);
 		for (let callback of callbacks)
 			callback(action, path, newVal, oldVal);
+	},
+
+	cleanup: () => {
+		WatchUtil.proxies = new WeakMap();
+		WatchUtil.roots = new WeakMap();
+		WatchUtil.callbacks = new WeakMap();
+		WatchUtil.paths = new WeakMap();
 	}
 };
 
@@ -1054,7 +1068,6 @@ WatchUtil.callbacks = new WeakMap();
  * Outer weakmap is indexed by root, inner by object.
  * @type {WeakMap<object, WeakMap<object, string[][]>>} */
 WatchUtil.paths = new WeakMap();
-
 
 
 
@@ -1079,14 +1092,19 @@ var watchProxy = (root, callback) => {
 	return WatchUtil.getProxy(root);
 };
 
-;
+export default watchProxy;
+export { WatchUtil };;
+
+import {csv, hasKeyStartingWith, isObj, traversePath, XElementError} from '../src/utils.js';
+import watchProxy from './watchproxy.js';
 
 
 var removeProxy = (obj) => isObj(obj) ? obj.$removeProxy || obj : obj;
 
 
 /**
- * Operates recursively to remove all proxies.  But should it?
+ * Operates recursively to remove all proxies.
+ * TODO: This is used by watchproxy and should be moved there?
  * @param obj {*}
  * @param visited {WeakSet=} Used internally.
  * @returns {*} */
@@ -1121,7 +1139,7 @@ var removeProxies = (obj, visited) => {
 					obj[name] = v;
 				else {
 					// It's a defined property.  Set it on the underlying object.
-					let wp = watched.get(obj);
+					let wp = watch.objects.get(obj);
 					let node = wp ? wp.fields_ : obj;
 					node[name] = v
 				}
@@ -1168,6 +1186,7 @@ class WatchProperties {
 			let parentCPath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
 			if (parentCPath in this.subs_)
+				/** @type function */
 				for (let callback of this.subs_[parentCPath])
 					// "this.obj_" so it has the context of the original object.
 					// We set indirect to true, which data-loop's rebuildChildren() uses to know it doesn't need to do anything.
@@ -1295,11 +1314,7 @@ class WatchProperties {
 	}
 }
 
-/**
- * Keeps track of which objects we're watching.
- * That way watch() and unwatch() can work without adding any new fields to the objects they watch.
- * @type {WeakMap<object, WatchProperties>} */
-var watched = new WeakMap();
+
 
 /**
  *
@@ -1310,12 +1325,19 @@ var watch = (obj, path, callback) => {
 	obj = removeProxy(obj);
 
 	// Keep only one WatchProperties per watched object.
-	var wp = watched.get(obj);
+	var wp = watch.objects.get(obj);
 	if (!wp)
-		watched.set(obj, wp = new WatchProperties(obj));
+		watch.objects.set(obj, wp = new WatchProperties(obj));
 
 	wp.subscribe_(path, callback);
 };
+
+
+/**
+ * Keeps track of which objects we're watching.
+ * That way watch() and unwatch() can work without adding any new fields to the objects they watch.
+ * @type {WeakMap<object, WatchProperties>} */
+watch.objects = new WeakMap();
 
 /**
  *
@@ -1324,7 +1346,7 @@ var watch = (obj, path, callback) => {
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
 	obj = removeProxy(obj);
-	var wp = watched.get(obj);
+	var wp = watch.objects.get(obj);
 
 	if (wp) {
 		if (path) // unsubscribe only from path.
@@ -1335,18 +1357,25 @@ var unwatch = (obj, path, callback) => {
 
 		// Remove from watched objects if we're no longer watching
 		if (!Object.keys(wp.subs_).length)
-			watched.delete(obj);
+			watch.objects.delete(obj);
 	}
 };
+
+watch.cleanup = () => watch.objects = new WeakMap();
+
+
 
 
 // Exports
 window.watch = watch;
 window.unwatch = unwatch;
-;
 
-"use strict";
+export { watch, unwatch, WatchProperties, removeProxy, removeProxies };;
 
+import {arrayEq, createEl, safeEval, traversePath, XElementError} from './utils.js';
+import {addThis, isStandaloneVar, parseLoop, parseObj, parseVars, replaceVars, trimThis} from './parsevars.js';
+import {removeProxy, watch} from './watch.js';
+import {elEvents, elWatches, bindEl, unbindEl, getRootXElement, getXParent } from './xelement.js';
 
 // TODO: write a function to replace common code among these.
 var bindings = {
@@ -1591,9 +1620,9 @@ var bindings = {
 					// TODO: createEl() binds nexted x-elements before we're ready for them to be bound.
 					// E.g. below we set the localContext for loop variables.
 					if (isNew) {
-						disableBind ++;
+						XElement.disableBind ++;
 						newChild = createEl(root.loopHtml_);
-						disableBind --;
+						XElement.disableBind --;
 
 					}
 					// This can either insert the new one or move an old one to this position.
@@ -1951,7 +1980,7 @@ var getLoopElArray_ = (loopEl, xparent) => {
 	return safeEval.call(xparent, foreach, {el: loopEl});
 };
 
-;
+export default bindings;;
 
 /*
 Inherit from XElement to create custom HTML Components.
@@ -1972,6 +2001,7 @@ Use a regex or parser to remove the html of x-loops before they're passed to cre
 Make sure recursive embeds work if:  1. the x-loop is on the x-parent above the shadow dom.  2. An x-element is within a div inside the loop.
 
 TODO: next goals:
+When an x-prop calls a function, and that function throws an error, we don't see it in chrome's stack trace.
 {{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
 allow comments in loops.
@@ -2034,8 +2064,10 @@ lazy modifier for input binding, to only trigger update after change.
 
 */
 
-
-
+import {createEl, eventNames, isValidAttribute, safeEval, traversePath, WeakMultiMap} from './utils.js';
+import {addThis, isStandaloneCall, parseVars, replaceVars} from './parsevars.js';
+import {removeProxy, unwatch} from './watch.js';
+import bindings from './bindings.js';
 
 /**
  * A map between elements and the callback functions subscribed to them.
@@ -2048,7 +2080,6 @@ var elWatches = new WeakMultiMap();
  * A map between elements and the events assigned to them. *
  * @type {WeakMultiMap<HTMLElement, *[]>} */
 var elEvents = new WeakMultiMap();
-
 
 
 /**
@@ -2370,8 +2401,6 @@ var setAttribute = (self, name, value) => {
 };
 
 
-let disableBind = 0;
-
 var initHtml = (self) => {
 
 	if (!self.init_) {
@@ -2390,9 +2419,9 @@ var initHtml = (self) => {
 		}
 
 		// 1. Create temporary element.
-		disableBind++;
+		XElement.disableBind++;
 		var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
-		disableBind--;
+		XElement.disableBind--;
 
 
 		// Save definition attributes
@@ -2503,7 +2532,7 @@ var initHtml = (self) => {
 		}
 
 
-		if (disableBind === 0) {
+		if (XElement.disableBind === 0) {
 
 			// 9. Bind all data- and event attributes
 			// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
@@ -2570,8 +2599,6 @@ class XElement extends HTMLElement {
 	}
 }
 
-
-
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
 Object.defineProperty(XElement, 'html', {
@@ -2614,11 +2641,23 @@ Object.defineProperty(XElement, 'html', {
 });
 
 // Exports
+XElement.disableBind = 0;
 XElement.bindings = bindings;
 XElement.createEl = createEl; // useful for other code.
 XElement.getXParent = getXParent;
 XElement.removeProxy = removeProxy;
+
+XElement.cleanup = () => {
+	elWatches = new WeakMultiMap();
+	elEvents = new WeakMultiMap();
+};
+
+
 window.XElement = XElement;
+
+export default XElement;
+export { getRootXElement, getXParent, elWatches, elEvents, bindEl, unbindEl };
+
 
 // Used as a passthrough for xelement attrib debugging.
 window.xdebug = (a) => {
