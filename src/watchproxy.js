@@ -1,4 +1,5 @@
-"use strict";
+import { isObj} from '../src/utils.js';
+import { removeProxy, removeProxies } from '../src/watch.js';
 
 
 
@@ -400,6 +401,13 @@ var WatchUtil = {
 		let callbacks = WatchUtil.getCallbacks(root);
 		for (let callback of callbacks)
 			callback(action, path, newVal, oldVal);
+	},
+
+	cleanup: () => {
+		WatchUtil.proxies = new WeakMap();
+		WatchUtil.roots = new WeakMap();
+		WatchUtil.callbacks = new WeakMap();
+		WatchUtil.paths = new WeakMap();
 	}
 };
 
@@ -418,7 +426,6 @@ WatchUtil.callbacks = new WeakMap();
  * Outer weakmap is indexed by root, inner by object.
  * @type {WeakMap<object, WeakMap<object, string[][]>>} */
 WatchUtil.paths = new WeakMap();
-
 
 
 
@@ -443,3 +450,5 @@ var watchProxy = (root, callback) => {
 	return WatchUtil.getProxy(root);
 };
 
+export default watchProxy;
+export { WatchUtil };

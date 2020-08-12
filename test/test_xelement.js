@@ -1,4 +1,9 @@
-
+import { createEl, arrayEq, XElementError } from '../src/utils.js';
+import { isStandaloneVar, parseVars, replaceVars, addThis } from '../src/parsevars.js';
+import watchProxy, { WatchUtil } from '../src/watchproxy.js';
+import { removeProxy, watch, unwatch, WatchProperties } from '../src/watch.js';
+import XElement, { bindEl, unbindEl, elWatches, elEvents } from '../src/xelement.js';
+import { assert, assertEq, assertEqDeep, assertNeq, assertLte } from './test.js';
 
 var XElementTests = {
 
@@ -1216,14 +1221,14 @@ XElement: {
 			b.items = [{name: 1}, {name: 2}];
 
 			b.items.splice(0, 1);
-			var subs = Object.keys(watched.get(b).subs_);
+			var subs = Object.keys(watch.objects.get(b).subs_);
 			assertEq(subs[0], '"items"');
 			assertEq(subs[1], '"items","0","name"');
 			assertEq(subs.length, 2);
 
 
 			b.items.splice(0, 1);
-			subs = Object.keys(watched.get(b).subs_);
+			subs = Object.keys(watch.objects.get(b).subs_);
 			assertEq(subs[0], '"items"');
 			assertEq(subs.length, 1);
 		})();
@@ -2032,13 +2037,13 @@ XElement: {
 
 				xa.a.items.pop();
 
-				var subs = watched.get(xa).subs_;
+				var subs = watch.objects.get(xa).subs_;
 				assert('"a","items"' in subs);
 				assert('"a","items","0","name"' in subs);
 				assertEq(Object.keys(subs).length, 2);
 
 				xa.a.items.pop();
-				subs = watched.get(xa).subs_;
+				subs = watch.objects.get(xa).subs_;
 				assert('"a","items"' in subs);
 				assertEq(Object.keys(subs).length, 1);
 			})();
@@ -2536,115 +2541,88 @@ XElement: {
 
 		cleanup: function () {
 			// This messes up another test with setTmeout
-			(function () {
-				watched = new Map();
-				watchedEls = new Map();
-				proxyRoots = new Map();
-				proxyObjects = new Map();
 
-				class A_C1 extends XElement {}
-				A_C1.html = `
-					<div>
-						<div x-loop="items: item">
-							<input data-val="item"/>
-						</div>
-					</div>`;
-				var a = new A_C1();
-				a.items = ['A', 'B', 'C'];
+			watch.cleanup();
+			XElement.cleanup();
+			WatchUtil.cleanup();
 
-				let sizes = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+			class A_C1 extends XElement {}
+			A_C1.html = `
+				<div>
+					<div x-loop="items: item">
+						<input data-val="item"/>
+					</div>
+				</div>`;
+			var a = new A_C1();
+			a.items = ['A', 'B', 'C'];
 
-				//console.log(watched.size, watchedEls.size);
+			let sizes = [WatchUtil.proxies, WatchUtil.roots, WatchUtil.callbacks, WatchUtil.paths, watch.objects.size, elWatches.size, elEvents.size];
+			//console.log(watched.size, watchedEls.size);
 
-				for (let i = 0; i < 1; i++) {
-					let c = a.items.pop();
-					a.items.push(c);
-				}
+			for (let i = 0; i < 1; i++) {
+				let c = a.items.pop();
+				a.items.push(c);
+			}
 
-				let sizes2 = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
-				assert(arrayEq(sizes, sizes2));
+			let sizes2 = [WatchUtil.proxies, WatchUtil.roots, WatchUtil.callbacks, WatchUtil.paths, watch.objects.size, elWatches.size, elEvents.size];
+			assert(arrayEq(sizes, sizes2));
 
-				//console.log(watched.size, watchedEls.size);
-				//console.log(watchedEls);
+			//console.log(watched.size, watchedEls.size);
+			//console.log(watchedEls);
 
-				watched = new WeakMap();
-				watchedEls = new WeakMap();
-				proxyRoots = new WeakMap();
-				proxyObjects = new WeakMap();
-			})();
+			watch.cleanup();
+			XElement.cleanup();
+			WatchUtil.cleanup();
+
 		},
 
 		cleanup2: function () {
 
 			// This messes up another test with setTmeout
-			(function () {
-				watched = new Map();
-				watchedEls = new Map();
-				proxyRoots = new Map();
-				proxyObjects = new Map();
+			watch.cleanup();
+			XElement.cleanup();
+			WatchUtil.cleanup();
 
-				class B_C1 extends XElement {}
-				B_C1.html = `
-					<div>
-						<div x-loop="parentA.items: item">
-							<span data-text="item"></span>
-						</div>
-					</div>`;
+			class B_C1 extends XElement {}
+			B_C1.html = `
+				<div>
+					<div x-loop="parentA.items: item">
+						<span data-text="item"></span>
+					</div>
+				</div>`;
 
-				class A_C1 extends XElement {}
-				A_C1.html = `
-					<div>
-						<x-b_c1 data-prop="parentA: this"></x-b_c1>
-						<div x-loop="items: item">
-							<span data-text="item"></span>
-						</div>
-					</div>`;
-				var a = new A_C1();
-				a.items = ['A', 'B', 'C'];
+			class A_C1 extends XElement {}
+			A_C1.html = `
+				<div>
+					<x-b_c1 data-prop="parentA: this"></x-b_c1>
+					<div x-loop="items: item">
+						<span data-text="item"></span>
+					</div>
+				</div>`;
+			var a = new A_C1();
+			a.items = ['A', 'B', 'C'];
 
-				let sizes = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
+			let sizes = [WatchUtil.proxies, WatchUtil.roots, WatchUtil.callbacks, WatchUtil.paths, watch.objects.size, elWatches.size, elEvents.size];
 
-				//console.log(watched.size, watchedEls.size);
+			//console.log(watched.size, watchedEls.size);
 
-				for (let i = 0; i < 10; i++) {
+			for (let i = 0; i < 10; i++) {
 
-					a.items.push('D');
-					let c = a.items.pop();
-				}
+				a.items.push('D');
+				let c = a.items.pop();
+			}
 
-				let sizes2 = [watched.size, watchedEls.size, proxyRoots.size, proxyObjects.size];
-				assert(arrayEq(sizes, sizes2));
+			let sizes2 = [WatchUtil.proxies, WatchUtil.roots, WatchUtil.callbacks, WatchUtil.paths, watch.objects.size, elWatches.size, elEvents.size];
+			assert(arrayEq(sizes, sizes2));
 
-				//console.log(watched.size, watchedEls.size);
-				//console.log(watchedEls);
+			//console.log(watched.size, watchedEls.size);
+			//console.log(watchedEls);
 
-				watched = new WeakMap();
-				watchedEls = new WeakMap();
-				proxyRoots = new WeakMap();
-				proxyObjects = new WeakMap();
-			})();
+			watch.cleanup();
+			XElement.cleanup();
+			WatchUtil.cleanup();
 		},
 	},
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -2655,18 +2633,6 @@ XElement: {
 
 
 unresolved: {
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 	/*
@@ -2705,13 +2671,6 @@ unresolved: {
 		//o.items[1].name = 3;
 
 	},
-
-
-
-
-
-
-
 
 	doubleRef3: function() {
 
@@ -2767,11 +2726,6 @@ unresolved: {
 		//assertEq(watch1, 2);
 		//assertE1(watch2, 2);
 	},
-
-
-
-
-
 
 	rebuildArray: function () {
 		var item = {name: 'Set1'};
@@ -2916,3 +2870,7 @@ unresolved: {
 
 };
 
+// Required so we can run tests from eval'd code.
+window.XElementTests = XElementTests;
+
+export default XElementTests;

@@ -1,9 +1,13 @@
+import {csv, hasKeyStartingWith, isObj, traversePath, XElementError} from '../src/utils.js';
+import watchProxy from './watchproxy.js';
+
 
 var removeProxy = (obj) => isObj(obj) ? obj.$removeProxy || obj : obj;
 
 
 /**
- * Operates recursively to remove all proxies.  But should it?
+ * Operates recursively to remove all proxies.
+ * TODO: This is used by watchproxy and should be moved there?
  * @param obj {*}
  * @param visited {WeakSet=} Used internally.
  * @returns {*} */
@@ -38,7 +42,7 @@ var removeProxies = (obj, visited) => {
 					obj[name] = v;
 				else {
 					// It's a defined property.  Set it on the underlying object.
-					let wp = watched.get(obj);
+					let wp = watch.objects.get(obj);
 					let node = wp ? wp.fields_ : obj;
 					node[name] = v
 				}
@@ -85,6 +89,7 @@ class WatchProperties {
 			let parentCPath = csv(parentPath); // TODO: This seems like a lot of work for any time a property is changed.
 
 			if (parentCPath in this.subs_)
+				/** @type function */
 				for (let callback of this.subs_[parentCPath])
 					// "this.obj_" so it has the context of the original object.
 					// We set indirect to true, which data-loop's rebuildChildren() uses to know it doesn't need to do anything.
@@ -212,11 +217,7 @@ class WatchProperties {
 	}
 }
 
-/**
- * Keeps track of which objects we're watching.
- * That way watch() and unwatch() can work without adding any new fields to the objects they watch.
- * @type {WeakMap<object, WatchProperties>} */
-var watched = new WeakMap();
+
 
 /**
  *
@@ -227,12 +228,19 @@ var watch = (obj, path, callback) => {
 	obj = removeProxy(obj);
 
 	// Keep only one WatchProperties per watched object.
-	var wp = watched.get(obj);
+	var wp = watch.objects.get(obj);
 	if (!wp)
-		watched.set(obj, wp = new WatchProperties(obj));
+		watch.objects.set(obj, wp = new WatchProperties(obj));
 
 	wp.subscribe_(path, callback);
 };
+
+
+/**
+ * Keeps track of which objects we're watching.
+ * That way watch() and unwatch() can work without adding any new fields to the objects they watch.
+ * @type {WeakMap<object, WatchProperties>} */
+watch.objects = new WeakMap();
 
 /**
  *
@@ -241,7 +249,7 @@ var watch = (obj, path, callback) => {
  * @param callback {function=} If not specified, all callbacks will be unsubscribed. */
 var unwatch = (obj, path, callback) => {
 	obj = removeProxy(obj);
-	var wp = watched.get(obj);
+	var wp = watch.objects.get(obj);
 
 	if (wp) {
 		if (path) // unsubscribe only from path.
@@ -252,11 +260,17 @@ var unwatch = (obj, path, callback) => {
 
 		// Remove from watched objects if we're no longer watching
 		if (!Object.keys(wp.subs_).length)
-			watched.delete(obj);
+			watch.objects.delete(obj);
 	}
 };
+
+watch.cleanup = () => watch.objects = new WeakMap();
+
+
 
 
 // Exports
 window.watch = watch;
 window.unwatch = unwatch;
+
+export { watch, unwatch, WatchProperties, removeProxy, removeProxies };

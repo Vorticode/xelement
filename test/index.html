@@ -43,28 +43,32 @@
 			document.write('<script src="//unpkg.com/document-register-element"><\x2fscript>');
 	</script>
 
-	<script src="../src/utils.js"></script>
-	<script src="../src/parsevars.js"></script>
-	<script src="../src/watchproxy.js"></script>
-	<script src="../src/watch.js"></script>
-	<script src="../src/bindings.js"></script>
-	<script src="../src/xelement.js"></script>
+
 	<!--
 	<script src="../xelement.js"></script>
 	-->
-	<script src="test_xelement.js"></script>
-	<script src="test.js"></script>
+
 </head>
 <body>
 	<form id="tests">
 		<button>Run Tests</button>
 
 
-		<script>
+		<script type="module">
+
+			import XElement from './../src/xelement.js';
+			import { createEl } from './../src/utils.js';
+
+			import Tests from './test.js';
+			window.Tests = Tests;
+			import XElementTests from './test_xelement.js';
+
+
 			//Tests.debugOnAssertFail = true;
 			Tests.throwError = true;
-			table = Tests.getTable(XElementTests, 'XElementTests');
-			document.write('<table class="tests" cellspacing="0">' + table + '</table>');
+			var table = Tests.getTable(XElementTests, 'XElementTests');
+			var table2 = createEl('<table class="tests" cellspacing="0">' + table + '</table>');
+			document.body.appendChild(table2);
 
 			Tests.runTests(document.querySelector('table.tests'));
 		</script>

@@ -247,3 +247,5 @@ var addThis = (code, context, isStandalone, prefix) => {
 
 // Exports
 window.parseLoop = parseLoop; // temporary for EditableSelect.
+
+export { isStandaloneVar, isStandaloneCall, parseVars, trimThis, replaceVars, parseObj, parseLoop, addThis };

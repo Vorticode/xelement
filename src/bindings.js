@@ -1,5 +1,7 @@
-"use strict";
-
+import {arrayEq, createEl, safeEval, traversePath, XElementError} from './utils.js';
+import {addThis, isStandaloneVar, parseLoop, parseObj, parseVars, replaceVars, trimThis} from './parsevars.js';
+import {removeProxy, watch} from './watch.js';
+import {elEvents, elWatches, bindEl, unbindEl, getRootXElement, getXParent } from './xelement.js';
 
 // TODO: write a function to replace common code among these.
 var bindings = {
@@ -244,9 +246,9 @@ var bindings = {
 					// TODO: createEl() binds nexted x-elements before we're ready for them to be bound.
 					// E.g. below we set the localContext for loop variables.
 					if (isNew) {
-						disableBind ++;
+						XElement.disableBind ++;
 						newChild = createEl(root.loopHtml_);
-						disableBind --;
+						XElement.disableBind --;
 
 					}
 					// This can either insert the new one or move an old one to this position.
@@ -604,3 +606,4 @@ var getLoopElArray_ = (loopEl, xparent) => {
 	return safeEval.call(xparent, foreach, {el: loopEl});
 };
 
+export default bindings;

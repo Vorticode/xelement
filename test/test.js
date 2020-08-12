@@ -303,3 +303,6 @@ var Tests = {
 		return Tests.escapeHtml(stack).replace(/\n/g, '<br/>');
 	}
 };
+
+export default Tests;
+export { AssertError, assert, assertEq, assertEqDeep, assertNeq, assertLte };

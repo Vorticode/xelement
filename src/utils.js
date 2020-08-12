@@ -1,3 +1,5 @@
+import { removeProxy } from '../src/watch.js';
+
 //#IFDEV
 class XElementError extends Error {
 	constructor(msg) {
@@ -25,7 +27,7 @@ var arrayEq = (array1, array2, deep) => {
 };
 
 var eq = (item1, item2) => {
-	return (item1.$removeProxy || item1) === (item2.$removeProxy || item2);
+	return removeProxy(item1) === removeProxy(item2);
 };
 
 /**
@@ -38,6 +40,8 @@ var hasKeys = (obj) => {
 	return false;
 };
 
+/**
+ * A WeakMap with multiple values per key. */
 var WeakMultiMap = function() {
 
 	let self = this;
@@ -379,3 +383,4 @@ function safeEval(expr, args, isStatements) {
 	return undefined;
 }
 
+export { createEl, eq, arrayEq, hasKeys, WeakMultiMap, csv, isObj, isValidAttribute, hasKeyStartingWith, traversePath, safeEval, eventNames, XElementError };

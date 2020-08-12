@@ -17,6 +17,7 @@ Use a regex or parser to remove the html of x-loops before they're passed to cre
 Make sure recursive embeds work if:  1. the x-loop is on the x-parent above the shadow dom.  2. An x-element is within a div inside the loop.
 
 TODO: next goals:
+When an x-prop calls a function, and that function throws an error, we don't see it in chrome's stack trace.
 {{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
 allow comments in loops.
@@ -79,8 +80,10 @@ lazy modifier for input binding, to only trigger update after change.
 
 */
 
-
-
+import {createEl, eventNames, isValidAttribute, safeEval, traversePath, WeakMultiMap} from './utils.js';
+import {addThis, isStandaloneCall, parseVars, replaceVars} from './parsevars.js';
+import {removeProxy, unwatch} from './watch.js';
+import bindings from './bindings.js';
 
 /**
  * A map between elements and the callback functions subscribed to them.
@@ -93,7 +96,6 @@ var elWatches = new WeakMultiMap();
  * A map between elements and the events assigned to them. *
  * @type {WeakMultiMap<HTMLElement, *[]>} */
 var elEvents = new WeakMultiMap();
-
 
 
 /**
@@ -415,8 +417,6 @@ var setAttribute = (self, name, value) => {
 };
 
 
-let disableBind = 0;
-
 var initHtml = (self) => {
 
 	if (!self.init_) {
@@ -435,9 +435,9 @@ var initHtml = (self) => {
 		}
 
 		// 1. Create temporary element.
-		disableBind++;
+		XElement.disableBind++;
 		var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
-		disableBind--;
+		XElement.disableBind--;
 
 
 		// Save definition attributes
@@ -548,7 +548,7 @@ var initHtml = (self) => {
 		}
 
 
-		if (disableBind === 0) {
+		if (XElement.disableBind === 0) {
 
 			// 9. Bind all data- and event attributes
 			// TODO: Move bind into setAttribute above, so we can call it separately for definition and instantiation?
@@ -615,8 +615,6 @@ class XElement extends HTMLElement {
 	}
 }
 
-
-
 /**
  * Override the static html property so we can call customElements.define() whenever the html is set.*/
 Object.defineProperty(XElement, 'html', {
@@ -659,11 +657,23 @@ Object.defineProperty(XElement, 'html', {
 });
 
 // Exports
+XElement.disableBind = 0;
 XElement.bindings = bindings;
 XElement.createEl = createEl; // useful for other code.
 XElement.getXParent = getXParent;
 XElement.removeProxy = removeProxy;
+
+XElement.cleanup = () => {
+	elWatches = new WeakMultiMap();
+	elEvents = new WeakMultiMap();
+};
+
+
 window.XElement = XElement;
+
+export default XElement;
+export { getRootXElement, getXParent, elWatches, elEvents, bindEl, unbindEl };
+
 
 // Used as a passthrough for xelement attrib debugging.
 window.xdebug = (a) => {
