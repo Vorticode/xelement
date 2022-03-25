@@ -16,7 +16,7 @@
 
 
 		table.tests td { vertical-align: top; color: #555; padding: 0; position: relative }
-		table.tests label {white-space: nowrap; font-weight: bold; width: 100% }
+		table.tests label { white-space: nowrap; font-weight: bold; width: 100% }
 
 		table.tests input[type=checkbox] { margin: 2px }
 
@@ -33,6 +33,14 @@
 		table.tests, table.tests table { table-layout: fixed; width: 100%; border-collapse: collapse }
 		table.tests div.indent { padding-left: 20px; }
 		table.tests a { text-decoration: none; color: #77a }
+
+
+		/* --- */
+		.liteUnit table.indent { margin-left: 1.5rem; color: #555 }
+		.liteUnit label { white-space: nowrap; font-weight: bold; user-select: none }
+		.liteUnit, .liteUnit table { table-layout: fixed; width: calc(100% - 1.5rem); border-collapse: collapse }
+		.liteUnit td { padding: 0 }
+
 	</style>
 
 	<script src="/src/sortable.min.js"></script>
@@ -47,22 +55,33 @@
 	<form id="tests">
 		<button>Run Tests</button>
 
+		<table id="table" class="liteUnit"></table>
 
 		<script type="module">
 
 			import { XElement } from './../src/xelement.js';
 			import { createEl } from '../src/createEl.js';
-			import { Tests } from './test.js';
-			import { XElementTests } from './test_xelement.js';
+			import { LiteUnit } from './LiteUnit.js';
+			import { TestXElement } from './TestXElement.js';
 
 
-			//Tests.debugOnAssertFail = true;
-			Tests.throwError = true;
-			var table = Tests.getTable(XElementTests, 'XElementTests');
+			//LiteUnit.debugOnAssertFail = true;
+			LiteUnit.throwError = true;
+			var table = LiteUnit.getTable(TestXElement, 'TestXElement');
 			var table2 = createEl('<table class="tests" cellspacing="0">' + table + '</table>');
 			document.getElementById('tests').appendChild(table2);
 
-			Tests.runTests(document.querySelector('table.tests'));
+			LiteUnit.runTests(document.querySelector('table.tests'));
+
+
+			//var trs = LiteUnitTable.createRows(TestXElement);
+			//var table = document.getElementById('table');
+
+			//console.log(trs);
+
+			//for (let tr of trs)
+			//	table.appendChild(tr);
+
 		</script>
 		<button>Run Tests</button>
 	</form>

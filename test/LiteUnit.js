@@ -11,36 +11,37 @@ class AssertError extends Error {
 
 function assert(val) {
 	if (!val) {
-		if (Tests.debugOnAssertFail)
+		if (LiteUnit.debugOnAssertFail)
 			debugger;
 		throw new AssertError(val);
 	}
 }
 
-function assertEq(val1, val2) {
+assert.eq = (val1, val2) => {
 	if (val1 !== val2) {
-		if (Tests.debugOnAssertFail)
+		if (LiteUnit.debugOnAssertFail)
 			debugger;
 		throw new AssertError(val1 + ' !== ' + val2);
 	}
-}
+};
+var assertEq = assert.eq;
 
-function assertEqDeep(val1, val2) {
+assert.eqDeep = (val1, val2) => {
 	if (val1 === val2)
 		return true;
 	if (JSON.stringify(val1) === JSON.stringify(val2))
 		return true;
 
-	if (Tests.debugOnAssertFail)
+	if (LiteUnit.debugOnAssertFail)
 		debugger;
 	throw new AssertError(val1 + ' !== ' + val2);
-}
+};
 
-
+var assertEqDeep = assert.eqDeep;
 
 function assertNeq(val1, val2) {
 	if (val1 !== val2) {
-		if (Tests.debugOnAssertFail)
+		if (LiteUnit.debugOnAssertFail)
 			debugger;
 		throw new AssertError(val1 + ' === ' + val2);
 	}
@@ -48,7 +49,7 @@ function assertNeq(val1, val2) {
 
 function assertLte(val1, val2) {
 	if (val1 > val2) {
-		if (Tests.debugOnAssertFail)
+		if (LiteUnit.debugOnAssertFail)
 			debugger;
 		throw new AssertError(val1 + ' > ' + val2);
 	}
@@ -77,10 +78,122 @@ var Mock = {
 
 };
 
+var createEl = (html) => {
+	if (!createEl.cache)
+		createEl.cache = {};
+
+	let existing = createEl.cache[html];
+	if (existing)
+		return existing.cloneNode(true);
+
+
+	//#IFDEV
+	if (typeof html !== 'string')
+		throw new Error('Html argument must be a string.');
+	//#ENDIF
+
+	let tagName = html.trim().match(/<([a-z0-9-]+)/i);
+	if (tagName)
+		tagName = tagName[1];
+
+	// Using a template makes some embed related tests fail to instantiate x-elements.
+	let parentMap = {
+		td: 'tr',
+		tr: 'tbody',
+		tbody: 'table',
+		thead: 'table',
+		tfoot: 'table',
+		source: 'video',
+		area: 'map',
+		legend: 'fieldset',
+		option: 'select',
+		col: 'colgroup',
+		param: 'object'
+	};
+	let parentTag = parentMap[tagName] || 'div';
+
+	var parent = document.createElement(parentTag);
+	parent.innerHTML = html;
+	var result = parent.removeChild(parent.firstChild);
+
+	createEl.cache[html] = result.cloneNode(true);
+	return result; // clone so that subsequent changes don't break our cache.
+};
+
+
+var LiteUnitTable = {
+
+
+	/**
+	 *
+	 * @param testObj {object<string, function|object>}
+	 * @param testPath {string}
+	 * @returns {HTMLTableRowElement[]} */
+	createRows(testObj, testPath) {
+		var result = [];
+
+		for (let testName in testObj) {
+			let test = testObj[testName];
+
+			let testPathName = testPath + '.' + testName;
+
+			let tr = createEl(
+				`<tr data-test="` + testPathName + `">
+					<td>
+						<label>
+							<input type="checkbox" name="` + testPathName + `">` + testName + `	
+						</label>
+					</td>
+					<td class="result"></td>
+				</tr>`);
+
+			result.push(tr);
+
+
+			if (typeof test === 'object') {
+
+				// 1.  Add expand button to previous tr.
+				// TODO
+
+				// 2. Add another row with a table of the children.
+				let tr = createEl(
+					`<tr>
+						<td colspan="2">
+							<table class="indent"></table>
+						</td>
+					</tr>`);
+				var table = tr.children[0].children[0];
+
+
+				let trs = LiteUnit.tableCreateRows(test); // Recurse
+				for (let tr of trs)
+					table.appendChild(tr);
+
+				result.push(tr);
+			}
+			else if (typeof test === 'function') {
+
+
+			}
+		}
+		return result;
+	},
+
+
+	getEnabledTests() {
+
+	},
+
+	getExpandedTests() {
+
+	}
+
+};
+
 
 /**
  * A set of functions for running tests. */
-var Tests = {
+var LiteUnit = {
 
 	debugOnAssertFail: false,
 	debugOnError: false,
@@ -102,6 +215,8 @@ var Tests = {
 		}
 		return def;
 	},
+
+
 
 	toggleTest: function(e) {
 		// Skip if we clicked a link.
@@ -145,7 +260,16 @@ var Tests = {
 		tr.querySelector('input.expand').checked = expand;
 	},
 
+
+
+
+
+
+
+
+
 	/**
+	 * Get the html to print a table of tests.
 	 * @param testObj {object<string, function|object>}
 	 * @param testName {string=}
 	 * @param level {string[]=}
@@ -159,7 +283,7 @@ var Tests = {
 
 		let val = testObj;
 
-		let checked = Tests.getIntArg(testName);
+		let checked = LiteUnit.getIntArg(testName);
 		let checkedAttr = checked ? 'checked' : '';
 		let selected = checked ? 'selected' : '';
 
@@ -173,18 +297,18 @@ var Tests = {
 		// Checbox and name, used for both a single and group of tests.
 		html.push(
 			'<tr class="' + selected + ' ' + type + '"' + ' ' + dataTest + '>' +
-				'<td class="level' + level.length + '" onclick="Tests.toggleTest(event)">' +
+				'<td class="level' + level.length + '" onclick="LiteUnit.toggleTest(event)">' +
 					'<label style="user-select: none">' +
 						'<input class="enabled" name="' + testName + '" type="checkbox" value="1" ' + checkedAttr + '>' +
 						testName +
 					'</label>');
 
 		// Expand button
-		let expand = Tests.getIntArg(testName + '_expand', level.length <= Tests.expandLevel);
+		let expand = LiteUnit.getIntArg(testName + '_expand', level.length <= LiteUnit.expandLevel);
 		if (typeof val === 'object') {
 			let expandChecked = expand ? 'checked' : '';
 			html.push(
-				'<a class="expand"  href="javascript:void(0)" onclick="Tests.toggleExpand(event)">▼</a>' +
+				'<a class="expand"  href="javascript:void(0)" onclick="LiteUnit.toggleExpand(event)">▼</a>' +
 				'<input class="expand" type="checkbox" style="display: none" name="' + testName + '_expand" value="1"' + expandChecked + '>'
 			);
 		}
@@ -200,7 +324,7 @@ var Tests = {
 			for (let testName in testObj) {
 				let nextLevel = [...level, testName];
 
-				let subHtml = Tests.getTable(val[testName], testName, nextLevel);
+				let subHtml = LiteUnit.getTable(val[testName], testName, nextLevel);
 				subHtml2 = [...subHtml2, subHtml];
 			}
 
@@ -228,17 +352,22 @@ var Tests = {
 		return html.join('');
 	},
 
+	/**
+	 * Run tests that are selected in the table.
+	 * @param table {HTMLTableElement} */
 	runTests: function(table) {
 		let testTrs = table.querySelectorAll('tr[data-test]');
 		for (let tr of testTrs) {
 			let code = tr.getAttribute('data-test');
 
 
+			//console.log(code);
+
 			let runTest = tr.querySelector('input.enabled').checked;
 
 			if (runTest) {
 				let tdResult = tr.querySelector('td.result');
-				if (Tests.throwError) {
+				if (LiteUnit.throwError) {
 					eval(code + '()');
 					tdResult.innerHTML = '<div class="pass">Passed</div>';
 				}
@@ -249,9 +378,9 @@ var Tests = {
 						tdResult.innerHTML = '<div class="pass">Passed</div>';
 						status++;
 					} catch (e) {
-						if (Tests.debugOnError)
+						if (LiteUnit.debugOnError)
 							debugger;
-						tdResult.innerHTML = '<div class="fail">' + Tests.stack(e) + '</div>';
+						tdResult.innerHTML = '<div class="fail">' + LiteUnit.getHtmlStackTrace(e) + '</div>';
 					}
 				}
 			}
@@ -289,7 +418,7 @@ var Tests = {
 		return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 	},
 
-	stack: function(e) {
+	getHtmlStackTrace: function(e) {
 		if (!e.stack)
 			return '';
 
@@ -300,12 +429,12 @@ var Tests = {
 			if (stack[i].indexOf('/liteunit.php?') === -1) // remove frames that are inside liteunit.php
 				stack2.push(stack[i]);
 		stack = stack2.join('\n');
-		return Tests.escapeHtml(stack).replace(/\n/g, '<br/>');
+		return LiteUnit.escapeHtml(stack).replace(/\n/g, '<br/>');
 	}
 };
 
 
-// Make global so that event attribute code can call Tests.
-window.Tests = Tests;
+// Make global so that event attribute code can call LiteUnit.
+window.LiteUnit = LiteUnit;
 
-export { Tests, AssertError, assert, assertEq, assertEqDeep, assertNeq, assertLte };
+export { LiteUnit, AssertError, assert, assertEq, assertEqDeep, assertNeq, assertLte };

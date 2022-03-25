@@ -4,6 +4,9 @@
 var eventNames = Object.keys(document.__proto__.__proto__)
 	.filter((x) => x.startsWith('on'))
 	.map(   (x) => x.slice(2));
+var eventNamesMap = {};
+for (let eventName of eventNames)
+	eventNamesMap['on'+eventName] = true;
 
 
 //#IFDEV
@@ -151,8 +154,7 @@ var traversePath = (obj, path, create, value, watchless) => {
 };
 
 
-export { arrayEq, hasKeys, csv, isObj, isValidAttribute, hasKeyStartingWith, traversePath, eventNames, XElementError };
-export {removeProxy};
+
 /**
  * Operates recursively to remove all proxies.
  * TODO: This is used by watchproxy and should be moved there?
@@ -199,4 +201,5 @@ var removeProxies = (obj, visited) => {
 	}
 	return obj;
 };
-export {removeProxies};
+export { arrayEq, hasKeys, csv, isObj, isValidAttribute, hasKeyStartingWith, traversePath, eventNamesMap, XElementError };
+export {removeProxy, removeProxies};

@@ -3,6 +3,7 @@ import {XElementError} from "./utils.js";
 var createElMap = {};
 
 
+
 var createEl = (html) => {
 	let existing = createElMap[html];
 	if (existing)
@@ -14,9 +15,8 @@ var createEl = (html) => {
 		throw new XElementError('Html argument must be a string.');
 	//#ENDIF
 
-	let tagName = html.trim().match(/<([a-z0-9-]+)/i);
-	if (tagName)
-		tagName = tagName[1];
+	let tagNames = html.trim().match(/<([a-z0-9-]+)/i);
+	let tagName = tagNames.length<1 ? tagNames[1] : undefined;
 
 	// Using a template makes some embed related tests fail to instantiate x-elements.
 	let parentMap = {

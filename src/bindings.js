@@ -245,7 +245,7 @@ var bindings = {
 				if (!oldChild || oldChild !== newChild) {
 
 					// Create a new one if needed.
-					// TODO: createEl() binds nexted x-elements before we're ready for them to be bound.
+					// TODO: createEl() binds nested x-elements before we're ready for them to be bound.
 					// E.g. below we set the localContext for loop variables.
 					if (isNew) {
 						XElement.disableBind ++;
@@ -554,7 +554,7 @@ var bindings = {
 				if (result !== el.innerHTML)
 					el.innerHTML = result;
 			}
-			else
+			else if (el.value !== result)
 				el.value = result;
 		}
 

@@ -3,6 +3,7 @@ Inherit from XElement to create custom HTML Components.
 
 
 TODO: major bugfixes
+Importing css in an xelement doesn't apply unless the same css file is imported in the main document.
 Removing a node that contains an xelement doesn't remove its items from elWatches or elsewhere?
 	How to unittest this, since I can't inspect what's in weakmap?
 	This can be tested in the test app by opening multiple programs.
@@ -17,6 +18,14 @@ Use a regex or parser to remove the html of x-loops before they're passed to cre
 Make sure recursive embeds work if:  1. the x-loop is on the x-parent above the shadow dom.  2. An x-element is within a div inside the loop.
 
 TODO: next goals:
+Allow defining and assigning to id="" properties only in the constructor, and only a null value or something.  That way TypeScript can know about them without throwing errors.
+
+rewrite loop code to let [key, value] = loop(array); or something that parses as valid javascript.  That way we can eventually make it a js language injection for IntelliJ.
+for (const [key, value] of Object.entries(animals))
+for (const [key, value] of loop(animals))
+Still very verbose compared to the current syntax.
+
+Remove proxy if name begins or ends with a $?  Warn about bound varaibles beginning with $.  And this will only work if the val is a proxy.  I need a way to let it do nothing if it's not a proxy.
 When an x-prop calls a function, and that function throws an error, we don't see it in chrome's stack trace.
 {{var}} in text and attributes, and stylesheets?
 Fix failing Edge tests.
@@ -42,17 +51,22 @@ Auto bind to this in complex expressions if the class property already exists an
 improve minifcation.
 Expose bindings prop in minified version to allow plugins.
 non-ascii variable names.
-throttle, debounce? data-val only trigger on change.  E.g. x-val:debounce(100)=""  x-visible:fade(100)=""
+throttle, debounce? data-val only trigger on change.  
+	E.g. x-val:debounce(100)=""  x-visible:fadeIn(100)="" x-visible:fadeOut(10)=""
+	or x-val="debounce(prop, 100)" ?
+	The latter will be better accomodated by IDEs since there's not an infinite number of attribute names to add.
+	Ideally it would support calling a function on change, after a debounce, with the before and after values.
+		This would make it easily pluggable into an undo/redo system.
+	How to handle debounce times in both directions?  Setting the prop to update the form, and setting the form value to update the prop?
 Auto two-way bind for simple variables?
 bind to <input type="file">
+bind to drag and drop areas for files?
 bind to clipboard events
 Named slot support? - https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_templates_and_slots
 Separate out a lite version that doesn't do binding?
 	This would also make the code easier to follow.  But what to call it?  XEl ? XElementLite?
 allow ${text} variables in nested styles?
 warning on loop element id.
-warning if binding to id attribute assigned to element.
-
 
 Disadvantages of Vue.js
 10x larger.
@@ -81,7 +95,7 @@ lazy modifier for input binding, to only trigger update after change.
 */
 
 import {safeEval} from './safeEval.js';
-import {eventNames, isValidAttribute, traversePath, removeProxy} from './utils.js';
+import {eventNamesMap, isValidAttribute, traversePath, removeProxy} from './utils.js';
 import {addThis, isStandaloneCall, parseVars, replaceVars} from './parseVars.js';
 import {unwatch} from './watch.js';
 import {bindings} from './bindings.js';
@@ -287,12 +301,18 @@ var bindElProps = (xelement, el, context) => {
  * @param getAttributesFrom {HTMLElement=} */
 var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 
-	if (el.getAttribute) { // if not document fragment
-		getAttributesFrom = getAttributesFrom || el;
 
-		for (let eventName of eventNames) {
-			let originalEventAttrib = getAttributesFrom.getAttribute('on' + eventName);
-			if (originalEventAttrib) {
+	getAttributesFrom = getAttributesFrom || el;
+	if (getAttributesFrom.getAttribute) { // if not document fragment
+
+		// Make copy because we remove them as we go.
+		var attribs = Array.prototype.slice.call(getAttributesFrom.attributes);
+		for (let attrib of attribs) {
+
+			if (attrib.name in eventNamesMap) {
+
+				let eventName = attrib.name.substr(2); // remove "on" prefix.
+				let originalEventAttrib = attrib.value;
 
 				let code = replaceVars(originalEventAttrib, context);
 
@@ -318,10 +338,9 @@ var bindElEvents = (xelement, el, context, recurse, getAttributesFrom) => {
 
 				// Save everything we'll need to restore it later.
 				elEvents.add(el, [eventName, callback, originalEventAttrib, xelement]);
-				//addElEvent(el, eventName, callback, originalEventAttrib, xelement);
 
 				// Remove the original version so it doesn't also fire.
-				el.removeAttribute('on' + eventName);
+				el.removeAttribute(attrib.name);
 			}
 		}
 	}
@@ -439,12 +458,12 @@ var initHtml = (self) => {
 
 		// 1. Create temporary element.
 		XElement.disableBind++;
-		var div = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
+		var definition = createEl(self.constructor.html_.trim()); // html_ is set from ClassName.html = '...'
 		XElement.disableBind--;
 
 
 		// Save definition attributes
-		for (let attr of div.attributes)
+		for (let attr of definition.attributes)
 			self.definitionAttributes[attr.name] = attr.value;
 
 		// 2. Remove and save attributes from instantiation.
@@ -452,14 +471,14 @@ var initHtml = (self) => {
 			self.instantiationAttributes[attr.name] = attr.value;
 
 		// 3.  Add attributes from definition (Item.html='<div attr="value"')
-		for (let attr of div.attributes) { // From definition
+		for (let attr of definition.attributes) { // From definition
 			if (attr.name)
 				setAttribute(self, attr.name, attr.value);
 		}
 
 		// 4. Bind events on the defintion to functions on its own element and not its container
 		// TODO: Remove this line and make the bindElEvents() smart enough to know what to do on its own, like we did with bindElProps()
-		bindElEvents(self, self, null, false, div);
+		bindElEvents(self, self, null, false, definition);
 
 		// 5.  Add attributes from instantiation.
 		for (let name in self.instantiationAttributes) // From instantiation
@@ -474,8 +493,8 @@ var initHtml = (self) => {
 
 		if (mode === 'open' || mode === 'closed') {
 			self.attachShadow({mode: mode});
-			while (div.firstChild)
-				self.shadowRoot.insertBefore(div.firstChild, null);
+			while (definition.firstChild)
+				self.shadowRoot.insertBefore(definition.firstChild, null);
 
 		}
 		else { // mode == 'none'
@@ -484,15 +503,15 @@ var initHtml = (self) => {
 			// Html within <x-classname>...</x-classname>, where the tag is added to another element.
 			// This only works in the Edge shim.  It's an empty string in chrome and firefox.
 			var slotHtml = self.innerHTML;
-			var slot = div.querySelector('#slot');
+			var slot = definition.querySelector('#slot');
 			if (slot)
 				slot.removeAttribute('id');
 
 			// Copy children from temporary div to this class.
 			if (slot || !slotHtml) {
 				self.innerHTML = '';
-				while (div.firstChild)
-					self.appendChild(div.firstChild);
+				while (definition.firstChild)
+					self.appendChild(definition.firstChild);
 			}
 
 			// Copy children from <x-classname> into the slot.

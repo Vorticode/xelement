@@ -3,10 +3,10 @@ import {addThis, isStandaloneVar, parseVars, replaceVars} from '../src/parsevars
 import {watchProxy, WatchUtil} from '../src/watchproxy.js';
 import {watch, WatchProperties} from '../src/watch.js';
 import {elEvents, elWatches, unbindEl, XElement} from '../src/xelement.js';
-import {assert, assertEq, assertEqDeep, assertLte} from './test.js';
+import {assert, assertEq, assertEqDeep, assertLte} from './LiteUnit.js';
 import {createEl} from "../src/createEl.js";
 
-var XElementTests = {
+var TestXElement = {
 
 
 Utils: {
@@ -361,7 +361,6 @@ WatchProxy: {
 },
 
 Watch: {
-
 
 	// Assign proxied.
 	removeProxy: function() {
@@ -1712,6 +1711,31 @@ XElement: {
 			assert(!outer.val);
 			assertEq(inner[0].val, 'A');
 			assertEq(inner[1].val, 'B');
+		},
+
+		/**
+		 * Make sure we can bind to multiple events. */
+		multiple: function() {
+			var actions = [];
+
+			class A_Ev8 extends XElement {
+				mousedown() {
+					actions.push('mousedown');
+				}
+				mouseup() {
+					actions.push('mouseup');
+				}
+			}
+			A_Ev8.html = `
+				<div>
+					<span id="span" onmousedown="mousedown(event)" onmouseup="mouseup(event)"></span>					
+				</div>`;
+
+			var a = new A_Ev8();
+			a.span.dispatchEvent(new MouseEvent('mousedown'));
+			a.span.dispatchEvent(new MouseEvent('mouseup'));
+
+			assertEqDeep(actions, ['mousedown', 'mouseup']);
 		}
 	},
 
@@ -2872,6 +2896,6 @@ unresolved: {
 };
 
 // Required so we can run tests from eval'd code.
-window.XElementTests = XElementTests;
+window.TestXElement = TestXElement;
 
-export { XElementTests };
+export { TestXElement };
