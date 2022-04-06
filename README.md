@@ -1,6 +1,6 @@
 # XElement
 
-**WARNING: This project is in alpha and is not yet ready for use.**
+**WARNING: This project was never finished and is now defunct.  Use [Refract.js](https://github.com/vorticode/refract) instead.**
 
 ![header](img/header.jpg)
 
